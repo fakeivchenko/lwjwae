@@ -1,0 +1,7 @@
+# LF everywhere, whatever the checkout platform: a test compares a resource byte for byte, and
+# the bridge script and the Gradle wrapper go into the JAR file and a native image as they are.
+* text=auto eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.png binary
+*.jar binary
