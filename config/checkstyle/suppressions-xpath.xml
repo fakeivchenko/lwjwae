@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<!DOCTYPE suppressions PUBLIC
+        "-//Checkstyle//DTD SuppressionXpathFilter Experimental Configuration 1.2//EN"
+        "https://checkstyle.org/dtds/suppressions_1_2_xpath_experimental.dtd">
+<suppressions>
+    <!-- Members of a @UtilityClass are static after Lombok runs, so `this.` would be wrong there. -->
+    <suppress-xpath checks="RequireThis"
+                    query="//CLASS_DEF[./MODIFIERS/ANNOTATION/IDENT[@text='UtilityClass']]//*"/>
+    <!-- Lombok makes the fields of a @UtilityClass constants; the source has no `static final` to show it. -->
+    <suppress-xpath checks="MemberName|ConstantName|AbbreviationAsWordInName"
+                    query="//CLASS_DEF[./MODIFIERS/ANNOTATION/IDENT[@text='UtilityClass']]//VARIABLE_DEF/IDENT"/>
+    <!-- A record's canonical constructor and accessors need no Javadoc: the @param tags on the record carry it. -->
+    <suppress-xpath checks="MissingJavadocMethod" query="//RECORD_DEF//COMPACT_CTOR_DEF"/>
+    <!-- Exception constructors that only forward the message. -->
+    <suppress-xpath checks="MissingJavadocMethod"
+                    query="//CLASS_DEF[./IDENT[contains(@text, 'Exception')]]//CTOR_DEF"/>
+</suppressions>

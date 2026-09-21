@@ -1,0 +1,27 @@
+# Google Java Style: https://google.github.io/styleguide/javaguide.html
+# Formatting is applied by google-java-format (./gradlew spotlessApply); these values keep editors in step.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+[*.java]
+max_line_length = 100
+ij_continuation_indent_size = 4
+ij_java_class_count_to_use_import_on_demand = 999
+ij_java_names_count_to_use_import_on_demand = 999
+ij_java_imports_layout = *
+ij_java_generate_final_locals = false
+
+[*.{kts,kt}]
+indent_size = 4
+max_line_length = 120
+
+[*.md]
+max_line_length = 100
+trim_trailing_whitespace = false

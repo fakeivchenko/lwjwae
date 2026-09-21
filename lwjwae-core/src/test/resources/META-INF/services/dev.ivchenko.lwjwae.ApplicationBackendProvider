@@ -1,0 +1,3 @@
+dev.ivchenko.lwjwae.testing.FakePreferredProvider
+dev.ivchenko.lwjwae.testing.FakeFallbackProvider
+dev.ivchenko.lwjwae.testing.FakeOtherPlatformProvider

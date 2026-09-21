@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<!DOCTYPE suppressions PUBLIC
+        "-//Checkstyle//DTD SuppressionFilter Configuration 1.2//EN"
+        "https://checkstyle.org/dtds/suppressions_1_2.dtd">
+<suppressions>
+    <!-- Tests document themselves through their method names. -->
+    <suppress checks="MissingJavadoc(Type|Method)" files="[\\/]src[\\/]test[\\/]"/>
+    <!-- A Gradle-generated Lombok config isn't code. -->
+    <suppress checks=".*" files="lombok\.config"/>
+    <!-- Control characters and U+2028/U+2029 have no special escape; the Unicode escape is the readable form. -->
+    <suppress checks="IllegalTokenText" files="(BridgeProtocol|ScriptUtil|ScriptUtilTest|JsonStringUtilTest)\.java"/>
+</suppressions>

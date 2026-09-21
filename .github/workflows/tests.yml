@@ -1,0 +1,177 @@
+name: Tests
+
+# Runs on its own for every push to dev, and as a step of the release workflow.
+on:
+  push:
+    branches: [dev]
+  workflow_call:
+
+permissions:
+  contents: read
+
+# A push that supersedes a running build cancels it.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Runners have no GPU: keep WebKit on the software path, and GTK on X11 for Xvfb.
+  GDK_BACKEND: x11
+  WEBKIT_DISABLE_DMABUF_RENDERER: "1"
+  WEBKIT_DISABLE_COMPOSITING_MODE: "1"
+
+jobs:
+  # Formatting fails fast, before any machine opens a window. Checkstyle only warns, as Google's
+  # configuration does; its findings are in the log and in the uploaded reports.
+  style:
+    name: Style
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 25
+      - uses: gradle/actions/setup-gradle@v6
+      - name: Spotless and Checkstyle
+        run: ./gradlew spotlessCheck checkstyleMain checkstyleTest checkstyleTestFixtures
+      - name: Checkstyle reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: checkstyle-reports
+          path: '**/build/reports/checkstyle/'
+          if-no-files-found: ignore
+
+  test-linux:
+    name: Tests (Linux ${{ matrix.arch }})
+    needs: style
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            arch: x86_64
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 25
+      - uses: gradle/actions/setup-gradle@v6
+
+      - name: Install GTK, WebKitGTK, and Xvfb
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libgtk-3-0t64 libwebkit2gtk-4.1-0 libxtst6 xvfb
+
+      - name: Headless tests
+        run: ./gradlew test
+
+      # A display test that silently skips on CI is a false pass.
+      - name: Display tests under Xvfb
+        run: xvfb-run -a ./gradlew displayTest -Dlwjwae.requireDisplay=true -Dlwjwae.screenshots=true
+
+      - name: Screenshots
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: screenshots-linux-${{ matrix.arch }}
+          path: '**/build/screenshots/'
+          if-no-files-found: error
+
+      - name: Jars and Javadoc
+        run: ./gradlew assemble javadoc
+
+      - name: Test reports
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-reports-linux-${{ matrix.arch }}
+          path: |
+            **/build/reports/tests/
+            **/build/test-results/
+
+  test-windows:
+    name: Tests (Windows)
+    needs: style
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 25
+      - uses: gradle/actions/setup-gradle@v6
+
+      - name: Headless tests
+        run: ./gradlew test
+
+      # The session of the runner has a desktop, so WebView2 can attach; no Xvfb equivalent needed.
+      - name: Display tests
+        run: ./gradlew displayTest "-Dlwjwae.requireDisplay=true" "-Dlwjwae.screenshots=true"
+
+      - name: Screenshots
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: screenshots-windows
+          path: '**/build/screenshots/'
+          if-no-files-found: error
+
+      - name: Test reports
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-reports-windows
+          path: |
+            **/build/reports/tests/
+            **/build/test-results/
+
+  test-macos:
+    name: Tests (macOS ${{ matrix.arch }})
+    needs: style
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-latest
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x86_64
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 25
+      - uses: gradle/actions/setup-gradle@v6
+
+      - name: Headless tests
+        run: ./gradlew test
+
+      # The session of the runner has a window server, so AppKit windows come up without any display setup.
+      - name: Display tests
+        run: ./gradlew displayTest -Dlwjwae.requireDisplay=true -Dlwjwae.screenshots=true
+
+      - name: Screenshots
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: screenshots-macos-${{ matrix.arch }}
+          path: '**/build/screenshots/'
+          if-no-files-found: error
+
+      - name: Test reports
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-reports-macos-${{ matrix.arch }}
+          path: |
+            **/build/reports/tests/
+            **/build/test-results/
+

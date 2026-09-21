@@ -1,0 +1,171 @@
+# lwjwae-macos
+
+The macOS backend: an `NSWindow` with a `WKWebView`, driven through the Objective-C runtime.[LICENSE](../../../Development/webview-jvm/LICENSE)
+
+**Status:** this module compiles and passes Checkstyle, and its headless tests run anywhere. Its
+display tests haven't been run on a Mac since the port.
+
+## Requirements
+
+- macOS, arm64 or x86_64. AppKit and WebKit are part of the system, so the platform check is the
+  whole test.
+
+The provider [`MacApplicationBackendProvider`](src/main/java/dev/ivchenko/lwjwae/macos/MacApplicationBackendProvider.java) registers under the name `cocoa-wkwebview`.
+
+## Layout
+
+| Class                                                                                               | Role                                                                          |
+|-----------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------|
+| [`MacApplicationBackend`](src/main/java/dev/ivchenko/lwjwae/macos/MacApplicationBackend.java)       | The window. Forwards every call to the main thread.                           |
+| [`MacDispatcher`](src/main/java/dev/ivchenko/lwjwae/macos/MacDispatcher.java)                       | The main thread of the process, and how work reaches it.                      |
+| [`PendingEvaluation`](src/main/java/dev/ivchenko/lwjwae/macos/PendingEvaluation.java)               | A future and the arena of its completion block.                               |
+| [`binding.ObjC`](src/main/java/dev/ivchenko/lwjwae/macos/binding/ObjC.java)                         | The runtime: classes, selectors, `objc_msgSend`, blocks, autorelease pools.   |
+| [`binding.Foundation`](src/main/java/dev/ivchenko/lwjwae/macos/binding/Foundation.java)             | Strings, URLs, data, errors, geometry structs.                                |
+| [`binding.AppKit`](src/main/java/dev/ivchenko/lwjwae/macos/binding/AppKit.java)                     | The application object and windows.                                           |
+| [`binding.WebKit`](../lwjwae-gtk/src/main/java/dev/ivchenko/lwjwae/gtk/binding/WebKit.java)         | The view, its configuration, user scripts, messages, scheme tasks.            |
+| [`binding.MethodStub`](src/main/java/dev/ivchenko/lwjwae/macos/binding/MethodStub.java)             | One method of a class defined at runtime.                                     |
+| [`binding.Signatures`](../lwjwae-gtk/src/main/java/dev/ivchenko/lwjwae/gtk/binding/Signatures.java) | Every `FunctionDescriptor` the module binds, mostly shapes of `objc_msgSend`. |
+
+## Talking to Objective-C
+
+Every call to Cocoa is a message send. `objc_msgSend` is a trampoline that takes whatever the target
+method takes, so [`ObjC`](src/main/java/dev/ivchenko/lwjwae/macos/binding/ObjC.java) binds one downcall handle per distinct signature and names the shape:
+`send` returns `id`, `sendVoid` returns nothing, `sendLong` returns `NSInteger`, and so on, each
+with overloads for the arguments. Classes and selectors are looked up once and cached, so a send
+costs one hash lookup and one native call.
+
+No method that returns a struct is bound. On x86_64, such a call must go through
+`objc_msgSend_stret`, which doesn't exist on arm64. Where a struct is needed, the backend reads it
+through key-value coding: `valueForKey:` boxes it into an `NSValue`, and `getValue:size:` copies it
+out.
+
+Callbacks go the other way. [`ObjC.defineClass`](src/main/java/dev/ivchenko/lwjwae/macos/binding/ObjC.java) creates a class at runtime with
+`objc_allocateClassPair`, adds one method per [`MethodStub`](src/main/java/dev/ivchenko/lwjwae/macos/binding/MethodStub.java), each an upcall stub with its
+Objective-C type encoding, and registers it. Every method receives `self` and `_cmd` before its own
+arguments, as Objective-C passes them.
+
+## The main thread
+
+AppKit accepts only the main thread of the process, and the library doesn't own it. There are two
+situations, and [`MacDispatcher`](src/main/java/dev/ivchenko/lwjwae/macos/MacDispatcher.java) handles both:
+
+- Under the `java` launcher, the main thread is parked in a `CFRunLoop` while Java code runs on
+  another thread. `post` queues the task and calls
+  `performSelectorOnMainThread:withObject:waitUntilDone:NO` on a `LwjwaeDispatcher` object whose
+  `drain` method is an upcall stub. That's a run loop source, so it keeps firing after the first
+  batch has started `-[NSApplication run]` and that nested loop owns the thread for the rest of the
+  process.
+- In a native image, the `main` method of the application *is* the main thread. Calls made from it
+  run inline, and [`ApplicationBackend.run()`](../lwjwae-core/src/main/java/dev/ivchenko/lwjwae/ApplicationBackend.java) starts the application loop itself.
+
+On first use, [`MacDispatcher.instance()`](src/main/java/dev/ivchenko/lwjwae/macos/MacDispatcher.java) creates the shared `NSApplication` with the regular
+activation policy (a Dock icon and a menu bar). When it's already on the main thread, it calls
+`finishLaunching`, because WebKit starts its helper processes only in an application that has
+launched. Otherwise, it posts `sharedApplication` and then `run`.
+
+Every task runs inside an autorelease pool: `execute` pushes one before and pops it after.
+
+## Creating a window
+
+`new MacApplicationBackend(parameters)` runs the following on the main thread and returns when it's
+done:
+
+1. Allocates an instance of `LwjwaeDelegate`, the class defined once per process with the window
+   delegate, navigation delegate, script message handler, and URL scheme handler methods. Records
+   the backend under the address of the delegate; that address is the key from every callback back
+   to the backend.
+2. Creates a `WKWebViewConfiguration`, sets the delegate as the handler for the `app` URL scheme,
+   retains the `WKUserContentController` of the configuration, and adds the delegate as the
+   script message handler named `__lwjwaeBridge`.
+3. Creates the `WKWebView` with that configuration, with an autoresizing mask that follows the
+   window, and sets the delegate as its navigation delegate.
+4. Creates an `NSWindow` with the title, closable, miniaturizable, and resizable style, and with
+   `releasedWhenClosed` off, so the backend owns its lifetime. Centers it. Sets the view as the
+   content view and the delegate as the window delegate.
+5. Injects a user script that cancels `contextmenu` unless `window.__lwjwaeContextMenu` is set.
+   WKWebView has no setting to suppress its menu, and a shipped application doesn't want "Reload"
+   and "Inspect Element" in it.
+6. Calls `installBridge()`.
+
+The window stays hidden until `show()`, which calls `makeKeyAndOrderFront:` and activates the
+application.
+
+## Callbacks
+
+Every delegate method looks the backend up by `self`, does the work, catches `Throwable` and
+reports it. Nothing unwinds into Cocoa.
+
+| Selector                                                                                  | Handler                           | What it does                                                                                                       |
+|-------------------------------------------------------------------------------------------|-----------------------------------|--------------------------------------------------------------------------------------------------------------------|
+| `webView:didStartProvisionalNavigation:`                                                  | `onDidStartProvisionalNavigation` | Emits `STARTED` with the current URL.                                                                              |
+| `webView:didCommitNavigation:`                                                            | `onDidCommitNavigation`           | Emits `COMMITTED`.                                                                                                 |
+| `webView:didFinishNavigation:`                                                            | `onDidFinishNavigation`           | Emits `FINISHED`.                                                                                                  |
+| `webView:didFailProvisionalNavigation:withError:`, `webView:didFailNavigation:withError:` | `onDidFailNavigation`             | Emits `LoadEvent.failed` once per URL, with the failing URL from the `NSError` and its localized description.      |
+| `userContentController:didReceiveScriptMessage:`                                          | `onDidReceiveScriptMessage`       | Reads the body of the `WKScriptMessage` and calls `handleBridgeMessage`.                                           |
+| `webView:startURLSchemeTask:`                                                             | `onStartUrlSchemeTask`            | Serves the resource, described next.                                                                               |
+| `webView:stopURLSchemeTask:`                                                              | `onStopUrlSchemeTask`             | Nothing: a resource is answered in one step, so there's nothing to stop.                                           |
+| `windowWillClose:`                                                                        | `onWindowWillClose`               | Detaches the delegates, releases every object, calls `markClosed()`, and stops the run loop if `run()` started it. |
+
+## Serving resources
+
+The `app://local/PATH` scheme is answered per window through `WKURLSchemeHandler`:
+
+1. Reads the URL of the `WKURLSchemeTask`, strips the scheme, the host, and the query string.
+2. Reads the bytes from the classpath.
+3. Builds an `NSURLResponse` with the URL, the media type from [`MimeTypeUtil`](../lwjwae-core/src/main/java/dev/ivchenko/lwjwae/util/MimeTypeUtil.java), and the length;
+   calls `didReceiveResponse:`, `didReceiveData:` with an `NSData` copy, and `didFinish`.
+4. On [`ResourceNotFoundException`](../lwjwae-core/src/main/java/dev/ivchenko/lwjwae/exception/ResourceNotFoundException.java), calls `didFailWithError:` with an `NSError` of code 404 in the
+   `dev.ivchenko.lwjwae` domain. WebKit reports that to the navigation delegate as a failed
+   provisional navigation. When the missing resource is the document being loaded, the backend also
+   emits [`LoadEvent.failed`](../lwjwae-core/src/main/java/dev/ivchenko/lwjwae/event/LoadEvent.java) itself and remembers the URL, so the delegate doesn't report it twice.
+
+## Evaluating scripts
+
+`evaluateJavaScript:completionHandler:` takes a block. The backend builds one by hand:
+
+1. Wraps the script with [`ScriptUtil.taggedEvaluation`](../lwjwae-core/src/main/java/dev/ivchenko/lwjwae/util/ScriptUtil.java), the same wrapper as on Windows: the caller
+   text runs in the global scope, and the outcome comes back as one string tagged `S` or `E`. WebKit
+   would otherwise replace the message of a thrown error with a generic one.
+2. Allocates a block literal in an automatic arena, marked global so the runtime never copies or
+   frees it, with the shared completion stub as `invoke` and the ID of a [`PendingEvaluation`](src/main/java/dev/ivchenko/lwjwae/macos/PendingEvaluation.java) as its
+   one captured value.
+3. Posts the evaluation to the main thread.
+4. In the completion, the stub reads the ID back from the block, looks the pending evaluation up,
+   and completes its future: an `NSError` becomes [`ScriptEvaluationFailedException`](../lwjwae-core/src/main/java/dev/ivchenko/lwjwae/exception/ScriptEvaluationFailedException.java) with its
+   description, and a result goes through `ScriptUtil.completeTagged`.
+
+## Developer tools
+
+`devToolsEnabled(true)` sets `developerExtrasEnabled` on the `WKPreferences` of the view through
+key-value coding. The key is private but has been stable since Safari 9, and it's what every
+embedding application uses. That enables the Web Inspector and adds "Inspect Element" to the
+context menu, so the backend also sets `window.__lwjwaeContextMenu` in the current document and in
+every later one, which lets the menu through. `isDevToolsEnabled()` reads the preference back.
+
+## Running the application loop
+
+`run()` has two behaviors, chosen by where it's called from:
+
+- From any thread other than the main thread, or when the application loop is already running:
+  shows the window and blocks until it closes, like the other backends.
+- From the main thread before the loop started, which is the `main` method of a native image:
+  shows the window and calls `-[NSApplication run]` itself. When the window closes, the backend
+  calls `stop:` and posts an application-defined event, because `stop:` takes effect only after the
+  loop processes an event. `run` returns, and so does `run()`.
+
+## Closing
+
+`close()` calls `-[NSWindow close]` on the main thread. The delegate receives `windowWillClose:`
+synchronously, so the cleanup runs before `close()` returns. Closing the window with the red button
+takes the same path. `close()` is idempotent.
+
+## Tests
+
+```bash
+./gradlew :lwjwae-macos:test          # Headless: provider registration; metadata on macOS
+./gradlew :lwjwae-macos:displayTest   # Opens real windows; macOS only
+```
+
+With `-Dlwjwae.screenshots=true`, the display tests capture the screen with the `screencapture`
+tool of the system instead of `java.awt.Robot`, because AWT would bring a second `NSApplication`
+into a process that already runs one.
