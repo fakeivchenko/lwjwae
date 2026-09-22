@@ -47,6 +47,8 @@ public class Glib {
       NativeLibraries.downcall(GOBJECT, "g_signal_connect_data", Signatures.G_SIGNAL_CONNECT_DATA);
   private final MethodHandle OBJECT_REF =
       NativeLibraries.downcall(GOBJECT, "g_object_ref", Signatures.POINTER_POINTER);
+  private final MethodHandle TYPE_CHECK_INSTANCE_IS_A =
+      NativeLibraries.downcall(GOBJECT, "g_type_check_instance_is_a", Signatures.INT_POINTER_LONG);
   private final MethodHandle OBJECT_UNREF =
       NativeLibraries.downcall(GOBJECT, "g_object_unref", Signatures.VOID_POINTER);
   private final MethodHandle MALLOC =
@@ -97,6 +99,12 @@ public class Glib {
   @SneakyThrows
   public void ref(MemorySegment object) {
     MemorySegment _ = (MemorySegment) OBJECT_REF.invokeExact(object);
+  }
+
+  /** Calls {@code g_type_check_instance_is_a}: whether {@code instance} is of {@code type}. */
+  @SneakyThrows
+  public boolean typeCheckInstanceIsA(MemorySegment instance, long type) {
+    return (int) TYPE_CHECK_INSTANCE_IS_A.invokeExact(instance, type) != 0;
   }
 
   /** Calls {@code g_object_unref}. */

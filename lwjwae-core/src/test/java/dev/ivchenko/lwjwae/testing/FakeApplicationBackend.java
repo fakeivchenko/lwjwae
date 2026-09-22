@@ -2,6 +2,7 @@ package dev.ivchenko.lwjwae.testing;
 
 import dev.ivchenko.lwjwae.AbstractApplicationBackend;
 import dev.ivchenko.lwjwae.ApplicationParameters;
+import dev.ivchenko.lwjwae.WindowPosition;
 import dev.ivchenko.lwjwae.event.LoadEvent;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -18,6 +19,8 @@ public class FakeApplicationBackend extends AbstractApplicationBackend {
   public final List<String> navigated = new CopyOnWriteArrayList<>();
 
   private String title;
+  private int left;
+  private int top;
   private int width;
   private int height;
   private boolean resizable = true;
@@ -105,6 +108,23 @@ public class FakeApplicationBackend extends AbstractApplicationBackend {
   public void size(int width, int height) {
     this.width = width;
     this.height = height;
+  }
+
+  @Override
+  public WindowPosition position() {
+    return new WindowPosition(this.left, this.top);
+  }
+
+  @Override
+  public void position(int x, int y) {
+    this.left = x;
+    this.top = y;
+  }
+
+  @Override
+  public void center() {
+    this.left = 0;
+    this.top = 0;
   }
 
   @Override

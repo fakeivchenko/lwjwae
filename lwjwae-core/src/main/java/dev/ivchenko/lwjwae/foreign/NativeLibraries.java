@@ -37,6 +37,18 @@ public class NativeLibraries {
   public final Arena ARENA = Arena.global();
 
   /**
+   * Opens the first library in {@code sonames} that the platform loader accepts, or returns {@code
+   * null} when none does. For a library that a backend can do without.
+   */
+  public SymbolLookup loadIfPresent(String... sonames) {
+    try {
+      return load(sonames);
+    } catch (UnsatisfiedLinkError _) {
+      return null;
+    }
+  }
+
+  /**
    * Opens the first library in {@code sonames} that the platform loader accepts.
    *
    * @throws UnsatisfiedLinkError If none of the names loads. The failure of every attempt is
@@ -90,6 +102,21 @@ public class NativeLibraries {
   public MethodHandle downcall(FunctionDescriptor descriptor) {
     DOWNCALLS.add(descriptor);
     return LINKER.downcallHandle(descriptor);
+  }
+
+  /**
+   * The same as {@link #downcall(SymbolLookup, String, FunctionDescriptor)} for a symbol that may
+   * be absent: {@code library} is {@code null} when it or the symbol isn't there, and then the
+   * result is {@code null} too. The descriptor is recorded either way, so that the reachability
+   * metadata of a module doesn't depend on the machine that ran its test.
+   */
+  public MethodHandle downcallIfPresent(
+      SymbolLookup library, String symbol, FunctionDescriptor descriptor) {
+    DOWNCALLS.add(descriptor);
+    if (library == null) {
+      return null;
+    }
+    return downcall(library, symbol, descriptor);
   }
 
   /**

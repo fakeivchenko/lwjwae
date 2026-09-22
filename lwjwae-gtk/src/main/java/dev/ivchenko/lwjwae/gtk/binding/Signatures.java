@@ -65,6 +65,17 @@ public class Signatures {
   public final FunctionDescriptor VOID_POINTER_POINTER =
       FunctionDescriptor.ofVoid(C_POINTER, C_POINTER);
 
+  /** {@code T* f(U*, V*)}: {@code gdk_display_get_monitor_at_window}. */
+  public final FunctionDescriptor POINTER_POINTER_POINTER =
+      FunctionDescriptor.of(C_POINTER, C_POINTER, C_POINTER);
+
+  /** {@code gsize f(void)}: {@code gdk_wayland_display_get_type}. */
+  public final FunctionDescriptor LONG_VOID = FunctionDescriptor.of(C_LONG);
+
+  /** {@code gboolean f(T*, GType)}: {@code g_type_check_instance_is_a}. */
+  public final FunctionDescriptor INT_POINTER_LONG =
+      FunctionDescriptor.of(C_INT, C_POINTER, C_LONG);
+
   /** {@code void f(T*, U*, V*)}. */
   public final FunctionDescriptor VOID_POINTER_POINTER_POINTER =
       FunctionDescriptor.ofVoid(C_POINTER, C_POINTER, C_POINTER);

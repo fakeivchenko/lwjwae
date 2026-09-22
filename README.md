@@ -1,4 +1,18 @@
-# lwjwae - lightweight java web application engine
+<h1 align="center">lwjwae</h1>
+
+<p align="center">
+  <b>Lightweight Java web application engine</b><br/>
+  <i>No JNI. No native code. No native artifacts.</i>
+</p>
+
+<p align="center">
+  <a href="https://github.com/fakeivchenko/lwjwae/actions/workflows/tests.yml"><img alt="Tests" src="https://github.com/fakeivchenko/lwjwae/actions/workflows/tests.yml/badge.svg?branch=dev"></a>
+  <a href="https://github.com/fakeivchenko/lwjwae/actions/workflows/release.yml"><img alt="Release" src="https://github.com/fakeivchenko/lwjwae/actions/workflows/release.yml/badge.svg?branch=release"></a>
+  <a href="https://repo.ivchenko.dev/#/releases/dev/ivchenko/lwjwae/lwjwae-core"><img alt="Latest release" src="https://repo.ivchenko.dev/api/badge/latest/releases/dev/ivchenko/lwjwae/lwjwae-core?color=40c14a&name=release"></a>
+  <img alt="Java 25" src="https://img.shields.io/badge/Java-25-blue">
+  <img alt="GraalVM native-image ready" src="https://img.shields.io/badge/GraalVM-native--image%20ready-2f6fd6">
+  <a href="LICENSE"><img alt="Apache 2.0" src="https://img.shields.io/badge/license-Apache%202.0-green"></a>
+</p>
 
 Native desktop applications with a web view inside, from Java, through the Foreign Function and Memory
 API. No JNI, no native artifacts of the library's own: on each platform, the window and the engine
@@ -36,7 +50,7 @@ On the page:
 
 ```js
 const reversed = await window.reverse("lwjwae");
-window.lwjwae.on("tick", (tick) => console.log(tick));
+await window.lwjwae.listen("tick", (event) => console.log(event.payload));
 ```
 
 `Application.create` picks the backend for the machine it runs on. Put

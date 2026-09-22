@@ -3,6 +3,7 @@ package dev.ivchenko.lwjwae.testing.contract;
 import dev.ivchenko.lwjwae.Application;
 import dev.ivchenko.lwjwae.ApplicationBackend;
 import dev.ivchenko.lwjwae.ApplicationParameters;
+import dev.ivchenko.lwjwae.WindowPosition;
 import dev.ivchenko.lwjwae.event.LoadEvent;
 import dev.ivchenko.lwjwae.testing.Loads;
 import dev.ivchenko.lwjwae.testing.LocalPages;
@@ -92,6 +93,80 @@ public abstract class WindowContractTest extends DisplayContractTest {
       Assertions.assertEquals(640, backend.width());
       Assertions.assertEquals(480, backend.height());
     }
+  }
+
+  /**
+   * Whether the platform lets a client place its window and read the position back. Wayland
+   * doesn't: there, the test only checks that the calls return.
+   */
+  protected boolean canPlaceWindows() {
+    return true;
+  }
+
+  @Test
+  void windowOpensWhereAskedAndMoves() throws Exception {
+    ApplicationParameters parameters =
+        ApplicationParameters.builder()
+            .title("lwjwae :: position")
+            .width(400)
+            .height(300)
+            .x(120)
+            .y(80)
+            .build();
+    try (ApplicationBackend backend = Application.create(parameters)) {
+      backend.show();
+      if (this.canPlaceWindows()) {
+        awaitPosition(backend, 120, 80);
+        Assertions.assertEquals(new WindowPosition(120, 80), backend.position());
+      }
+      Screenshots.capture("window-opened-at-120-80");
+
+      backend.position(200, 160);
+      if (this.canPlaceWindows()) {
+        awaitPosition(backend, 200, 160);
+        Assertions.assertEquals(new WindowPosition(200, 160), backend.position());
+      }
+      Screenshots.capture("window-moved-to-200-160");
+
+      backend.center();
+      Thread.sleep(300);
+      if (this.canPlaceWindows()) {
+        Assertions.assertNotEquals(200, backend.position().x(), "center must move the window");
+      }
+      Screenshots.capture("window-centered");
+    }
+  }
+
+  @Test
+  void windowOpensCentered() throws Exception {
+    ApplicationParameters parameters =
+        ApplicationParameters.builder().width(400).height(300).x(0).y(0).centered(true).build();
+    try (ApplicationBackend backend = Application.create(parameters)) {
+      backend.show();
+      Thread.sleep(300);
+      if (this.canPlaceWindows()) {
+        WindowPosition position = backend.position();
+        Assertions.assertTrue(position.x() > 0 && position.y() > 0, "centered wins over x and y");
+      }
+      Screenshots.capture("window-opened-centered");
+    }
+  }
+
+  /**
+   * Waits for the window manager to apply a move. Window managers apply a request asynchronously,
+   * and some shift the frame by the size of its decorations, so the check is within a margin.
+   */
+  private static void awaitPosition(ApplicationBackend backend, int x, int y)
+      throws InterruptedException {
+    for (int attempt = 0; attempt < 50 && !near(backend, x, y); attempt++) {
+      // noinspection BusyWait
+      Thread.sleep(50);
+    }
+  }
+
+  private static boolean near(ApplicationBackend backend, int x, int y) {
+    WindowPosition position = backend.position();
+    return Math.abs(position.x() - x) <= 2 && Math.abs(position.y() - y) <= 2;
   }
 
   @Test

@@ -3,6 +3,8 @@ package dev.ivchenko.lwjwae;
 import dev.ivchenko.lwjwae.bridge.BridgeMessage;
 import dev.ivchenko.lwjwae.bridge.BridgeProtocol;
 import dev.ivchenko.lwjwae.bridge.codec.BridgeCodec;
+import dev.ivchenko.lwjwae.event.Event;
+import dev.ivchenko.lwjwae.event.EventSubscription;
 import dev.ivchenko.lwjwae.event.LoadEvent;
 import dev.ivchenko.lwjwae.ui.UiDispatcher;
 import dev.ivchenko.lwjwae.util.ResourceUtil;
@@ -14,7 +16,9 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.regex.Pattern;
@@ -43,6 +47,18 @@ public abstract class AbstractApplicationBackend implements ApplicationBackend {
   private final ApplicationParameters parameters;
   private final List<Consumer<LoadEvent>> loadListeners = new CopyOnWriteArrayList<>();
   private final Map<String, Function<String, String>> bindings = new ConcurrentHashMap<>();
+  private final Map<String, Map<Long, Consumer<Event>>> eventListeners = new ConcurrentHashMap<>();
+  private final AtomicLong listenerIds = new AtomicLong();
+
+  /**
+   * One thread per window for event listeners, so that a listener sees the events of a name in the
+   * order they were emitted. A bound handler gets a thread of its own instead, because a call has a
+   * promise waiting on it and no order to keep.
+   */
+  private final ExecutorService eventExecutor =
+      Executors.newSingleThreadExecutor(Thread.ofVirtual().name("lwjwae-events").factory());
+
+  private final AtomicLong eventIds = new AtomicLong();
   private final CompletableFuture<Void> closeSignal = new CompletableFuture<>();
 
   private volatile boolean closed;
@@ -116,13 +132,99 @@ public abstract class AbstractApplicationBackend implements ApplicationBackend {
   @Override
   public final void emit(String name, String payload) {
     Objects.requireNonNull(name, "name");
-    this.eval(BridgeProtocol.emitScript(name, payload == null ? "" : payload, false));
+    String text = payload == null ? "" : payload;
+    this.eval(BridgeProtocol.emitScript(name, text, false));
+    this.deliver(name, text, false);
   }
 
   @Override
   public final void emit(String name, Object payload) {
     Objects.requireNonNull(name, "name");
-    this.eval(BridgeProtocol.emitScript(name, this.codec().encode(payload), true));
+    String text = this.codec().encode(payload);
+    this.eval(BridgeProtocol.emitScript(name, text, true));
+    this.deliver(name, text, true);
+  }
+
+  @Override
+  public final EventSubscription listen(String name, Consumer<Event> listener) {
+    Objects.requireNonNull(name, "name");
+    Objects.requireNonNull(listener, "listener");
+    long id = this.listenerIds.incrementAndGet();
+    this.eventListeners.computeIfAbsent(name, _ -> new ConcurrentHashMap<>()).put(id, listener);
+    return () -> this.unlisten(name, id);
+  }
+
+  @Override
+  public final <T> EventSubscription listen(String name, Class<T> type, Consumer<T> listener) {
+    Objects.requireNonNull(type, "type");
+    Objects.requireNonNull(listener, "listener");
+    BridgeCodec codec = this.codec();
+    return this.listen(name, event -> listener.accept(decode(codec, event, type)));
+  }
+
+  @Override
+  public final EventSubscription once(String name, Consumer<Event> listener) {
+    Objects.requireNonNull(name, "name");
+    Objects.requireNonNull(listener, "listener");
+    long id = this.listenerIds.incrementAndGet();
+    this.eventListeners
+        .computeIfAbsent(name, _ -> new ConcurrentHashMap<>())
+        .put(
+            id,
+            event -> {
+              // Only the first delivery that removes the entry runs the listener.
+              if (this.unlisten(name, id)) {
+                listener.accept(event);
+              }
+            });
+    return () -> this.unlisten(name, id);
+  }
+
+  @Override
+  public final <T> EventSubscription once(String name, Class<T> type, Consumer<T> listener) {
+    Objects.requireNonNull(type, "type");
+    Objects.requireNonNull(listener, "listener");
+    BridgeCodec codec = this.codec();
+    return this.once(name, event -> listener.accept(decode(codec, event, type)));
+  }
+
+  /**
+   * Suppressed warnings: {@code unchecked}: the cast is guarded by the equality of {@code type}
+   * with {@code String.class}, so {@code T} is {@code String} on that branch.
+   */
+  @SuppressWarnings("unchecked")
+  private static <T> T decode(BridgeCodec codec, Event event, Class<T> type) {
+    if (!event.typed() && type == String.class) {
+      return (T) event.payload();
+    }
+    return codec.decode(event.payload(), type);
+  }
+
+  private boolean unlisten(String name, long id) {
+    Map<Long, Consumer<Event>> listeners = this.eventListeners.get(name);
+    return listeners != null && listeners.remove(id) != null;
+  }
+
+  /**
+   * Runs every Java listener of {@code name} with the event, on the event thread of this window, so
+   * the emitter never waits and the listeners see events in order.
+   */
+  private void deliver(String name, String payload, boolean typed) {
+    Map<Long, Consumer<Event>> listeners = this.eventListeners.get(name);
+    if (listeners == null || listeners.isEmpty() || this.isClosed()) {
+      return;
+    }
+    Event event = new Event(name, this.eventIds.incrementAndGet(), payload, typed);
+    this.eventExecutor.execute(
+        () -> {
+          for (Consumer<Event> listener : listeners.values()) {
+            try {
+              listener.accept(event);
+            } catch (Throwable t) {
+              ThrowableUtil.report(t);
+            }
+          }
+        });
   }
 
   /**
@@ -146,6 +248,17 @@ public abstract class AbstractApplicationBackend implements ApplicationBackend {
     BridgeMessage parsed = BridgeProtocol.parse(message);
     if (parsed == null) {
       ThrowableUtil.report(new IllegalStateException("Malformed bridge message: " + message));
+      return;
+    }
+
+    if (parsed.name().equals(BridgeProtocol.EVENT_CALL)) {
+      Event event = BridgeProtocol.parseEvent(parsed.payload());
+      if (event == null) {
+        this.eval(BridgeProtocol.rejectScript(parsed.id(), "Malformed event"));
+        return;
+      }
+      this.deliver(event.name(), event.payload(), event.typed());
+      this.eval(BridgeProtocol.resolveScript(parsed.id(), ""));
       return;
     }
 
@@ -201,6 +314,8 @@ public abstract class AbstractApplicationBackend implements ApplicationBackend {
   protected final void markClosed() {
     this.closed = true;
     this.closeSignal.complete(null);
+    // Deliveries already queued still run; nothing new is accepted.
+    this.eventExecutor.shutdown();
   }
 
   /**

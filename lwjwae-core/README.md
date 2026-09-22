@@ -13,7 +13,7 @@ the window; a codec module supplies JSON when you use the typed bridge methods.
 |----------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | [`Application`](src/main/java/dev/ivchenko/lwjwae/Application.java)                                                                                      | Entry point. Picks a backend and creates a window.                                                                                                                                                                                                                                                                                                 |
 | [`ApplicationBackend`](src/main/java/dev/ivchenko/lwjwae/ApplicationBackend.java)                                                                        | One window with a web view inside. Every backend implements it.                                                                                                                                                                                                                                                                                    |
-| [`ApplicationParameters`](src/main/java/dev/ivchenko/lwjwae/ApplicationParameters.java)                                                                  | What the window starts with: title, size, URL, development server, codec.                                                                                                                                                                                                                                                                          |
+| [`ApplicationParameters`](src/main/java/dev/ivchenko/lwjwae/ApplicationParameters.java)                                                                  | What the window starts with: title, size, position, URL, development server, codec.                                                                                                                                                                                                                                                                          |
 | [`ApplicationBackendProvider`](src/main/java/dev/ivchenko/lwjwae/ApplicationBackendProvider.java)                                                        | The service that a backend module registers so that [`Application`](src/main/java/dev/ivchenko/lwjwae/Application.java) can find it.                                                                                                                                                                                                               |
 | [`bridge.codec.BridgeCodec`](src/main/java/dev/ivchenko/lwjwae/bridge/codec/BridgeCodec.java)                                                            | JSON in and out, for `bind(name, Class, handler)` and `emit(name, Object)`.                                                                                                                                                                                                                                                                        |
 | [`event.LoadEvent`](src/main/java/dev/ivchenko/lwjwae/event/LoadEvent.java), [`event.LoadState`](src/main/java/dev/ivchenko/lwjwae/event/LoadState.java) | Page load lifecycle notifications.                                                                                                                                                                                                                                                                                                                 |
@@ -32,6 +32,15 @@ try (ApplicationBackend application = Application.create(ApplicationParameters.b
   application.run();
 }
 ```
+
+### Placing the window
+
+`ApplicationParameters.x`/`y` open the window at a screen position, `centered` in the middle of
+the screen; `position(x, y)`, `center()`, and `position()` on the backend do the same later. The
+coordinates are those of the window frame, from the top left of the screen, in the units of the
+platform. Wayland is the exception: the protocol keeps window placement with the compositor, so
+there `position(x, y)` does nothing, `position()` returns `0, 0`, and `center()` is a request that
+the compositor may ignore. X11, Windows, and macOS place windows as asked.
 
 Every method of `ApplicationBackend` is safe to call from any thread. The backend forwards the
 call to its UI thread, and a getter blocks until the UI thread has answered.
@@ -99,11 +108,42 @@ return `window.webkit.messageHandlers.NAME.postMessage`; WebView2 returns
 Every string that goes into a script passes through [`ScriptUtil.quote`](src/main/java/dev/ivchenko/lwjwae/util/ScriptUtil.java). A quote, a backslash, a
 control character, or U+2028 in application data would otherwise change the script.
 
-### From Java to the page: `emit`
+### Events: `emit`, `listen`, `once`
 
-`emit("tick", payload)` evaluates `emitScript`. The runtime calls every listener registered with
-`window.lwjwae.on("tick", listener)` and dispatches a `CustomEvent` named `lwjwae:tick` with the
-payload as `detail`. There's no answer.
+Events go both ways and have the shape of Tauri's. On the page:
+
+```js
+const unlisten = await window.lwjwae.listen("tick", (event) => {
+  console.log(event.event, event.id, event.payload);
+});
+await window.lwjwae.once("ready", (event) => {});
+await window.lwjwae.emit("note", { x: 1 });
+unlisten();
+```
+
+In Java:
+
+```java
+EventSubscription subscription = application.listen("note", event -> log(event.payload()));
+application.listen("note", Point.class, point -> ...);
+application.once("ready", event -> ...);
+application.emit("tick", new Tick(...));
+subscription.unlisten();
+```
+
+An event reaches every listener of its name on both sides. `emit` from Java evaluates
+`emitScript`, which hands the payload to the page runtime, and runs the Java listeners. `emit` from
+the page runs the page listeners, then posts one message under the reserved name
+`BridgeProtocol.EVENT_CALL` (`lwjwae:emit`, which no binding can take because a bound name can't
+contain a colon) with `typed␟name␟payload` as its payload; the promise that `emit` returns resolves
+once Java took the event. A listener on the page gets `{ event, id, payload }`; one in Java gets an
+[`Event`](src/main/java/dev/ivchenko/lwjwae/event/Event.java) with the payload as text and a `typed`
+flag that says whether the text came from the codec. Typed Java listeners decode it; `String.class`
+takes an untyped payload as it is.
+
+Java listeners run on one virtual thread per window, in the order the events were emitted, so a
+listener never sees the second event of a name before the first. A listener that throws is reported
+and the others still run.
 
 ### Typed calls
 

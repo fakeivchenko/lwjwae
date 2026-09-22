@@ -2,12 +2,14 @@ package dev.ivchenko.lwjwae.gtk;
 
 import dev.ivchenko.lwjwae.AbstractApplicationBackend;
 import dev.ivchenko.lwjwae.ApplicationParameters;
+import dev.ivchenko.lwjwae.WindowPosition;
 import dev.ivchenko.lwjwae.bridge.BridgeProtocol;
 import dev.ivchenko.lwjwae.event.LoadEvent;
 import dev.ivchenko.lwjwae.event.LoadState;
 import dev.ivchenko.lwjwae.exception.ResourceNotFoundException;
 import dev.ivchenko.lwjwae.foreign.CallbackRegistry;
 import dev.ivchenko.lwjwae.foreign.NativeLibraries;
+import dev.ivchenko.lwjwae.gtk.binding.Gdk;
 import dev.ivchenko.lwjwae.gtk.binding.Glib;
 import dev.ivchenko.lwjwae.gtk.binding.Gtk;
 import dev.ivchenko.lwjwae.gtk.binding.Signatures;
@@ -136,6 +138,11 @@ public class GtkApplicationBackend extends AbstractApplicationBackend {
     MemorySegment newWindow = Gtk.windowNew(Gtk.WINDOW_TOPLEVEL);
     Gtk.windowSetTitle(newWindow, parameters.title());
     Gtk.windowSetDefaultSize(newWindow, parameters.width(), parameters.height());
+    if (parameters.centered()) {
+      Gtk.windowSetPosition(newWindow, Gtk.WIN_POS_CENTER);
+    } else if (parameters.hasPosition()) {
+      Gtk.windowMove(newWindow, parameters.x(), parameters.y());
+    }
 
     MemorySegment userData = CallbackRegistry.userData(this.id);
 
@@ -194,6 +201,45 @@ public class GtkApplicationBackend extends AbstractApplicationBackend {
             () -> {
               Gtk.windowSetDefaultSize(this.window(), width, height);
               Gtk.windowResize(this.window(), width, height);
+            });
+  }
+
+  @Override
+  public WindowPosition position() {
+    return this.dispatcher()
+        .call(
+            () -> {
+              int[] position = Gtk.windowGetPosition(this.window());
+              return new WindowPosition(position[0], position[1]);
+            });
+  }
+
+  @Override
+  public void position(int x, int y) {
+    this.dispatcher().run(() -> Gtk.windowMove(this.window(), x, y));
+  }
+
+  /**
+   * Before the window is mapped, {@code GTK_WIN_POS_CENTER} lets GTK place it. After that, the
+   * position of the frame is the work area of its monitor minus its own size, halved. On Wayland,
+   * neither the move nor the read of the position does anything, so only the first form has any
+   * effect there, and only if the compositor honors it.
+   */
+  @Override
+  public void center() {
+    this.dispatcher()
+        .run(
+            () -> {
+              MemorySegment current = this.window();
+              MemorySegment gdkWindow = Gtk.widgetGetWindow(current);
+              if (gdkWindow.equals(MemorySegment.NULL) || Gdk.isWayland()) {
+                Gtk.windowSetPosition(current, Gtk.WIN_POS_CENTER);
+                return;
+              }
+              int[] area = Gdk.workareaAt(gdkWindow);
+              int[] size = Gtk.windowGetSize(current);
+              Gtk.windowMove(
+                  current, area[0] + (area[2] - size[0]) / 2, area[1] + (area[3] - size[1]) / 2);
             });
   }
 

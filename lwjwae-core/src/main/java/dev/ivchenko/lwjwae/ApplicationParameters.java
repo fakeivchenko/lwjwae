@@ -18,6 +18,12 @@ import lombok.Builder;
  *     Default: {@code 1024}.
  * @param height The initial window height, in pixels. A non-positive value means the default.
  *     Default: {@code 768}.
+ * @param x The screen X coordinate that the window opens at, in the units of the platform, or
+ *     {@code null} to let the window manager choose. Both {@code x} and {@code y} must be set for
+ *     either to count. Wayland ignores them: a client can't place its window there.
+ * @param y The screen Y coordinate that the window opens at, measured from the top. See {@code x}.
+ * @param centered Whether the window opens in the middle of the screen. Wins over {@code x} and
+ *     {@code y}. Default: {@code false}, except on macOS, where every window opens centered.
  * @param url The URL to load after the window exists, or {@code null} to leave the window blank.
  *     This is a convenience for simple cases. {@link Application#create} navigates before it
  *     returns, so to observe a load from its first event, leave this value unset, register the
@@ -34,7 +40,15 @@ import lombok.Builder;
  */
 @Builder(toBuilder = true)
 public record ApplicationParameters(
-    String title, int width, int height, String url, String devServerUrl, BridgeCodec codec) {
+    String title,
+    int width,
+    int height,
+    Integer x,
+    Integer y,
+    boolean centered,
+    String url,
+    String devServerUrl,
+    BridgeCodec codec) {
   /** The system property that supplies {@link #devServerUrl()} when the builder leaves it unset. */
   public static final String DEV_SERVER_URL_PROPERTY = "lwjwae.devServerUrl";
 
@@ -67,6 +81,17 @@ public record ApplicationParameters(
     if (codec == null) {
       codec = BridgeCodec.discover().orElse(null);
     }
+    if (x == null || y == null) {
+      x = null;
+      y = null;
+    }
+  }
+
+  /**
+   * Whether the window opens at {@link #x()}, {@link #y()} rather than where the platform puts it.
+   */
+  public boolean hasPosition() {
+    return this.x != null;
   }
 
   /**

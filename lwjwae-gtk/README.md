@@ -67,7 +67,10 @@ done:
 2. Registers the `app` URI scheme on the default context, once per process, with a static
    callback. Every view shares it.
 3. Creates a `GtkWindow` (`GTK_WINDOW_TOPLEVEL`) with the title and the default size from the
-   parameters.
+   parameters. A requested position goes to `gtk_window_move` before the window is mapped; a
+   centered window gets `GTK_WIN_POS_CENTER`. Later, `center()` reads the work area of the monitor
+   from GDK and moves the frame itself, except on Wayland, where a client can't move its window and
+   the backend falls back to `GTK_WIN_POS_CENTER` and hopes.
 4. Creates a `WebKitUserContentManager`, connects `script-message-received::__lwjwaeBridge` to the
    bridge callback, and then registers the `__lwjwaeBridge` message handler. The order matters:
    an early message would otherwise race the signal connection.

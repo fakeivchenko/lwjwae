@@ -1,6 +1,8 @@
 package dev.ivchenko.lwjwae;
 
 import dev.ivchenko.lwjwae.bridge.codec.BridgeCodec;
+import dev.ivchenko.lwjwae.event.Event;
+import dev.ivchenko.lwjwae.event.EventSubscription;
 import dev.ivchenko.lwjwae.event.LoadEvent;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
@@ -38,6 +40,26 @@ public interface ApplicationBackend extends AutoCloseable, Runnable {
    * with.
    */
   void size(int width, int height);
+
+  /**
+   * Returns where the window frame is, measured from the top left of the screen. On Wayland, where
+   * a client can't know where its window is, {@code 0, 0}.
+   */
+  WindowPosition position();
+
+  /**
+   * Moves the window frame to {@code x}, {@code y}, measured from the top left of the screen.
+   * Before {@link #show()}, this method sets where the window opens. On Wayland, this method does
+   * nothing: the protocol keeps window placement with the compositor.
+   */
+  void position(int x, int y);
+
+  /**
+   * Moves the window to the middle of the screen it is on. Before {@link #show()}, this method
+   * makes the window open there. On Wayland, this method asks the compositor, which may or may not
+   * comply.
+   */
+  void center();
 
   /** Checks whether the user can resize the window. */
   boolean isResizable();
@@ -117,20 +139,44 @@ public interface ApplicationBackend extends AutoCloseable, Runnable {
   <T, R> void bind(String name, Class<T> argumentType, Function<T, R> handler);
 
   /**
-   * Delivers an event to the page. Listeners registered with {@code window.lwjwae.on(name,
-   * listener)} receive {@code payload}, and a {@code CustomEvent} named {@code lwjwae:NAME} with
-   * the payload as {@code detail} is dispatched on {@code window}. This is the direction from Java
-   * to the page, without writing a script.
+   * Emits an event to every listener of {@code name}: the ones on the page, registered with {@code
+   * window.lwjwae.listen(name, handler)} or {@code once}, and the ones in Java, registered with
+   * {@link #listen}. A page listener receives {@code { event, id, payload }}; a Java one an {@link
+   * Event}. This is the direction from Java to the page, without writing a script.
    */
   void emit(String name, String payload);
 
   /**
-   * The same as {@link #emit(String, String)}, with {@code payload} sent as JSON, so listeners
-   * receive the object.
+   * The same as {@link #emit(String, String)}, with {@code payload} encoded by the codec, so page
+   * listeners receive the value and typed Java listeners decode it.
    *
    * @throws IllegalStateException If no {@link BridgeCodec} is available.
    */
   void emit(String name, Object payload);
+
+  /**
+   * Registers a listener for every event named {@code name}, whether the page emits it with {@code
+   * window.lwjwae.emit(name, payload)} or Java does with {@link #emit}. The listener runs off the
+   * UI thread; a listener that throws is reported, not propagated.
+   *
+   * @return The handle that removes the listener.
+   */
+  EventSubscription listen(String name, Consumer<Event> listener);
+
+  /**
+   * The same as {@link #listen(String, Consumer)}, with the payload decoded as {@code type} before
+   * the listener sees it. {@code String.class} takes the text as it is when the event was emitted
+   * untyped.
+   *
+   * @throws IllegalStateException If no {@link BridgeCodec} is available.
+   */
+  <T> EventSubscription listen(String name, Class<T> type, Consumer<T> listener);
+
+  /** The same as {@link #listen(String, Consumer)}, for the next event only. */
+  EventSubscription once(String name, Consumer<Event> listener);
+
+  /** The same as {@link #listen(String, Class, Consumer)}, for the next event only. */
+  <T> EventSubscription once(String name, Class<T> type, Consumer<T> listener);
 
   /** Registers a listener that's notified on every page load transition. */
   void onLoad(Consumer<LoadEvent> listener);

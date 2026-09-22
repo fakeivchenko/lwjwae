@@ -2,6 +2,7 @@ package dev.ivchenko.lwjwae.windows;
 
 import dev.ivchenko.lwjwae.AbstractApplicationBackend;
 import dev.ivchenko.lwjwae.ApplicationParameters;
+import dev.ivchenko.lwjwae.WindowPosition;
 import dev.ivchenko.lwjwae.event.LoadEvent;
 import dev.ivchenko.lwjwae.event.LoadState;
 import dev.ivchenko.lwjwae.exception.ResourceNotFoundException;
@@ -109,12 +110,21 @@ public class WindowsApplicationBackend extends AbstractApplicationBackend {
   /** Creates the Win32 window and starts the asynchronous WebView2 setup. Runs on the UI thread. */
   private void createWindow(ApplicationParameters parameters) {
     registerWindowClass();
+    boolean placed = parameters.hasPosition() && !parameters.centered();
     MemorySegment window =
         User32.createWindow(
-            WINDOW_CLASS, parameters.title(), parameters.width(), parameters.height());
+            WINDOW_CLASS,
+            parameters.title(),
+            placed ? parameters.x() : User32.CW_USEDEFAULT,
+            placed ? parameters.y() : User32.CW_USEDEFAULT,
+            parameters.width(),
+            parameters.height());
     User32.userData(window, this.id);
     this.hwnd = window;
     User32.resizeClient(window, parameters.width(), parameters.height());
+    if (parameters.centered()) {
+      centerWindow(window);
+    }
 
     MemorySegment handler =
         ComCallback.completion(WebView2.IID_ENVIRONMENT_COMPLETED, this::onEnvironmentCreated);
@@ -151,6 +161,38 @@ public class WindowsApplicationBackend extends AbstractApplicationBackend {
   @Override
   public void size(int width, int height) {
     this.dispatcher().run(() -> User32.resizeClient(this.window(), width, height));
+  }
+
+  @Override
+  public WindowPosition position() {
+    return this.dispatcher()
+        .call(
+            () -> {
+              int[] frame = User32.windowRect(this.window());
+              return new WindowPosition(frame[0], frame[1]);
+            });
+  }
+
+  @Override
+  public void position(int x, int y) {
+    this.dispatcher().run(() -> User32.move(this.window(), x, y));
+  }
+
+  @Override
+  public void center() {
+    this.dispatcher().run(() -> centerWindow(this.window()));
+  }
+
+  /** Puts the frame in the middle of the work area of the monitor that holds the window. */
+  private static void centerWindow(MemorySegment hwnd) {
+    int[] area = User32.workArea(hwnd);
+    int[] frame = User32.windowRect(hwnd);
+    int width = frame[2] - frame[0];
+    int height = frame[3] - frame[1];
+    User32.move(
+        hwnd,
+        area[0] + (area[2] - area[0] - width) / 2,
+        area[1] + (area[3] - area[1] - height) / 2);
   }
 
   @Override

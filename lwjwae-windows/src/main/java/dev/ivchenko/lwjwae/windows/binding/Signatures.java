@@ -37,6 +37,20 @@ public class Signatures {
   /** Any {@code T*}. */
   public final AddressLayout C_POINTER = Layouts.C_POINTER;
 
+  /** {@code struct MONITORINFO { DWORD cbSize; RECT rcMonitor; RECT rcWork; DWORD dwFlags; }}. */
+  public final MemoryLayout MONITORINFO =
+      MemoryLayout.structLayout(
+          C_INT.withName("cbSize"),
+          C_INT.withName("monitorLeft"),
+          C_INT.withName("monitorTop"),
+          C_INT.withName("monitorRight"),
+          C_INT.withName("monitorBottom"),
+          C_INT.withName("workLeft"),
+          C_INT.withName("workTop"),
+          C_INT.withName("workRight"),
+          C_INT.withName("workBottom"),
+          C_INT.withName("flags"));
+
   /** {@code struct RECT { LONG left, top, right, bottom; }}. */
   public final MemoryLayout RECT =
       MemoryLayout.structLayout(
