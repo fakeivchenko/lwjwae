@@ -80,8 +80,12 @@ done:
 3. Creates the `WKWebView` with that configuration, with an autoresizing mask that follows the
    window, and sets the delegate as its navigation delegate.
 4. Creates an `NSWindow` with the title, closable, miniaturizable, and resizable style, and with
-   `releasedWhenClosed` off, so the backend owns its lifetime. Centers it. Sets the view as the
-   content view and the delegate as the window delegate.
+   `releasedWhenClosed` off, so the backend owns its lifetime. Centers it, then moves it to the
+   requested position if there is one. Sets the view as the content view and the delegate as the
+   window delegate. `position()` reads `frame` through key-value coding and flips the Y axis with
+   the height of the primary screen, because AppKit measures from the bottom left; `position(x, y)`
+   converts the same way and sends `setFrameOrigin:`, whose `NSPoint` has the layout of an
+   `NSSize`; `center()` is `-[NSWindow center]`.
 5. Injects a user script that cancels `contextmenu` unless `window.__lwjwaeContextMenu` is set.
    WKWebView has no setting to suppress its menu, and a shipped application doesn't want "Reload"
    and "Inspect Element" in it.

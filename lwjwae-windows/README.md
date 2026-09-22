@@ -91,9 +91,12 @@ messages. It does the following:
    `windowProc` stub. The class loads icon resource 1 of the running module, so a native image
    built with an icon shows it in the title bar and the taskbar, and `java.exe` shows the stock
    icon.
-3. Creates the window with `CreateWindowExW` and `WS_OVERLAPPEDWINDOW`, hidden. Stores the backend
-   ID in the `GWLP_USERDATA` slot of the window, which is how `windowProc` finds the backend.
-   Resizes the window so that the client area, not the outer frame, has the requested size.
+3. Creates the window with `CreateWindowExW` and `WS_OVERLAPPEDWINDOW`, hidden, at the requested
+   position or at `CW_USEDEFAULT`. Stores the backend ID in the `GWLP_USERDATA` slot of the window,
+   which is how `windowProc` finds the backend. Resizes the window so that the client area, not the
+   outer frame, has the requested size, and centers it in the work area of its monitor
+   (`MonitorFromWindow`, `GetMonitorInfoW`) when asked. `position()` reads `GetWindowRect`;
+   `position(x, y)` is `SetWindowPos` with `SWP_NOSIZE`.
 4. Calls `CreateWebViewEnvironmentWithOptionsInternal` with a user data folder under
    `%LOCALAPPDATA%\lwjwae\WebView2` and a completion handler.
 5. Back on the calling thread, waits up to 60 seconds on a future that the completion chain

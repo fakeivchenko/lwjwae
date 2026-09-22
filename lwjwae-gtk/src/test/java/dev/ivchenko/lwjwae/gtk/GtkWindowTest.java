@@ -10,6 +10,12 @@ class GtkWindowTest extends WindowContractTest {
     return PlatformUtil.isUnixDesktop();
   }
 
+  /** X11 places windows where asked; Wayland keeps placement with the compositor. */
+  @Override
+  protected boolean canPlaceWindows() {
+    return System.getenv("WAYLAND_DISPLAY") == null || "x11".equals(System.getenv("GDK_BACKEND"));
+  }
+
   @Override
   protected Class<? extends ApplicationBackend> expectedBackendType() {
     return GtkApplicationBackend.class;

@@ -21,6 +21,12 @@ public class Gtk {
   /** {@code GTK_WINDOW_TOPLEVEL}. */
   public final int WINDOW_TOPLEVEL = 0;
 
+  /** {@code GTK_WIN_POS_NONE}: the window manager places the window. */
+  public final int WIN_POS_NONE = 0;
+
+  /** {@code GTK_WIN_POS_CENTER}: the window opens in the middle of the screen. */
+  public final int WIN_POS_CENTER = 1;
+
   private final MethodHandle INIT_CHECK =
       NativeLibraries.downcall(GTK, "gtk_init_check", Signatures.INT_POINTER_POINTER);
   private final MethodHandle MAIN = NativeLibraries.downcall(GTK, "gtk_main", Signatures.VOID_VOID);
@@ -36,12 +42,21 @@ public class Gtk {
       NativeLibraries.downcall(GTK, "gtk_window_resize", Signatures.VOID_POINTER_INT_INT);
   private final MethodHandle WINDOW_GET_SIZE =
       NativeLibraries.downcall(GTK, "gtk_window_get_size", Signatures.VOID_POINTER_POINTER_POINTER);
+  private final MethodHandle WINDOW_MOVE =
+      NativeLibraries.downcall(GTK, "gtk_window_move", Signatures.VOID_POINTER_INT_INT);
+  private final MethodHandle WINDOW_GET_POSITION =
+      NativeLibraries.downcall(
+          GTK, "gtk_window_get_position", Signatures.VOID_POINTER_POINTER_POINTER);
+  private final MethodHandle WINDOW_SET_POSITION =
+      NativeLibraries.downcall(GTK, "gtk_window_set_position", Signatures.VOID_POINTER_INT);
   private final MethodHandle WINDOW_SET_RESIZABLE =
       NativeLibraries.downcall(GTK, "gtk_window_set_resizable", Signatures.VOID_POINTER_INT);
   private final MethodHandle WINDOW_GET_RESIZABLE =
       NativeLibraries.downcall(GTK, "gtk_window_get_resizable", Signatures.INT_POINTER);
   private final MethodHandle CONTAINER_ADD =
       NativeLibraries.downcall(GTK, "gtk_container_add", Signatures.VOID_POINTER_POINTER);
+  private final MethodHandle WIDGET_GET_WINDOW =
+      NativeLibraries.downcall(GTK, "gtk_widget_get_window", Signatures.POINTER_POINTER);
   private final MethodHandle WIDGET_SHOW_ALL =
       NativeLibraries.downcall(GTK, "gtk_widget_show_all", Signatures.VOID_POINTER);
   private final MethodHandle WIDGET_DESTROY =
@@ -108,6 +123,38 @@ public class Gtk {
     }
   }
 
+  /**
+   * Calls {@code gtk_window_move}: the position of the frame, from the top left of the screen.
+   * Before the window is mapped, this is where it opens. On Wayland, this call does nothing.
+   */
+  @SneakyThrows
+  public void windowMove(MemorySegment window, int x, int y) {
+    WINDOW_MOVE.invokeExact(window, x, y);
+  }
+
+  /**
+   * Returns {@code {x, y}} of the window frame. On Wayland, {@code {0, 0}}: the toolkit has no way
+   * to know.
+   */
+  @SneakyThrows
+  public int[] windowGetPosition(MemorySegment window) {
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment x = arena.allocate(Signatures.C_INT);
+      MemorySegment y = arena.allocate(Signatures.C_INT);
+      WINDOW_GET_POSITION.invokeExact(window, x, y);
+      return new int[] {x.get(Signatures.C_INT, 0), y.get(Signatures.C_INT, 0)};
+    }
+  }
+
+  /**
+   * Calls {@code gtk_window_set_position} with a {@code GtkWindowPosition}: how the window is
+   * placed when it is first mapped.
+   */
+  @SneakyThrows
+  public void windowSetPosition(MemorySegment window, int position) {
+    WINDOW_SET_POSITION.invokeExact(window, position);
+  }
+
   /** Calls {@code gtk_window_set_resizable}. */
   @SneakyThrows
   public void windowSetResizable(MemorySegment window, boolean resizable) {
@@ -124,6 +171,15 @@ public class Gtk {
   @SneakyThrows
   public void containerAdd(MemorySegment container, MemorySegment child) {
     CONTAINER_ADD.invokeExact(container, child);
+  }
+
+  /**
+   * Calls {@code gtk_widget_get_window}: the {@code GdkWindow} of a realized widget, or {@code
+   * NULL} before that.
+   */
+  @SneakyThrows
+  public MemorySegment widgetGetWindow(MemorySegment widget) {
+    return (MemorySegment) WIDGET_GET_WINDOW.invokeExact(widget);
   }
 
   /** Calls {@code gtk_widget_show_all}: shows the widget and everything inside it. */

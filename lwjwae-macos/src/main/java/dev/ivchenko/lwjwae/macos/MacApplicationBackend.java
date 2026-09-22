@@ -2,6 +2,7 @@ package dev.ivchenko.lwjwae.macos;
 
 import dev.ivchenko.lwjwae.AbstractApplicationBackend;
 import dev.ivchenko.lwjwae.ApplicationParameters;
+import dev.ivchenko.lwjwae.WindowPosition;
 import dev.ivchenko.lwjwae.bridge.BridgeProtocol;
 import dev.ivchenko.lwjwae.event.LoadEvent;
 import dev.ivchenko.lwjwae.event.LoadState;
@@ -129,6 +130,10 @@ public class MacApplicationBackend extends AbstractApplicationBackend {
         AppKit.window(parameters.width(), parameters.height(), parameters.title());
     AppKit.setContentView(newWindow, newWebView);
     AppKit.setDelegate(newWindow, newDelegate);
+    // AppKit.window centers; a requested position wins over that, a requested center is a no-op.
+    if (parameters.hasPosition() && !parameters.centered()) {
+      AppKit.setFramePosition(newWindow, parameters.x(), parameters.y());
+    }
 
     this.delegate = newDelegate;
     this.userContentController = controller;
@@ -170,6 +175,26 @@ public class MacApplicationBackend extends AbstractApplicationBackend {
   @Override
   public void size(int width, int height) {
     this.dispatcher().run(() -> AppKit.setContentSize(this.window(), width, height));
+  }
+
+  @Override
+  public WindowPosition position() {
+    return this.dispatcher()
+        .call(
+            () -> {
+              int[] frame = AppKit.framePosition(this.window());
+              return new WindowPosition(frame[0], frame[1]);
+            });
+  }
+
+  @Override
+  public void position(int x, int y) {
+    this.dispatcher().run(() -> AppKit.setFramePosition(this.window(), x, y));
+  }
+
+  @Override
+  public void center() {
+    this.dispatcher().run(() -> AppKit.center(this.window()));
   }
 
   @Override

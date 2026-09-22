@@ -13,7 +13,7 @@ the window; a codec module supplies JSON when you use the typed bridge methods.
 |----------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | [`Application`](src/main/java/dev/ivchenko/lwjwae/Application.java)                                                                                      | Entry point. Picks a backend and creates a window.                                                                                                                                                                                                                                                                                                 |
 | [`ApplicationBackend`](src/main/java/dev/ivchenko/lwjwae/ApplicationBackend.java)                                                                        | One window with a web view inside. Every backend implements it.                                                                                                                                                                                                                                                                                    |
-| [`ApplicationParameters`](src/main/java/dev/ivchenko/lwjwae/ApplicationParameters.java)                                                                  | What the window starts with: title, size, URL, development server, codec.                                                                                                                                                                                                                                                                          |
+| [`ApplicationParameters`](src/main/java/dev/ivchenko/lwjwae/ApplicationParameters.java)                                                                  | What the window starts with: title, size, position, URL, development server, codec.                                                                                                                                                                                                                                                                          |
 | [`ApplicationBackendProvider`](src/main/java/dev/ivchenko/lwjwae/ApplicationBackendProvider.java)                                                        | The service that a backend module registers so that [`Application`](src/main/java/dev/ivchenko/lwjwae/Application.java) can find it.                                                                                                                                                                                                               |
 | [`bridge.codec.BridgeCodec`](src/main/java/dev/ivchenko/lwjwae/bridge/codec/BridgeCodec.java)                                                            | JSON in and out, for `bind(name, Class, handler)` and `emit(name, Object)`.                                                                                                                                                                                                                                                                        |
 | [`event.LoadEvent`](src/main/java/dev/ivchenko/lwjwae/event/LoadEvent.java), [`event.LoadState`](src/main/java/dev/ivchenko/lwjwae/event/LoadState.java) | Page load lifecycle notifications.                                                                                                                                                                                                                                                                                                                 |
@@ -32,6 +32,15 @@ try (ApplicationBackend application = Application.create(ApplicationParameters.b
   application.run();
 }
 ```
+
+### Placing the window
+
+`ApplicationParameters.x`/`y` open the window at a screen position, `centered` in the middle of
+the screen; `position(x, y)`, `center()`, and `position()` on the backend do the same later. The
+coordinates are those of the window frame, from the top left of the screen, in the units of the
+platform. Wayland is the exception: the protocol keeps window placement with the compositor, so
+there `position(x, y)` does nothing, `position()` returns `0, 0`, and `center()` is a request that
+the compositor may ignore. X11, Windows, and macOS place windows as asked.
 
 Every method of `ApplicationBackend` is safe to call from any thread. The backend forwards the
 call to its UI thread, and a getter blocks until the UI thread has answered.

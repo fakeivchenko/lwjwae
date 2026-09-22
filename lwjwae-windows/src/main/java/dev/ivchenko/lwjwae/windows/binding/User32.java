@@ -30,6 +30,7 @@ public class User32 {
   public final int SWP_NOZORDER = 0x0004;
   public final int SWP_NOACTIVATE = 0x0010;
   public final int SWP_FRAMECHANGED = 0x0020;
+  public final int MONITOR_DEFAULTTONEAREST = 2;
   public final int PM_NOREMOVE = 0x0000;
   public final int WM_DESTROY = 0x0002;
   public final int WM_SIZE = 0x0005;
@@ -76,6 +77,12 @@ public class User32 {
       NativeLibraries.downcall(USER32, "GetWindowTextW", Signatures.INT_POINTER_POINTER_INT);
   private final MethodHandle GET_CLIENT_RECT =
       NativeLibraries.downcall(USER32, "GetClientRect", Signatures.INT_POINTER_POINTER);
+  private final MethodHandle GET_WINDOW_RECT =
+      NativeLibraries.downcall(USER32, "GetWindowRect", Signatures.INT_POINTER_POINTER);
+  private final MethodHandle MONITOR_FROM_WINDOW =
+      NativeLibraries.downcall(USER32, "MonitorFromWindow", Signatures.POINTER_POINTER_INT);
+  private final MethodHandle GET_MONITOR_INFO =
+      NativeLibraries.downcall(USER32, "GetMonitorInfoW", Signatures.INT_POINTER_POINTER);
   private final MethodHandle SET_WINDOW_POS =
       NativeLibraries.downcall(USER32, "SetWindowPos", Signatures.INT_POINTER_POINTER_INT_X5);
   private final MethodHandle GET_WINDOW_LONG_PTR =
@@ -128,9 +135,13 @@ public class User32 {
     }
   }
 
-  /** A hidden top-level window of {@code className}. {@code show} makes it visible. */
+  /**
+   * A hidden top-level window of {@code className}. {@code show} makes it visible. {@code x} and
+   * {@code y} place the frame; {@code CW_USEDEFAULT} for both lets Windows choose.
+   */
   @SneakyThrows
-  public MemorySegment createWindow(String className, String title, int width, int height) {
+  public MemorySegment createWindow(
+      String className, String title, int x, int y, int width, int height) {
     try (Arena arena = Arena.ofConfined()) {
       MemorySegment hwnd =
           (MemorySegment)
@@ -139,8 +150,8 @@ public class User32 {
                   Wide.allocate(arena, className),
                   Wide.allocate(arena, title),
                   WS_OVERLAPPEDWINDOW,
-                  CW_USEDEFAULT,
-                  CW_USEDEFAULT,
+                  x,
+                  y,
                   width,
                   height,
                   MemorySegment.NULL,
@@ -202,6 +213,51 @@ public class User32 {
       return new int[] {
         (int) RECT_RIGHT.get(rect, 0L) - (int) RECT_LEFT.get(rect, 0L),
         (int) RECT_BOTTOM.get(rect, 0L) - (int) RECT_TOP.get(rect, 0L)
+      };
+    }
+  }
+
+  /** {@code {left, top, right, bottom}} of the window frame, in screen coordinates. */
+  @SneakyThrows
+  public int[] windowRect(MemorySegment hwnd) {
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment rect = arena.allocate(Signatures.RECT);
+      int _ = (int) GET_WINDOW_RECT.invokeExact(hwnd, rect);
+      return new int[] {
+        (int) RECT_LEFT.get(rect, 0L),
+        (int) RECT_TOP.get(rect, 0L),
+        (int) RECT_RIGHT.get(rect, 0L),
+        (int) RECT_BOTTOM.get(rect, 0L)
+      };
+    }
+  }
+
+  /** Moves the frame of the window to {@code x}, {@code y} without resizing or raising it. */
+  @SneakyThrows
+  public void move(MemorySegment hwnd, int x, int y) {
+    int _ =
+        (int)
+            SET_WINDOW_POS.invokeExact(
+                hwnd, MemorySegment.NULL, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+  }
+
+  /**
+   * {@code {left, top, right, bottom}} of the work area of the monitor that holds most of the
+   * window: the monitor minus the taskbar.
+   */
+  @SneakyThrows
+  public int[] workArea(MemorySegment hwnd) {
+    MemorySegment monitor =
+        (MemorySegment) MONITOR_FROM_WINDOW.invokeExact(hwnd, MONITOR_DEFAULTTONEAREST);
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment info = arena.allocate(Signatures.MONITORINFO);
+      info.set(Signatures.C_INT, 0, (int) Signatures.MONITORINFO.byteSize());
+      int _ = (int) GET_MONITOR_INFO.invokeExact(monitor, info);
+      return new int[] {
+        info.get(Signatures.C_INT, 20),
+        info.get(Signatures.C_INT, 24),
+        info.get(Signatures.C_INT, 28),
+        info.get(Signatures.C_INT, 32)
       };
     }
   }

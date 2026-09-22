@@ -125,6 +125,47 @@ public class AppKit {
     }
   }
 
+  /**
+   * {@code {x, y}} of the top left of the window frame, measured from the top left of the primary
+   * screen. AppKit measures from the bottom left, so the height of the primary screen turns one
+   * into the other.
+   */
+  public int[] framePosition(MemorySegment window) {
+    double[] frame = Foundation.rect(window, "frame");
+    double screenHeight = primaryScreenFrame()[3];
+    return new int[] {
+      (int) Math.round(frame[0]), (int) Math.round(screenHeight - frame[1] - frame[3])
+    };
+  }
+
+  /**
+   * Calls {@code -[NSWindow setFrameOrigin:]} with the top left of the frame given from the top
+   * left of the primary screen, converted as {@link #framePosition} does.
+   */
+  public void setFramePosition(MemorySegment window, int x, int y) {
+    double[] frame = Foundation.rect(window, "frame");
+    double screenHeight = primaryScreenFrame()[3];
+    try (Arena arena = Arena.ofConfined()) {
+      // An NSPoint has the layout of an NSSize: two doubles.
+      ObjC.sendVoidSize(
+          window, "setFrameOrigin:", Foundation.size(arena, x, screenHeight - y - frame[3]));
+    }
+  }
+
+  /** Calls {@code -[NSWindow center]}. */
+  public void center(MemorySegment window) {
+    ObjC.sendVoid(window, "center");
+  }
+
+  /**
+   * {@code {x, y, width, height}} of the primary screen, the one with the menu bar, whose bottom
+   * left is the origin of the screen coordinates of AppKit.
+   */
+  private double[] primaryScreenFrame() {
+    MemorySegment screens = ObjC.send(ObjC.cls("NSScreen"), "screens");
+    return Foundation.rect(ObjC.send(screens, "firstObject"), "frame");
+  }
+
   /** Calls {@code -[NSWindow styleMask]}. */
   public long styleMask(MemorySegment window) {
     return ObjC.sendLong(window, "styleMask");

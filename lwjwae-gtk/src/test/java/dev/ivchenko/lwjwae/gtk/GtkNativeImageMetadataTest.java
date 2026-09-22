@@ -1,5 +1,6 @@
 package dev.ivchenko.lwjwae.gtk;
 
+import dev.ivchenko.lwjwae.gtk.binding.Gdk;
 import dev.ivchenko.lwjwae.gtk.binding.Glib;
 import dev.ivchenko.lwjwae.gtk.binding.Gtk;
 import dev.ivchenko.lwjwae.gtk.binding.WebKit;
@@ -23,6 +24,11 @@ class GtkNativeImageMetadataTest extends NativeImageMetadataContractTest {
   @Override
   protected List<Class<?>> bindingClasses() {
     return List.of(
-        Glib.class, Gtk.class, WebKit.class, GtkDispatcher.class, GtkApplicationBackend.class);
+        Glib.class,
+        Gdk.class,
+        Gtk.class,
+        WebKit.class,
+        GtkDispatcher.class,
+        GtkApplicationBackend.class);
   }
 }

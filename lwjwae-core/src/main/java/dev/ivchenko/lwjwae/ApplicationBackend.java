@@ -41,6 +41,26 @@ public interface ApplicationBackend extends AutoCloseable, Runnable {
    */
   void size(int width, int height);
 
+  /**
+   * Returns where the window frame is, measured from the top left of the screen. On Wayland, where
+   * a client can't know where its window is, {@code 0, 0}.
+   */
+  WindowPosition position();
+
+  /**
+   * Moves the window frame to {@code x}, {@code y}, measured from the top left of the screen.
+   * Before {@link #show()}, this method sets where the window opens. On Wayland, this method does
+   * nothing: the protocol keeps window placement with the compositor.
+   */
+  void position(int x, int y);
+
+  /**
+   * Moves the window to the middle of the screen it is on. Before {@link #show()}, this method
+   * makes the window open there. On Wayland, this method asks the compositor, which may or may not
+   * comply.
+   */
+  void center();
+
   /** Checks whether the user can resize the window. */
   boolean isResizable();
 
