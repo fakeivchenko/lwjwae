@@ -1,6 +1,6 @@
 # lwjwae-macos
 
-The macOS backend: an `NSWindow` with a `WKWebView`, driven through the Objective-C runtime.[LICENSE](../../../Development/webview-jvm/LICENSE)
+The macOS backend: an `NSWindow` with a `WKWebView`, driven through the Objective-C runtime.
 
 **Status:** this module compiles and passes Checkstyle, and its headless tests run anywhere. Its
 display tests haven't been run on a Mac since the port.
@@ -14,17 +14,17 @@ The provider [`MacApplicationBackendProvider`](src/main/java/dev/ivchenko/lwjwae
 
 ## Layout
 
-| Class                                                                                               | Role                                                                          |
-|-----------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------|
-| [`MacApplicationBackend`](src/main/java/dev/ivchenko/lwjwae/macos/MacApplicationBackend.java)       | The window. Forwards every call to the main thread.                           |
-| [`MacDispatcher`](src/main/java/dev/ivchenko/lwjwae/macos/MacDispatcher.java)                       | The main thread of the process, and how work reaches it.                      |
-| [`PendingEvaluation`](src/main/java/dev/ivchenko/lwjwae/macos/PendingEvaluation.java)               | A future and the arena of its completion block.                               |
-| [`binding.ObjC`](src/main/java/dev/ivchenko/lwjwae/macos/binding/ObjC.java)                         | The runtime: classes, selectors, `objc_msgSend`, blocks, autorelease pools.   |
-| [`binding.Foundation`](src/main/java/dev/ivchenko/lwjwae/macos/binding/Foundation.java)             | Strings, URLs, data, errors, geometry structs.                                |
-| [`binding.AppKit`](src/main/java/dev/ivchenko/lwjwae/macos/binding/AppKit.java)                     | The application object and windows.                                           |
-| [`binding.WebKit`](../lwjwae-gtk/src/main/java/dev/ivchenko/lwjwae/gtk/binding/WebKit.java)         | The view, its configuration, user scripts, messages, scheme tasks.            |
-| [`binding.MethodStub`](src/main/java/dev/ivchenko/lwjwae/macos/binding/MethodStub.java)             | One method of a class defined at runtime.                                     |
-| [`binding.Signatures`](../lwjwae-gtk/src/main/java/dev/ivchenko/lwjwae/gtk/binding/Signatures.java) | Every `FunctionDescriptor` the module binds, mostly shapes of `objc_msgSend`. |
+| Class                                                                                         | Role                                                                          |
+|-----------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------|
+| [`MacApplicationBackend`](src/main/java/dev/ivchenko/lwjwae/macos/MacApplicationBackend.java) | The window. Forwards every call to the main thread.                           |
+| [`MacDispatcher`](src/main/java/dev/ivchenko/lwjwae/macos/MacDispatcher.java)                 | The main thread of the process, and how work reaches it.                      |
+| [`PendingEvaluation`](src/main/java/dev/ivchenko/lwjwae/macos/PendingEvaluation.java)         | A future and the arena of its completion block.                               |
+| [`binding.ObjC`](src/main/java/dev/ivchenko/lwjwae/macos/binding/ObjC.java)                   | The runtime: classes, selectors, `objc_msgSend`, blocks, autorelease pools.   |
+| [`binding.Foundation`](src/main/java/dev/ivchenko/lwjwae/macos/binding/Foundation.java)       | Strings, URLs, data, errors, geometry structs.                                |
+| [`binding.AppKit`](src/main/java/dev/ivchenko/lwjwae/macos/binding/AppKit.java)               | The application object and windows.                                           |
+| [`binding.WebKit`](src/main/java/dev/ivchenko/lwjwae/macos/binding/WebKit.java)               | The view, its configuration, user scripts, messages, scheme tasks.            |
+| [`binding.MethodStub`](src/main/java/dev/ivchenko/lwjwae/macos/binding/MethodStub.java)       | One method of a class defined at runtime.                                     |
+| [`binding.Signatures`](src/main/java/dev/ivchenko/lwjwae/macos/binding/Signatures.java)       | Every `FunctionDescriptor` the module binds, mostly shapes of `objc_msgSend`. |
 
 ## Talking to Objective-C
 

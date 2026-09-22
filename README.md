@@ -55,7 +55,7 @@ await window.lwjwae.listen("tick", (event) => console.log(event.payload));
 
 `Application.create` picks the backend for the machine it runs on. Put
 [`lwjwae-core`](lwjwae-core) and the backend module of your platform on the classpath, or all
-three, and the same JAR file runs everywhere. [`lwjwae-examples`](../lwjwae-examples) has a demo
+three, and the same JAR file runs everywhere. [`lwjwae-examples`](https://github.com/fakeivchenko/lwjwae-examples) has a demo
 that shows every feature on one page.
 
 ## Requirements
@@ -99,8 +99,8 @@ or all three, and the same JAR file runs everywhere: a backend checks the operat
 it loads anything, so the other two step aside.
 
 The typed bridge methods, `bind(name, Class, handler)` and `emit(name, Object)`, need a
-`BridgeCodec`. The codecs live in lwjwae-codecs Jackson 3, Gson, and Jakarta
-JSON Binding, each one a module that registers itself. Add one to the runtime classpath, or pass a
+`BridgeCodec`. The codecs live in [lwjwae-codecs](https://github.com/fakeivchenko/lwjwae-codecs): Jackson 3, Gson,
+and Jakarta JSON Binding, each one a module that registers itself. Add one to the runtime classpath, or pass a
 configured instance through `ApplicationParameters.codec()`:
 
 ```kotlin
@@ -139,8 +139,8 @@ creation, callbacks, resources, script evaluation, and closing.
 
 Two sibling repositories complete the picture:
 
-- lwjwae-codecs: the codec modules for the typed bridge.
-- lwjwae-examples: runnable applications, starting with the demo.
+- [lwjwae-codecs](https://github.com/fakeivchenko/lwjwae-codecs): the codec modules for the typed bridge.
+- [lwjwae-examples](https://github.com/fakeivchenko/lwjwae-examples): runnable applications, starting with the demo.
 
 ## Design in short
 
