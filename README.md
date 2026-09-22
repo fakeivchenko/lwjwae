@@ -50,7 +50,7 @@ On the page:
 
 ```js
 const reversed = await window.reverse("lwjwae");
-window.lwjwae.on("tick", (tick) => console.log(tick));
+await window.lwjwae.listen("tick", (event) => console.log(event.payload));
 ```
 
 `Application.create` picks the backend for the machine it runs on. Put

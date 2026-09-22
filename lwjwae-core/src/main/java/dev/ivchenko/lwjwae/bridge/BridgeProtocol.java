@@ -1,5 +1,6 @@
 package dev.ivchenko.lwjwae.bridge;
 
+import dev.ivchenko.lwjwae.event.Event;
 import dev.ivchenko.lwjwae.util.ScriptUtil;
 import java.io.IOException;
 import java.io.InputStream;
@@ -29,14 +30,18 @@ public class BridgeProtocol {
   public final String CHANNEL = "__lwjwaeBridge";
 
   /**
-   * The global that the page uses to listen for events: {@code window.lwjwae.on(name, listener)}.
+   * The global that holds the event API of the page: {@code window.lwjwae.listen(name, handler)},
+   * {@code once}, and {@code emit}.
    */
   public final String PAGE_API = "lwjwae";
 
   /**
-   * The prefix of the {@code CustomEvent} that {@link #emitScript} dispatches on {@code window}.
+   * The name under which the page delivers its own events to Java, through the same message path as
+   * a call. It contains a colon, which no bound name can, so a binding can never shadow it. The
+   * payload of such a message is {@code typed␟name␟payload}, with the same separator as the message
+   * itself.
    */
-  public final String EVENT_PREFIX = "lwjwae:";
+  public final String EVENT_CALL = "lwjwae:emit";
 
   /**
    * The field separator inside a bridge message.
@@ -93,7 +98,7 @@ public class BridgeProtocol {
     return BOOTSTRAP_TEMPLATE
         .replace("${channel}", CHANNEL)
         .replace("${pageApi}", PAGE_API)
-        .replace("${eventPrefix}", EVENT_PREFIX)
+        .replace("${eventCall}", EVENT_CALL)
         .replace("${separator}", "\u001f")
         .replace("${post}", postMessage)
         .replace("${codec}", pageCodec);
@@ -120,14 +125,27 @@ public class BridgeProtocol {
   }
 
   /**
-   * Delivers an event to the page: to every listener registered with {@code window.lwjwae.on(name,
-   * listener)}, and as a {@code CustomEvent} named {@code lwjwae:NAME} on {@code window}. When
-   * {@code typed} is set, the payload is decoded first, so listeners receive the value instead of
-   * its text.
+   * Delivers an event to the page: to every listener registered with {@code
+   * window.lwjwae.listen(name, handler)} or {@code once}. When {@code typed} is set, the payload is
+   * decoded first, so listeners receive the value instead of its text.
    */
   public String emitScript(String name, String payload, boolean typed) {
-    return "window.%s.emit(%s, %s, %s);"
+    return "window.%s.deliver(%s, %s, %s);"
         .formatted(CHANNEL, ScriptUtil.quote(name), ScriptUtil.quote(payload), typed);
+  }
+
+  /**
+   * Splits the payload of an {@link #EVENT_CALL} message into the event that the page emitted.
+   *
+   * @return The event with an ID of zero, which the backend replaces, or {@code null} if the text
+   *     has fewer than three fields.
+   */
+  public Event parseEvent(String payload) {
+    String[] parts = payload.split(SEPARATOR, 3);
+    if (parts.length != 3) {
+      return null;
+    }
+    return new Event(parts[1], 0, parts[2], parts[0].equals("1"));
   }
 
   /** Completes the page-side promise {@code id} with {@code value}. */

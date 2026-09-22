@@ -1,5 +1,6 @@
 package dev.ivchenko.lwjwae.bridge;
 
+import dev.ivchenko.lwjwae.event.Event;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -32,9 +33,9 @@ class BridgeProtocolTest {
     Assertions.assertTrue(script.contains("const post = (m) => host.post(m);"));
     Assertions.assertTrue(script.contains("const codec = fakeCodec;"));
     Assertions.assertTrue(script.contains("window." + BridgeProtocol.CHANNEL + " = {"));
-    Assertions.assertTrue(script.contains("window." + BridgeProtocol.PAGE_API + " = { on, off };"));
     Assertions.assertTrue(
-        script.contains("new CustomEvent(\"" + BridgeProtocol.EVENT_PREFIX + "\" + name"));
+        script.contains("window." + BridgeProtocol.PAGE_API + " = { listen, once, emit };"));
+    Assertions.assertTrue(script.contains("call(\"" + BridgeProtocol.EVENT_CALL + "\""));
     Assertions.assertTrue(
         script.contains("if (window." + BridgeProtocol.CHANNEL + ") return;"),
         "must be safe to inject twice");
@@ -54,11 +55,21 @@ class BridgeProtocolTest {
   @Test
   void emitQuotesTheNameAndThePayload() {
     Assertions.assertEquals(
-        "window.__lwjwaeBridge.emit(\"tick\", \"{\\\"n\\\":1}\", true);",
+        "window.__lwjwaeBridge.deliver(\"tick\", \"{\\\"n\\\":1}\", true);",
         BridgeProtocol.emitScript("tick", "{\"n\":1}", true));
     Assertions.assertEquals(
-        "window.__lwjwaeBridge.emit(\"tick\", \"plain\", false);",
+        "window.__lwjwaeBridge.deliver(\"tick\", \"plain\", false);",
         BridgeProtocol.emitScript("tick", "plain", false));
+  }
+
+  @Test
+  void parseEventReadsTheTypedFlagTheNameAndThePayload() {
+    String sep = BridgeProtocol.SEPARATOR;
+    Event typed = BridgeProtocol.parseEvent("1" + sep + "moved" + sep + "3,4" + sep + "tail");
+    Assertions.assertEquals(new Event("moved", 0, "3,4" + sep + "tail", true), typed);
+    Assertions.assertEquals(
+        new Event("plain", 0, "", false), BridgeProtocol.parseEvent("0" + sep + "plain" + sep));
+    Assertions.assertNull(BridgeProtocol.parseEvent("0" + sep + "only-two"));
   }
 
   @Test

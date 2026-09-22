@@ -99,11 +99,42 @@ return `window.webkit.messageHandlers.NAME.postMessage`; WebView2 returns
 Every string that goes into a script passes through [`ScriptUtil.quote`](src/main/java/dev/ivchenko/lwjwae/util/ScriptUtil.java). A quote, a backslash, a
 control character, or U+2028 in application data would otherwise change the script.
 
-### From Java to the page: `emit`
+### Events: `emit`, `listen`, `once`
 
-`emit("tick", payload)` evaluates `emitScript`. The runtime calls every listener registered with
-`window.lwjwae.on("tick", listener)` and dispatches a `CustomEvent` named `lwjwae:tick` with the
-payload as `detail`. There's no answer.
+Events go both ways and have the shape of Tauri's. On the page:
+
+```js
+const unlisten = await window.lwjwae.listen("tick", (event) => {
+  console.log(event.event, event.id, event.payload);
+});
+await window.lwjwae.once("ready", (event) => {});
+await window.lwjwae.emit("note", { x: 1 });
+unlisten();
+```
+
+In Java:
+
+```java
+EventSubscription subscription = application.listen("note", event -> log(event.payload()));
+application.listen("note", Point.class, point -> ...);
+application.once("ready", event -> ...);
+application.emit("tick", new Tick(...));
+subscription.unlisten();
+```
+
+An event reaches every listener of its name on both sides. `emit` from Java evaluates
+`emitScript`, which hands the payload to the page runtime, and runs the Java listeners. `emit` from
+the page runs the page listeners, then posts one message under the reserved name
+`BridgeProtocol.EVENT_CALL` (`lwjwae:emit`, which no binding can take because a bound name can't
+contain a colon) with `typed␟name␟payload` as its payload; the promise that `emit` returns resolves
+once Java took the event. A listener on the page gets `{ event, id, payload }`; one in Java gets an
+[`Event`](src/main/java/dev/ivchenko/lwjwae/event/Event.java) with the payload as text and a `typed`
+flag that says whether the text came from the codec. Typed Java listeners decode it; `String.class`
+takes an untyped payload as it is.
+
+Java listeners run on one virtual thread per window, in the order the events were emitted, so a
+listener never sees the second event of a name before the first. A listener that throws is reported
+and the others still run.
 
 ### Typed calls
 

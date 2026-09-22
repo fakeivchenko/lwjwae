@@ -1,6 +1,8 @@
 package dev.ivchenko.lwjwae;
 
 import dev.ivchenko.lwjwae.bridge.BridgeProtocol;
+import dev.ivchenko.lwjwae.event.Event;
+import dev.ivchenko.lwjwae.event.EventSubscription;
 import dev.ivchenko.lwjwae.event.LoadEvent;
 import dev.ivchenko.lwjwae.event.LoadState;
 import dev.ivchenko.lwjwae.testing.FakeApplicationBackend;
@@ -8,7 +10,9 @@ import dev.ivchenko.lwjwae.testing.Point;
 import dev.ivchenko.lwjwae.testing.PointCodec;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
@@ -72,6 +76,83 @@ class AbstractApplicationBackendTest {
       backend.emit("moved", new Point(3, 4));
       Assertions.assertTrue(
           backend.evaluated.contains(BridgeProtocol.emitScript("moved", "3,4", true)));
+    }
+  }
+
+  @Test
+  void javaListenersHearEventsFromJavaAndFromThePage() throws Exception {
+    ApplicationParameters parameters =
+        ApplicationParameters.builder().codec(new PointCodec()).build();
+    try (FakeApplicationBackend backend = new FakeApplicationBackend(parameters)) {
+      BlockingQueue<Event> heard = new LinkedBlockingQueue<>();
+      BlockingQueue<Point> points = new LinkedBlockingQueue<>();
+      BlockingQueue<String> texts = new LinkedBlockingQueue<>();
+      backend.listen("tick", heard::add);
+      backend.listen("moved", Point.class, points::add);
+      backend.listen("tick", String.class, texts::add);
+
+      // From Java: the page gets the script, and the Java listeners get the event.
+      backend.emit("tick", "one");
+      Event first = heard.poll(5, TimeUnit.SECONDS);
+      Assertions.assertEquals("tick", first.name());
+      Assertions.assertEquals("one", first.payload());
+      Assertions.assertFalse(first.typed());
+      Assertions.assertEquals("one", texts.poll(5, TimeUnit.SECONDS));
+      Assertions.assertTrue(
+          backend.evaluated.contains(BridgeProtocol.emitScript("tick", "one", false)));
+
+      // From the page: window.lwjwae.emit posts an EVENT_CALL message; the promise resolves.
+      backend.receive(
+          "1" + SEP + BridgeProtocol.EVENT_CALL + SEP + "1" + SEP + "moved" + SEP + "3,4");
+      Assertions.assertEquals(new Point(3, 4), points.poll(5, TimeUnit.SECONDS));
+      awaitEvaluation(backend, BridgeProtocol.resolveScript(1, ""));
+
+      backend.receive(
+          "2" + SEP + BridgeProtocol.EVENT_CALL + SEP + "0" + SEP + "tick" + SEP + "two");
+      Event second = heard.poll(5, TimeUnit.SECONDS);
+      Assertions.assertEquals("two", second.payload());
+      Assertions.assertTrue(second.id() > first.id(), "IDs count deliveries");
+
+      backend.receive("3" + SEP + BridgeProtocol.EVENT_CALL + SEP + "garbage");
+      awaitEvaluation(backend, BridgeProtocol.rejectScript(3, "Malformed event"));
+    }
+  }
+
+  @Test
+  void onceHearsOneEventAndUnlistenStopsTheRest() throws Exception {
+    try (FakeApplicationBackend backend = new FakeApplicationBackend()) {
+      BlockingQueue<String> once = new LinkedBlockingQueue<>();
+      BlockingQueue<String> always = new LinkedBlockingQueue<>();
+      backend.once("tick", event -> once.add(event.payload()));
+      final EventSubscription subscription =
+          backend.listen("tick", event -> always.add(event.payload()));
+
+      backend.emit("tick", "a");
+      backend.emit("tick", "b");
+      Assertions.assertEquals("a", once.poll(5, TimeUnit.SECONDS));
+      Assertions.assertEquals("a", always.poll(5, TimeUnit.SECONDS));
+      Assertions.assertEquals("b", always.poll(5, TimeUnit.SECONDS));
+      Assertions.assertNull(once.poll(200, TimeUnit.MILLISECONDS), "once must not hear twice");
+
+      subscription.unlisten();
+      subscription.unlisten();
+      backend.emit("tick", "c");
+      Assertions.assertNull(always.poll(200, TimeUnit.MILLISECONDS), "unlisten must stop delivery");
+    }
+  }
+
+  @Test
+  void throwingListenerDoesNotStopTheOthers() throws Exception {
+    try (FakeApplicationBackend backend = new FakeApplicationBackend()) {
+      BlockingQueue<String> heard = new LinkedBlockingQueue<>();
+      backend.listen(
+          "tick",
+          _ -> {
+            throw new IllegalStateException("listener failed");
+          });
+      backend.listen("tick", event -> heard.add(event.payload()));
+      backend.emit("tick", "still delivered");
+      Assertions.assertEquals("still delivered", heard.poll(5, TimeUnit.SECONDS));
     }
   }
 
