@@ -23,9 +23,11 @@ import lombok.Builder;
  * @param codec The codec behind the typed bridge methods. The default is the first {@link
  *     BridgeCodec} on the classpath. When there is none, the value stays {@code null} and typed
  *     calls fail with a message.
+ * @param name The name of the application, as the desktop shows it next to its notifications.
+ *     Default: none, and the desktop shows its own placeholder.
  */
 @Builder(toBuilder = true)
-public record ApplicationParameters(String devServerUrl, BridgeCodec codec) {
+public record ApplicationParameters(String devServerUrl, BridgeCodec codec, String name) {
   /** The system property that supplies {@link #devServerUrl()} when the builder leaves it unset. */
   public static final String DEV_SERVER_URL_PROPERTY = "lwjwae.devServerUrl";
 
@@ -44,6 +46,9 @@ public record ApplicationParameters(String devServerUrl, BridgeCodec codec) {
     }
     if (codec == null) {
       codec = BridgeCodec.discover().orElse(null);
+    }
+    if (isBlank(name)) {
+      name = null;
     }
   }
 

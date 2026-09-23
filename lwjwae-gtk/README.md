@@ -29,17 +29,19 @@ checks the operating system first and the libraries second, because probing a li
 
 ## Layout
 
-| Class                                                                                       | Role                                                                                        |
-|---------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------|
-| [`GtkApplication`](src/main/java/dev/ivchenko/lwjwae/gtk/GtkApplication.java)               | The application. Prepares the web context and serves `app://`; opens `GtkWindow`s.          |
-| [`GtkWindow`](src/main/java/dev/ivchenko/lwjwae/gtk/GtkWindow.java)                         | The window. Forwards every call to the GTK thread.                                          |
-| [`GtkDispatcher`](src/main/java/dev/ivchenko/lwjwae/gtk/GtkDispatcher.java)                 | The one GTK thread of the process.                                                          |
-| [`GtkTray`](src/main/java/dev/ivchenko/lwjwae/gtk/GtkTray.java)                             | A tray icon, through libappindicator or `GtkStatusIcon`.                                    |
-| [`binding.Gtk`](src/main/java/dev/ivchenko/lwjwae/gtk/binding/Gtk.java)                     | `gtk_*` functions: the window and the main loop.                                            |
-| [`binding.WebKit`](src/main/java/dev/ivchenko/lwjwae/gtk/binding/WebKit.java)               | `webkit_*` functions: the view, user scripts, message handlers, the URI scheme, evaluation. |
-| [`binding.Glib`](src/main/java/dev/ivchenko/lwjwae/gtk/binding/Glib.java)                   | `g_*` functions: signals, idle sources, memory streams, errors.                             |
-| [`binding.AppIndicator`](src/main/java/dev/ivchenko/lwjwae/gtk/binding/AppIndicator.java)   | `app_indicator_*` functions, from an optional library.                                      |
-| [`binding.Signatures`](src/main/java/dev/ivchenko/lwjwae/gtk/binding/Signatures.java)       | Every `FunctionDescriptor` the module binds, named by shape.                                |
+| Class                                                                                                                                                    | Role                                                                                        |
+|----------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------|
+| [`GtkApplication`](src/main/java/dev/ivchenko/lwjwae/gtk/GtkApplication.java)                                                                            | The application. Prepares the web context and serves `app://`; opens `GtkWindow`s.          |
+| [`GtkWindow`](src/main/java/dev/ivchenko/lwjwae/gtk/GtkWindow.java)                                                                                      | The window. Forwards every call to the GTK thread.                                          |
+| [`GtkDispatcher`](src/main/java/dev/ivchenko/lwjwae/gtk/GtkDispatcher.java)                                                                              | The one GTK thread of the process.                                                          |
+| [`GtkTray`](src/main/java/dev/ivchenko/lwjwae/gtk/GtkTray.java)                                                                                          | A tray icon, through libappindicator or `GtkStatusIcon`.                                    |
+| [`GtkNotifier`](src/main/java/dev/ivchenko/lwjwae/gtk/GtkNotifier.java), [`GtkNotification`](src/main/java/dev/ivchenko/lwjwae/gtk/GtkNotification.java) | Notifications, through `org.freedesktop.Notifications` on the session bus.                  |
+| [`binding.Gtk`](src/main/java/dev/ivchenko/lwjwae/gtk/binding/Gtk.java)                                                                                  | `gtk_*` functions: the window and the main loop.                                            |
+| [`binding.WebKit`](src/main/java/dev/ivchenko/lwjwae/gtk/binding/WebKit.java)                                                                            | `webkit_*` functions: the view, user scripts, message handlers, the URI scheme, evaluation. |
+| [`binding.Glib`](src/main/java/dev/ivchenko/lwjwae/gtk/binding/Glib.java)                                                                                | `g_*` functions: signals, idle sources, memory streams, errors.                             |
+| [`binding.AppIndicator`](src/main/java/dev/ivchenko/lwjwae/gtk/binding/AppIndicator.java)                                                                | `app_indicator_*` functions, from an optional library.                                      |
+| [`binding.Dbus`](src/main/java/dev/ivchenko/lwjwae/gtk/binding/Dbus.java)                                                                                | GDBus calls and signals, and the `GVariant` values they carry.                              |
+| [`binding.Signatures`](src/main/java/dev/ivchenko/lwjwae/gtk/binding/Signatures.java)                                                                    | Every `FunctionDescriptor` the module binds, named by shape.                                |
 
 The binding classes are Lombok `@UtilityClass`es with `static final` method handles. `invokeExact`
 compiles to a direct call only when the JIT compiler sees the handle as a constant.
@@ -163,6 +165,34 @@ loaded or not: the reachability metadata of the module stays the same on a machi
 
 The tray closes with its application, on `quit()`, or earlier through `Tray.close()`. Until then it
 keeps `Application.run()` going, so an application can live in the tray with no window open.
+
+## Notifications
+
+`Application.showNotification(Notification)` goes through a
+[`GtkNotifier`](src/main/java/dev/ivchenko/lwjwae/gtk/GtkNotifier.java), one per application, created
+on the first notification. It calls `org.freedesktop.Notifications`, the interface that GNOME Shell,
+Plasma, dunst, mako, and every other Linux notification server implement, over GDBus. GDBus is part
+of GIO, which GTK already loads, so notifications need no library beyond GTK's; libnotify would add
+one for nothing the interface lacks.
+
+The arguments of `Notify` are `GVariant` values, built one constructor at a time in
+[`binding.Dbus`](src/main/java/dev/ivchenko/lwjwae/gtk/binding/Dbus.java). `g_variant_new` with a
+format string would be shorter, but it's variadic, and a variadic downcall needs a descriptor per
+combination of arguments. The image goes as a PNG file in a temporary directory, named in the
+`image-path` hint; the file is deleted when its notification is gone, and the directory with the
+application.
+
+Buttons are the actions `action-0`, `action-1`, and so on; `onActivate` is the `default` action,
+which servers run on a click of the notification itself. The server reports a click with the
+`ActionInvoked` signal and the end of a notification with `NotificationClosed`. The notifier
+subscribes to both on the GTK thread and calls `Notify` there too, so the ID of a notification is in
+its table before the loop can deliver a signal about it. Handlers run on a virtual thread, off the
+GTK thread.
+
+Without a session bus, or with nothing that owns `org.freedesktop.Notifications` on it,
+`showNotification` throws `UnsupportedOperationException`. `Application.quit()` takes back every
+notification still on screen with `CloseNotification`, because their handlers go with the
+application.
 
 ## Closing
 

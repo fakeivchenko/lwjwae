@@ -2,6 +2,8 @@ package dev.ivchenko.lwjwae;
 
 import dev.ivchenko.lwjwae.bridge.BridgeProtocol;
 import dev.ivchenko.lwjwae.event.Event;
+import dev.ivchenko.lwjwae.notification.Notification;
+import dev.ivchenko.lwjwae.notification.NotificationHandle;
 import dev.ivchenko.lwjwae.testing.FakeApplication;
 import dev.ivchenko.lwjwae.testing.FakeWindow;
 import dev.ivchenko.lwjwae.testing.Point;
@@ -77,6 +79,34 @@ class AbstractApplicationTest {
           IllegalStateException.class,
           () -> application.tray(TrayIcon.builder().icon(new byte[] {1}).build()));
     }
+  }
+
+  @Test
+  void notificationDoesNotKeepRunGoingAndQuitTakesItBack() throws Exception {
+    try (FakeApplication application = new FakeApplication()) {
+      FakeWindow window = application.openFake();
+      NotificationHandle notification =
+          application.showNotification(Notification.builder().title("Done").build());
+      CompletableFuture<Void> running = CompletableFuture.runAsync(application::run);
+
+      window.close();
+      running.get(5, TimeUnit.SECONDS);
+      Assertions.assertFalse(notification.isClosed(), "only quit() takes the notification back");
+
+      application.quit();
+      Assertions.assertTrue(notification.isClosed(), "quit() takes the notification back");
+      Assertions.assertThrows(
+          IllegalStateException.class,
+          () -> application.showNotification(Notification.builder().title("Late").build()));
+    }
+  }
+
+  @Test
+  void notificationNeedsTitle() {
+    Assertions.assertThrows(
+        IllegalArgumentException.class, () -> Notification.builder().body("no title").build());
+    Assertions.assertThrows(
+        IllegalArgumentException.class, () -> Notification.builder().title(" ").build());
   }
 
   @Test

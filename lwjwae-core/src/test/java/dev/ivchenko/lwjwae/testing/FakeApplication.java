@@ -4,6 +4,8 @@ import dev.ivchenko.lwjwae.AbstractApplication;
 import dev.ivchenko.lwjwae.AbstractWindow;
 import dev.ivchenko.lwjwae.ApplicationParameters;
 import dev.ivchenko.lwjwae.WindowParameters;
+import dev.ivchenko.lwjwae.notification.Notification;
+import dev.ivchenko.lwjwae.notification.NotificationHandle;
 import dev.ivchenko.lwjwae.tray.Tray;
 import dev.ivchenko.lwjwae.tray.TrayIcon;
 import java.util.function.Consumer;
@@ -39,6 +41,12 @@ public class FakeApplication extends AbstractApplication {
   @Override
   protected Tray createTray(TrayIcon icon, Consumer<Tray> closed) {
     return new FakeTray(closed);
+  }
+
+  @Override
+  protected NotificationHandle createNotification(
+      Notification notification, Consumer<NotificationHandle> closed) {
+    return new FakeNotification(closed);
   }
 
   @Override
