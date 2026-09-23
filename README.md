@@ -125,6 +125,10 @@ dependencies {
   one called, a listener hears every window, and `emit` reaches every page. Handlers run on virtual
   threads, so a slow one doesn't freeze the window. The protocol is a string, so the core has no
   serialization dependency; a codec adds typed calls with records and objects.
+- **A tray icon, and windows that hide.** `Application.tray(TrayIcon)` puts an icon with a menu in
+  the notification area on Windows, the menu bar on macOS, or the StatusNotifier or XEmbed tray on
+  Linux. With `CloseAction.HIDE`, the close button hides a window instead of closing it, and `run`
+  keeps going while a tray icon is up, so an application can live in the tray.
 - **Pages from the classpath.** `loadResource("app/index.html")` serves the files of the
   application under a custom scheme, so relative links, stylesheets, scripts, and `fetch` resolve
   as on a web server. During development, `LWJWAE_DEV_SERVER_URL` points every window at a Vite
