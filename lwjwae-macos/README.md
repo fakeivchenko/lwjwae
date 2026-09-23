@@ -2,9 +2,6 @@
 
 The macOS backend: an `NSWindow` with a `WKWebView`, driven through the Objective-C runtime.
 
-**Status:** this module compiles and passes Checkstyle, and its headless tests run anywhere. Its
-display tests haven't been run on a Mac since the port.
-
 ## Requirements
 
 - macOS, arm64 or x86_64. AppKit and WebKit are part of the system, so the platform check is the
@@ -14,19 +11,19 @@ The provider [`MacBackendProvider`](src/main/java/dev/ivchenko/lwjwae/macos/MacB
 
 ## Layout
 
-| Class                                                                                         | Role                                                                          |
-|-----------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------|
-| [`MacApplication`](src/main/java/dev/ivchenko/lwjwae/macos/MacApplication.java)               | The application. Runs the loop from the main thread of a native image.        |
-| [`MacWindow`](src/main/java/dev/ivchenko/lwjwae/macos/MacWindow.java)                         | The window. Forwards every call to the main thread.                           |
-| [`MacDispatcher`](src/main/java/dev/ivchenko/lwjwae/macos/MacDispatcher.java)                 | The main thread of the process, and how work reaches it.                      |
-| [`MacTray`](src/main/java/dev/ivchenko/lwjwae/macos/MacTray.java) | A tray icon: an `NSStatusItem` in the menu bar. |
-| [`PendingEvaluation`](src/main/java/dev/ivchenko/lwjwae/macos/PendingEvaluation.java)         | A future and the arena of its completion block.                               |
-| [`binding.ObjC`](src/main/java/dev/ivchenko/lwjwae/macos/binding/ObjC.java)                   | The runtime: classes, selectors, `objc_msgSend`, blocks, autorelease pools.   |
-| [`binding.Foundation`](src/main/java/dev/ivchenko/lwjwae/macos/binding/Foundation.java)       | Strings, URLs, data, errors, geometry structs.                                |
-| [`binding.AppKit`](src/main/java/dev/ivchenko/lwjwae/macos/binding/AppKit.java)               | The application object, windows, the status bar, and menus.                   |
-| [`binding.WebKit`](src/main/java/dev/ivchenko/lwjwae/macos/binding/WebKit.java)               | The view, its configuration, user scripts, messages, scheme tasks.            |
-| [`binding.MethodStub`](src/main/java/dev/ivchenko/lwjwae/macos/binding/MethodStub.java)       | One method of a class defined at runtime.                                     |
-| [`binding.Signatures`](src/main/java/dev/ivchenko/lwjwae/macos/binding/Signatures.java)       | Every `FunctionDescriptor` the module binds, mostly shapes of `objc_msgSend`. |
+| Class                                                                                   | Role                                                                          |
+|-----------------------------------------------------------------------------------------|-------------------------------------------------------------------------------|
+| [`MacApplication`](src/main/java/dev/ivchenko/lwjwae/macos/MacApplication.java)         | The application. Runs the loop from the main thread of a native image.        |
+| [`MacWindow`](src/main/java/dev/ivchenko/lwjwae/macos/MacWindow.java)                   | The window. Forwards every call to the main thread.                           |
+| [`MacDispatcher`](src/main/java/dev/ivchenko/lwjwae/macos/MacDispatcher.java)           | The main thread of the process, and how work reaches it.                      |
+| [`MacTray`](src/main/java/dev/ivchenko/lwjwae/macos/MacTray.java)                       | A tray icon: an `NSStatusItem` in the menu bar.                               |
+| [`PendingEvaluation`](src/main/java/dev/ivchenko/lwjwae/macos/PendingEvaluation.java)   | A future and the arena of its completion block.                               |
+| [`binding.ObjC`](src/main/java/dev/ivchenko/lwjwae/macos/binding/ObjC.java)             | The runtime: classes, selectors, `objc_msgSend`, blocks, autorelease pools.   |
+| [`binding.Foundation`](src/main/java/dev/ivchenko/lwjwae/macos/binding/Foundation.java) | Strings, URLs, data, errors, geometry structs.                                |
+| [`binding.AppKit`](src/main/java/dev/ivchenko/lwjwae/macos/binding/AppKit.java)         | The application object, windows, the status bar, and menus.                   |
+| [`binding.WebKit`](src/main/java/dev/ivchenko/lwjwae/macos/binding/WebKit.java)         | The view, its configuration, user scripts, messages, scheme tasks.            |
+| [`binding.MethodStub`](src/main/java/dev/ivchenko/lwjwae/macos/binding/MethodStub.java) | One method of a class defined at runtime.                                     |
+| [`binding.Signatures`](src/main/java/dev/ivchenko/lwjwae/macos/binding/Signatures.java) | Every `FunctionDescriptor` the module binds, mostly shapes of `objc_msgSend`. |
 
 ## Talking to Objective-C
 
@@ -102,15 +99,15 @@ application.
 Every delegate method looks the window up by `self`, does the work, catches `Throwable` and
 reports it. Nothing unwinds into Cocoa.
 
-| Selector                                                                                  | Handler                           | What it does                                                                                                       |
-|-------------------------------------------------------------------------------------------|-----------------------------------|--------------------------------------------------------------------------------------------------------------------|
-| `webView:didStartProvisionalNavigation:`                                                  | `onDidStartProvisionalNavigation` | Emits `STARTED` with the current URL.                                                                              |
-| `webView:didCommitNavigation:`                                                            | `onDidCommitNavigation`           | Emits `COMMITTED`.                                                                                                 |
-| `webView:didFinishNavigation:`                                                            | `onDidFinishNavigation`           | Emits `FINISHED`.                                                                                                  |
-| `webView:didFailProvisionalNavigation:withError:`, `webView:didFailNavigation:withError:` | `onDidFailNavigation`             | Emits `LoadEvent.failed` once per URL, with the failing URL from the `NSError` and its localized description.      |
-| `userContentController:didReceiveScriptMessage:`                                          | `onDidReceiveScriptMessage`       | Reads the body of the `WKScriptMessage` and calls `handleBridgeMessage`.                                           |
-| `webView:startURLSchemeTask:`                                                             | `onStartUrlSchemeTask`            | Serves the resource, described next.                                                                               |
-| `webView:stopURLSchemeTask:`                                                              | `onStopUrlSchemeTask`             | Nothing: a resource is answered in one step, so there's nothing to stop.                                           |
+| Selector                                                                                  | Handler                           | What it does                                                                                                                                          |
+|-------------------------------------------------------------------------------------------|-----------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `webView:didStartProvisionalNavigation:`                                                  | `onDidStartProvisionalNavigation` | Emits `STARTED` with the current URL.                                                                                                                 |
+| `webView:didCommitNavigation:`                                                            | `onDidCommitNavigation`           | Emits `COMMITTED`.                                                                                                                                    |
+| `webView:didFinishNavigation:`                                                            | `onDidFinishNavigation`           | Emits `FINISHED`.                                                                                                                                     |
+| `webView:didFailProvisionalNavigation:withError:`, `webView:didFailNavigation:withError:` | `onDidFailNavigation`             | Emits `LoadEvent.failed` once per URL, with the failing URL from the `NSError` and its localized description.                                         |
+| `userContentController:didReceiveScriptMessage:`                                          | `onDidReceiveScriptMessage`       | Reads the body of the `WKScriptMessage` and calls `handleBridgeMessage`.                                                                              |
+| `webView:startURLSchemeTask:`                                                             | `onStartUrlSchemeTask`            | Serves the resource, described next.                                                                                                                  |
+| `webView:stopURLSchemeTask:`                                                              | `onStopUrlSchemeTask`             | Nothing: a resource is answered in one step, so there's nothing to stop.                                                                              |
 | `windowWillClose:`                                                                        | `onWindowWillClose`               | Detaches the delegates, releases every object, and calls `markClosed()`, which stops the run loop if `run()` started it and this was the last window. |
 
 ## Serving resources
@@ -177,9 +174,6 @@ Entry actions and `onActivate` run on a virtual thread, off the main thread.
 
 The tray closes with its application, on `quit()`, or earlier through `Tray.close()`. Until then it
 keeps `Application.run()` going, so an application can live in the menu bar with no window open.
-
-> **Untested.** The macOS tray compiles and follows the Windows and GTK trays, but no Mac has run it
-> yet, neither on the JVM nor as a native image.
 
 ## Closing
 
