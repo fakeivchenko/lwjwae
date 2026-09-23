@@ -3,6 +3,7 @@ package dev.ivchenko.lwjwae.macos;
 import dev.ivchenko.lwjwae.macos.binding.AppKit;
 import dev.ivchenko.lwjwae.macos.binding.Foundation;
 import dev.ivchenko.lwjwae.macos.binding.ObjC;
+import dev.ivchenko.lwjwae.macos.binding.UserNotifications;
 import dev.ivchenko.lwjwae.macos.binding.WebKit;
 import dev.ivchenko.lwjwae.testing.contract.NativeImageMetadataContractTest;
 import dev.ivchenko.lwjwae.util.PlatformUtil;
@@ -31,6 +32,8 @@ class MacNativeImageMetadataTest extends NativeImageMetadataContractTest {
         MacDispatcher.class,
         MacWindow.class,
         MacApplication.class,
-        MacTray.class);
+        MacTray.class,
+        UserNotifications.class,
+        MacNotifier.class);
   }
 }

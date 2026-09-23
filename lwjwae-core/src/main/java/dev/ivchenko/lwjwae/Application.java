@@ -4,6 +4,8 @@ import dev.ivchenko.lwjwae.bridge.codec.BridgeCodec;
 import dev.ivchenko.lwjwae.event.Event;
 import dev.ivchenko.lwjwae.event.EventSubscription;
 import dev.ivchenko.lwjwae.exception.BackendNotAvailableException;
+import dev.ivchenko.lwjwae.notification.Notification;
+import dev.ivchenko.lwjwae.notification.NotificationHandle;
 import dev.ivchenko.lwjwae.tray.Tray;
 import dev.ivchenko.lwjwae.tray.TrayIcon;
 import dev.ivchenko.lwjwae.util.PlatformUtil;
@@ -237,6 +239,19 @@ public interface Application extends AutoCloseable {
   Tray tray(TrayIcon icon);
 
   /**
+   * Shows a desktop notification and returns the handle that takes it back.
+   *
+   * <p>The notification belongs to the application. It stays when every window is closed, but it
+   * doesn't keep {@link #run()} running, and it goes away with the application, because its buttons
+   * and its {@code onActivate} handler go with it.
+   *
+   * @throws UnsupportedOperationException If this backend has no notifications yet, or the desktop
+   *     has nothing that shows them.
+   * @throws IllegalStateException If the application is closed.
+   */
+  NotificationHandle showNotification(Notification notification);
+
+  /**
    * Blocks the calling thread while any window is open or any tray icon is up, or until {@link
    * #quit()}. Returns at once when there is neither. A window opened from another thread, or from a
    * page, in the meantime keeps the application running.
@@ -248,8 +263,8 @@ public interface Application extends AutoCloseable {
   void run();
 
   /**
-   * Closes every window, every tray icon, and the application. Every thread blocked in {@link
-   * #run()} returns. Nothing can be opened afterwards. Idempotent.
+   * Closes every window, every tray icon, every notification, and the application. Every thread
+   * blocked in {@link #run()} returns. Nothing can be opened afterwards. Idempotent.
    */
   void quit();
 

@@ -9,6 +9,8 @@ import dev.ivchenko.lwjwae.foreign.NativeLibraries;
 import dev.ivchenko.lwjwae.gtk.binding.Glib;
 import dev.ivchenko.lwjwae.gtk.binding.Signatures;
 import dev.ivchenko.lwjwae.gtk.binding.WebKit;
+import dev.ivchenko.lwjwae.notification.Notification;
+import dev.ivchenko.lwjwae.notification.NotificationHandle;
 import dev.ivchenko.lwjwae.tray.Tray;
 import dev.ivchenko.lwjwae.tray.TrayIcon;
 import dev.ivchenko.lwjwae.util.MimeTypeUtil;
@@ -27,7 +29,7 @@ import java.util.function.Consumer;
  * GtkDispatcher}, and the default web context, which serves {@code app://} for every web view. Both
  * outlive the application, because GTK can't be initialized twice and a web context can't be
  * unregistered, so creating the application only makes sure that they exist. Each window is a
- * {@link GtkWindow} on that thread.
+ * {@link GtkWindow} on that thread, and each notification a {@link GtkNotification}.
  */
 public class GtkApplication extends AbstractApplication {
   private static final String ERROR_DOMAIN = "lwjwae";
@@ -39,6 +41,8 @@ public class GtkApplication extends AbstractApplication {
           "onResourceRequest",
           MethodType.methodType(void.class, MemorySegment.class, MemorySegment.class),
           Signatures.URI_SCHEME_REQUEST_CALLBACK);
+
+  private GtkNotifier notifier;
 
   /** Creates an application with {@link ApplicationParameters#createDefault()}. */
   public GtkApplication() {
@@ -74,6 +78,32 @@ public class GtkApplication extends AbstractApplication {
   @Override
   protected Tray createTray(TrayIcon icon, Consumer<Tray> closed) {
     return new GtkTray(this.dispatcher(), icon, closed);
+  }
+
+  @Override
+  protected NotificationHandle createNotification(
+      Notification notification, Consumer<NotificationHandle> closed) {
+    return this.notifier().show(notification, closed);
+  }
+
+  /** The notifier, connected to the bus on the first notification rather than at startup. */
+  private synchronized GtkNotifier notifier() {
+    if (this.notifier == null) {
+      this.notifier = new GtkNotifier(this.dispatcher(), this.parameters().name());
+    }
+    return this.notifier;
+  }
+
+  @Override
+  protected void onClose() {
+    GtkNotifier current;
+    synchronized (this) {
+      current = this.notifier;
+      this.notifier = null;
+    }
+    if (current != null) {
+      current.close();
+    }
   }
 
   /**

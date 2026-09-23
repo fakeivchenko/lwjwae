@@ -6,6 +6,8 @@ import dev.ivchenko.lwjwae.ApplicationParameters;
 import dev.ivchenko.lwjwae.WindowParameters;
 import dev.ivchenko.lwjwae.macos.binding.AppKit;
 import dev.ivchenko.lwjwae.macos.binding.WebKit;
+import dev.ivchenko.lwjwae.notification.Notification;
+import dev.ivchenko.lwjwae.notification.NotificationHandle;
 import dev.ivchenko.lwjwae.tray.Tray;
 import dev.ivchenko.lwjwae.tray.TrayIcon;
 import java.util.function.Consumer;
@@ -17,10 +19,11 @@ import java.util.function.Consumer;
  * own. {@link MacDispatcher} starts the loop from a background thread when it can; when the process
  * is already on the main thread, as the {@code main} method of a native image is, {@link #run()}
  * runs the loop itself and stops it once the last window closed. Each window is a {@link
- * MacWindow}, and each tray icon a {@link MacTray}.
+ * MacWindow}, each tray icon a {@link MacTray}, and each notification a {@link MacNotification}.
  */
 public class MacApplication extends AbstractApplication {
   private volatile boolean runningApplication;
+  private MacNotifier notifier;
 
   /** Creates an application with {@link ApplicationParameters#createDefault()}. */
   public MacApplication() {
@@ -45,6 +48,32 @@ public class MacApplication extends AbstractApplication {
   @Override
   protected Tray createTray(TrayIcon icon, Consumer<Tray> closed) {
     return new MacTray(this.dispatcher(), icon, closed);
+  }
+
+  @Override
+  protected NotificationHandle createNotification(
+      Notification notification, Consumer<NotificationHandle> closed) {
+    return this.notifier().show(notification, closed);
+  }
+
+  /** The notifier, created on the first notification rather than at startup. */
+  private synchronized MacNotifier notifier() {
+    if (this.notifier == null) {
+      this.notifier = new MacNotifier(this.dispatcher());
+    }
+    return this.notifier;
+  }
+
+  @Override
+  protected void onClose() {
+    MacNotifier current;
+    synchronized (this) {
+      current = this.notifier;
+      this.notifier = null;
+    }
+    if (current != null) {
+      current.close();
+    }
   }
 
   /**

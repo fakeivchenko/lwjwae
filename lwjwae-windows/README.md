@@ -19,12 +19,14 @@ then looks for the runtime in the registry without loading it.
 | [`WindowsWindow`](src/main/java/dev/ivchenko/lwjwae/windows/WindowsWindow.java)                                                                                                                                                                                     | The window. Forwards every call to the UI thread.                  |
 | [`WindowsDispatcher`](src/main/java/dev/ivchenko/lwjwae/windows/WindowsDispatcher.java)                                                                                                                                                                             | The one UI thread of the process, which is also the COM apartment. |
 | [`WindowsTray`](src/main/java/dev/ivchenko/lwjwae/windows/WindowsTray.java) | A tray icon in the notification area, through `Shell_NotifyIconW`. |
+| [`WindowsNotifier`](src/main/java/dev/ivchenko/lwjwae/windows/WindowsNotifier.java), [`WindowsNotification`](src/main/java/dev/ivchenko/lwjwae/windows/WindowsNotification.java) | Notifications, as toasts. |
 | [`binding.User32`](src/main/java/dev/ivchenko/lwjwae/windows/binding/User32.java)                                                                                                                                                                                   | The window class, the window, and the message loop.                |
 | [`binding.Kernel32`](src/main/java/dev/ivchenko/lwjwae/windows/binding/Kernel32.java)                                                                                                                                                                               | Module handles, thread IDs, `LoadLibraryExW`, `GetProcAddress`.    |
 | [`binding.Ole32`](src/main/java/dev/ivchenko/lwjwae/windows/binding/Ole32.java)                                                                                                                                                                                     | The COM apartment and task memory.                                 |
 | [`binding.Advapi32`](src/main/java/dev/ivchenko/lwjwae/windows/binding/Advapi32.java)                                                                                                                                                                               | The registry, to find the runtime.                                 |
 | [`binding.Shlwapi`](src/main/java/dev/ivchenko/lwjwae/windows/binding/Shlwapi.java)                                                                                                                                                                                 | An in-memory `IStream` for resource responses.                     |
 | [`binding.Shell32`](src/main/java/dev/ivchenko/lwjwae/windows/binding/Shell32.java) | `Shell_NotifyIconW`: adds, changes, and removes a tray icon. |
+| [`binding.WinRt`](src/main/java/dev/ivchenko/lwjwae/windows/binding/WinRt.java), [`binding.Toasts`](src/main/java/dev/ivchenko/lwjwae/windows/binding/Toasts.java) | `HSTRING`s and class activation from `combase.dll`, and the toast interfaces by vtable slot. |
 | [`binding.WebView2Runtime`](src/main/java/dev/ivchenko/lwjwae/windows/binding/WebView2Runtime.java)                                                                                                                                                                 | Where `EmbeddedBrowserWebView.dll` is.                             |
 | [`binding.WebView2`](src/main/java/dev/ivchenko/lwjwae/windows/binding/WebView2.java)                                                                                                                                                                               | The `ICoreWebView2*` methods the backend uses, by vtable slot.     |
 | [`binding.Com`](src/main/java/dev/ivchenko/lwjwae/windows/binding/Com.java)                                                                                                                                                                                         | Calling a COM method through its vtable.                           |
@@ -207,6 +209,31 @@ actions and `onActivate` run on a virtual thread, off the UI thread.
 
 The tray closes with its application, on `quit()`, or earlier through `Tray.close()`. Until then it
 keeps `Application.run()` going, so an application can live in the tray with no window open.
+
+## Notifications
+
+`Application.showNotification(Notification)` shows a toast, through a
+[`WindowsNotifier`](src/main/java/dev/ivchenko/lwjwae/windows/WindowsNotifier.java) created on the
+first notification. Toasts are a Windows Runtime API, and the Windows Runtime is COM: a runtime
+object is called by vtable slot as WebView2 is, from [`binding.Toasts`](src/main/java/dev/ivchenko/lwjwae/windows/binding/Toasts.java),
+and [`binding.WinRt`](src/main/java/dev/ivchenko/lwjwae/windows/binding/WinRt.java) adds the two
+things COM lacks: `HSTRING`s and `RoGetActivationFactory`. The STA of the UI thread serves both.
+
+Windows files toasts under an AppUserModelID. A plain executable has none, so the notifier registers
+`lwjwae.<name>` under `HKCU\Software\Classes\AppUserModelId`, with the name of the application from
+`ApplicationParameters.name()`, or of the executable, as `DisplayName`. The key stays after the
+application exits: Notification Center labels the toasts that are still there with it. Without a
+Start menu shortcut, Windows has no notification setting for the ID yet and `get_Setting` fails with
+`ERROR_NOT_FOUND`; the notifier shows the toast anyway, and a toast that Windows refuses reports its
+`Failed` event and closes.
+
+The content is `ToastGeneric` XML: the title and the body as two text lines, the image as a `file:`
+URI in the `appLogoOverride` placement, and each button as an action with the argument `action-N`.
+A click on the toast itself has the argument `default`. `Activated`, `Dismissed`, and `Failed` fire
+on a thread of the pool, not on the UI thread, so the handlers are agile COM objects: they answer to
+`IAgileObject`, and their reference count is atomic. A toast that times out moves to Notification
+Center, where it can still be clicked, so its handle stays open; a click, a dismissal by the user,
+or `close()` ends it.
 
 ## Closing
 

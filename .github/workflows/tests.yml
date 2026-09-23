@@ -65,18 +65,21 @@ jobs:
           java-version: 25
       - uses: gradle/actions/setup-gradle@v6
 
-      - name: Install GTK, WebKitGTK, and Xvfb
+      # dunst is the notification server: the bus starts it on the first notification, through the
+      # activation file that the package installs.
+      - name: Install GTK, WebKitGTK, Xvfb, and a notification server
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libgtk-3-0t64 libwebkit2gtk-4.1-0 libxtst6 xvfb
+          sudo apt-get install -y --no-install-recommends libgtk-3-0t64 libwebkit2gtk-4.1-0 libxtst6 xvfb dbus-daemon dunst
 
       - name: Headless tests
         run: ./gradlew test
 
-      # A display test that silently skips on CI is a false pass.
+      # A display test that silently skips on CI is a false pass. The runner has no session bus, so
+      # dbus-run-session gives the tests one, for the notifications.
       - name: Display tests under Xvfb
         id: display
-        run: xvfb-run -a ./gradlew displayTest -Dlwjwae.requireDisplay=true -Dlwjwae.screenshots=true
+        run: xvfb-run -a dbus-run-session -- ./gradlew displayTest -Dlwjwae.requireDisplay=true -Dlwjwae.screenshots=true
 
       - name: Screenshots
         # Only after the display tests ran: a failure before them has no pictures to upload.

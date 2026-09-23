@@ -9,8 +9,10 @@ import dev.ivchenko.lwjwae.windows.binding.Kernel32;
 import dev.ivchenko.lwjwae.windows.binding.Ole32;
 import dev.ivchenko.lwjwae.windows.binding.Shell32;
 import dev.ivchenko.lwjwae.windows.binding.Shlwapi;
+import dev.ivchenko.lwjwae.windows.binding.Toasts;
 import dev.ivchenko.lwjwae.windows.binding.User32;
 import dev.ivchenko.lwjwae.windows.binding.WebView2;
+import dev.ivchenko.lwjwae.windows.binding.WinRt;
 import java.util.List;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
@@ -34,6 +36,8 @@ class WindowsNativeImageMetadataTest extends NativeImageMetadataContractTest {
         Ole32.class,
         Shlwapi.class,
         Shell32.class,
+        WinRt.class,
+        Toasts.class,
         Advapi32.class,
         Com.class,
         ComCallback.class,

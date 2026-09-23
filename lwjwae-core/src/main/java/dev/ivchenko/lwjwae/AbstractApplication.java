@@ -4,6 +4,8 @@ import dev.ivchenko.lwjwae.bridge.BridgeProtocol;
 import dev.ivchenko.lwjwae.bridge.codec.BridgeCodec;
 import dev.ivchenko.lwjwae.event.Event;
 import dev.ivchenko.lwjwae.event.EventSubscription;
+import dev.ivchenko.lwjwae.notification.Notification;
+import dev.ivchenko.lwjwae.notification.NotificationHandle;
 import dev.ivchenko.lwjwae.tray.Tray;
 import dev.ivchenko.lwjwae.tray.TrayIcon;
 import dev.ivchenko.lwjwae.ui.UiDispatcher;
@@ -44,6 +46,7 @@ public abstract class AbstractApplication implements Application {
   private final ApplicationParameters parameters;
   private final Map<Long, AbstractWindow> windows = new ConcurrentHashMap<>();
   private final Set<Tray> trays = ConcurrentHashMap.newKeySet();
+  private final Set<NotificationHandle> notifications = ConcurrentHashMap.newKeySet();
   private final AtomicLong windowIds = new AtomicLong();
   private final Map<String, BiFunction<Window, String, String>> bindings =
       new ConcurrentHashMap<>();
@@ -254,6 +257,36 @@ public abstract class AbstractApplication implements Application {
     throw new UnsupportedOperationException("The " + this.engine() + " backend has no tray yet");
   }
 
+  @Override
+  public final NotificationHandle showNotification(Notification notification) {
+    Objects.requireNonNull(notification, "notification");
+    this.checkOpen();
+    NotificationHandle handle = this.createNotification(notification, this.notifications::remove);
+    if (!handle.isClosed()) {
+      this.notifications.add(handle);
+    }
+    // Shown while quit() was taking the others back: this one missed it, so take it back here.
+    if (this.closed.get()) {
+      handle.close();
+      throw new IllegalStateException("The application is closed");
+    }
+    return handle;
+  }
+
+  /**
+   * Hands the notification to the desktop. The default throws, for a backend without notifications.
+   *
+   * @param notification What the notification says and offers.
+   * @param closed To run once when the notification goes away, however it goes, so that the
+   *     application stops tracking it.
+   * @throws UnsupportedOperationException If the backend or the desktop can't show notifications.
+   */
+  protected NotificationHandle createNotification(
+      Notification notification, Consumer<NotificationHandle> closed) {
+    throw new UnsupportedOperationException(
+        "The " + this.engine() + " backend has no notifications yet");
+  }
+
   /** Called by a window once its native window is gone. The last one wakes {@link #run()}. */
   final void windowClosed(AbstractWindow window) {
     this.windows.remove(window.id(), window);
@@ -299,6 +332,13 @@ public abstract class AbstractApplication implements Application {
     for (Tray tray : List.copyOf(this.trays)) {
       try {
         tray.close();
+      } catch (Throwable t) {
+        ThrowableUtil.report(t);
+      }
+    }
+    for (NotificationHandle notification : List.copyOf(this.notifications)) {
+      try {
+        notification.close();
       } catch (Throwable t) {
         ThrowableUtil.report(t);
       }

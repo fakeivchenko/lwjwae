@@ -4,6 +4,8 @@ import dev.ivchenko.lwjwae.AbstractApplication;
 import dev.ivchenko.lwjwae.AbstractWindow;
 import dev.ivchenko.lwjwae.ApplicationParameters;
 import dev.ivchenko.lwjwae.WindowParameters;
+import dev.ivchenko.lwjwae.notification.Notification;
+import dev.ivchenko.lwjwae.notification.NotificationHandle;
 import dev.ivchenko.lwjwae.tray.Tray;
 import dev.ivchenko.lwjwae.tray.TrayIcon;
 import dev.ivchenko.lwjwae.windows.binding.Com;
@@ -35,6 +37,8 @@ public class WindowsApplication extends AbstractApplication {
   private static final Duration CREATION_TIMEOUT = Duration.ofMinutes(1);
 
   private final AtomicReference<MemorySegment> environment = new AtomicReference<>();
+
+  private WindowsNotifier notifier;
 
   /** Creates an application with {@link ApplicationParameters#createDefault()}. */
   public WindowsApplication() {
@@ -106,7 +110,29 @@ public class WindowsApplication extends AbstractApplication {
   }
 
   @Override
+  protected NotificationHandle createNotification(
+      Notification notification, Consumer<NotificationHandle> closed) {
+    return this.notifier().show(notification, closed);
+  }
+
+  /** The notifier, registered and created on the first notification rather than at startup. */
+  private synchronized WindowsNotifier notifier() {
+    if (this.notifier == null) {
+      this.notifier = new WindowsNotifier(this.dispatcher(), this.parameters().name());
+    }
+    return this.notifier;
+  }
+
+  @Override
   protected void onClose() {
+    WindowsNotifier currentNotifier;
+    synchronized (this) {
+      currentNotifier = this.notifier;
+      this.notifier = null;
+    }
+    if (currentNotifier != null) {
+      currentNotifier.close();
+    }
     MemorySegment closing = this.environment.getAndSet(null);
     if (closing != null) {
       this.dispatcher().run(() -> Com.release(closing));
