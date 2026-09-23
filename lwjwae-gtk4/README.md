@@ -22,6 +22,27 @@ on any display server.
 | openSUSE                           | `libgtk-4-1 libwebkitgtk-6_0-4`      |
 | Alpine                             | `gtk4.0 webkit2gtk-6.0`              |
 
+WebKitGTK 6.0 always runs its web processes in a bubblewrap sandbox, which the 4.1 API leaves off
+by default. The sandbox needs unprivileged user namespaces. Ubuntu 23.10 and newer restrict them
+through AppArmor (`kernel.apparmor_restrict_unprivileged_userns = 1`), and there WebKit aborts the
+whole process on the first web view with `Failed to fully launch dbus-proxy`. An application that
+ships for Ubuntu needs an AppArmor profile for its executable that allows `userns`, the way the
+browsers that Ubuntu packages have one:
+
+```
+abi <abi/4.0>,
+include <tunables/global>
+
+profile my-app /opt/my-app/bin/my-app flags=(unconfined) {
+  userns,
+}
+```
+
+`sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0` lifts the restriction for the whole
+machine, which is what CI does. `WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS=1` turns the sandbox off
+for one process instead, and leaves web content unconfined; the GTK 3 backend, which has no
+sandbox either way, is the safer fallback there.
+
 The provider [`Gtk4BackendProvider`](src/main/java/dev/ivchenko/lwjwae/gtk4/Gtk4BackendProvider.java)
 registers under the name `gtk4-webkitgtk-6.0`, with a priority below the GTK 3 backend: when both
 modules are on the classpath and both libraries are installed, GTK 3 runs, as it can also place

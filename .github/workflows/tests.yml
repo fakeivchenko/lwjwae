@@ -77,6 +77,11 @@ jobs:
       - name: Headless tests
         run: ./gradlew test
 
+      # WebKitGTK 6.0 always runs its web processes in a bubblewrap sandbox, which needs unprivileged
+      # user namespaces; Ubuntu 24.04 restricts them through AppArmor, and WebKit aborts without them.
+      - name: Allow the WebKitGTK 6.0 sandbox
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
       # A display test that silently skips on CI is a false pass. The runner has no session bus, so
       # dbus-run-session gives the tests one, for the notifications.
       - name: Display tests under Xvfb
