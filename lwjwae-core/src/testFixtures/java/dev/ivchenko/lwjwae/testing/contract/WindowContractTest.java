@@ -39,9 +39,7 @@ public abstract class WindowContractTest extends DisplayContractTest {
 
   @Test
   void hiddenWindowComesBackAndTheCloseActionDecidesTheUsersClose() throws Exception {
-    // HIDE hides only while a tray icon offers the way back.
-    try (Application application = Application.create();
-        Tray _ = application.tray(TrayIcon.builder().icon(Icons.circle(32, Color.GREEN)).build())) {
+    try (Application application = Application.create()) {
       Window window =
           application.open(
               WindowParameters.builder()
@@ -57,17 +55,37 @@ public abstract class WindowContractTest extends DisplayContractTest {
       window.show();
       Assertions.assertTrue(window.isVisible(), "show() brings a hidden window back");
 
-      // What the close button of the title bar does: with HIDE, the window only hides.
-      window.requestClose();
-      awaitTrue(() -> !window.isVisible(), "the user's close hides the window");
-      Assertions.assertFalse(window.isClosed());
-      Assertions.assertEquals(List.of(window), application.windows(), "a hidden window stays open");
+      Tray tray = trayOrNull(application);
+      try (Tray _ = tray) {
+        if (tray == null) {
+          // No tray on this backend: nothing could bring a hidden window back, so HIDE closes.
+          window.requestClose();
+          awaitTrue(window::isClosed, "without a tray icon, the user's close closes the window");
+          return;
+        }
 
-      window.show();
-      window.closeAction(CloseAction.CLOSE);
-      window.requestClose();
-      awaitTrue(window::isClosed, "with CLOSE, the user's close closes the window");
-      Assertions.assertTrue(application.windows().isEmpty());
+        // What the close button of the title bar does: with HIDE and a tray icon, it only hides.
+        window.requestClose();
+        awaitTrue(() -> !window.isVisible(), "the user's close hides the window");
+        Assertions.assertFalse(window.isClosed());
+        Assertions.assertEquals(
+            List.of(window), application.windows(), "a hidden window stays open");
+
+        window.show();
+        window.closeAction(CloseAction.CLOSE);
+        window.requestClose();
+        awaitTrue(window::isClosed, "with CLOSE, the user's close closes the window");
+        Assertions.assertTrue(application.windows().isEmpty());
+      }
+    }
+  }
+
+  /** A tray icon, the way back to a hidden window, or {@code null} on a backend without a tray. */
+  private static Tray trayOrNull(Application application) {
+    try {
+      return application.tray(TrayIcon.builder().icon(Icons.circle(32, Color.GREEN)).build());
+    } catch (UnsupportedOperationException _) {
+      return null;
     }
   }
 
