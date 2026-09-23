@@ -13,10 +13,10 @@ import java.util.function.Consumer;
  * One toast, and the reference to its {@code ToastNotification} that takes it back.
  *
  * <p>A toast ends when the user clicks it or one of its buttons, when the user dismisses it, when
- * it fails to show, when it times out, or on {@link #close()}. A toast that times out would move to
- * Notification Center and wait there, still clickable, for as long as the application runs, and its
- * handle, its COM object, and its image with it; the handle takes it back instead, so that a
- * long-running application doesn't collect every toast it ever showed.
+ * it fails to show, or on {@link #close()}. A toast that times out is not over: it moves to
+ * Notification Center, where the user can still read and click it, so the handle stays open. That
+ * is also where every toast goes under Do Not Disturb, which reports it as timed out at once;
+ * taking such a toast back would hide every notification from a user who only asked for quiet.
  */
 public class WindowsNotification extends AbstractNotification {
   private final WindowsNotifier notifier;
@@ -59,9 +59,7 @@ public class WindowsNotification extends AbstractNotification {
 
   /** Windows took the toast off the screen, for {@code reason}. */
   void dismissed(int reason) {
-    if (reason == Toasts.DISMISSED_BY_TIMEOUT) {
-      this.close();
-    } else {
+    if (reason != Toasts.DISMISSED_BY_TIMEOUT) {
       this.markClosed();
     }
   }

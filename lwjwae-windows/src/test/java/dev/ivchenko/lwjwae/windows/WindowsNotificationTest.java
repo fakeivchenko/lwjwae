@@ -72,7 +72,7 @@ class WindowsNotificationTest extends NotificationContractTest {
   }
 
   @Test
-  void toastThatTimesOutIsTakenBack() {
+  void toastThatTimesOutStaysInNotificationCenter() {
     try (Application application = Application.create()) {
       WindowsNotification notification =
           (WindowsNotification)
@@ -80,7 +80,8 @@ class WindowsNotificationTest extends NotificationContractTest {
                   Notification.builder().title("lwjwae :: timeout").build());
 
       notification.simulateTimeout();
-      Assertions.assertTrue(notification.isClosed(), "a timed-out toast must not pile up");
+      Assertions.assertFalse(notification.isClosed(), "a timed-out toast can still be clicked");
+      notification.close();
     }
   }
 

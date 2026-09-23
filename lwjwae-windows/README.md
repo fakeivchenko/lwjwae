@@ -232,10 +232,10 @@ The content is `ToastGeneric` XML: the title and the body as two text lines, the
 URI in the `appLogoOverride` placement, and each button as an action with the argument `action-N`.
 A click on the toast itself has the argument `default`. `Activated`, `Dismissed`, and `Failed` fire
 on a thread of the pool, not on the UI thread, so the handlers are agile COM objects: they answer to
-`IAgileObject`, and their reference count is atomic. A toast that times out would move to
-Notification Center and wait there for as long as the application runs, with its handle, its COM
-object, and its image, so the handle takes it back with `Hide` instead; a click, a dismissal by the
-user, a timeout, or `close()` ends it.
+`IAgileObject`, and their reference count is atomic. A toast that times out moves to Notification
+Center, where it can still be clicked, so its handle stays open until a click, a dismissal, `close()`,
+or `quit()`. Under Do Not Disturb, every toast goes there at once and reports a timeout; taking those
+back would hide every notification from a user who only asked for quiet.
 
 ## Closing
 
