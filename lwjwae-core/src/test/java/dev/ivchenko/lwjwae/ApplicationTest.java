@@ -1,7 +1,7 @@
 package dev.ivchenko.lwjwae;
 
 import dev.ivchenko.lwjwae.exception.BackendNotAvailableException;
-import dev.ivchenko.lwjwae.testing.FakeApplicationBackend;
+import dev.ivchenko.lwjwae.testing.FakeApplication;
 import dev.ivchenko.lwjwae.testing.FakeProviders;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
@@ -21,7 +21,7 @@ class ApplicationTest {
   @Test
   void listsEveryProviderOnTheClasspath() {
     List<String> names =
-        Application.providers().stream().map(ApplicationBackendProvider::name).sorted().toList();
+        Application.providers().stream().map(BackendProvider::name).sorted().toList();
     Assertions.assertEquals(
         List.of("fake-fallback", "fake-other-platform", "fake-preferred"), names);
   }
@@ -45,22 +45,14 @@ class ApplicationTest {
   }
 
   @Test
-  void createHandsTheParametersToTheProviderAndNavigates() {
+  void createHandsTheParametersToTheProvider() {
     ApplicationParameters parameters =
-        ApplicationParameters.builder().title("Docs").url("https://example.com").build();
+        ApplicationParameters.builder().devServerUrl("http://localhost:5173").build();
 
-    try (ApplicationBackend backend = Application.create(parameters)) {
-      FakeApplicationBackend fake =
-          Assertions.assertInstanceOf(FakeApplicationBackend.class, backend);
-      Assertions.assertEquals("Docs", fake.title());
-      Assertions.assertEquals(List.of("https://example.com"), fake.navigated);
-    }
-  }
-
-  @Test
-  void createWithoutUrlDoesNotNavigate() {
-    try (ApplicationBackend backend = Application.create()) {
-      Assertions.assertTrue(((FakeApplicationBackend) backend).navigated.isEmpty());
+    try (Application application = Application.create(parameters)) {
+      Assertions.assertInstanceOf(FakeApplication.class, application);
+      Assertions.assertSame(parameters, application.parameters());
+      Assertions.assertTrue(application.windows().isEmpty(), "create opens no window");
     }
   }
 

@@ -21,9 +21,6 @@ public class Gtk {
   /** {@code GTK_WINDOW_TOPLEVEL}. */
   public final int WINDOW_TOPLEVEL = 0;
 
-  /** {@code GTK_WIN_POS_NONE}: the window manager places the window. */
-  public final int WIN_POS_NONE = 0;
-
   /** {@code GTK_WIN_POS_CENTER}: the window opens in the middle of the screen. */
   public final int WIN_POS_CENTER = 1;
 

@@ -1,13 +1,13 @@
 package dev.ivchenko.lwjwae.gtk;
 
-import dev.ivchenko.lwjwae.ApplicationBackendProvider;
+import dev.ivchenko.lwjwae.BackendProvider;
 import dev.ivchenko.lwjwae.testing.contract.BackendSelectionContractTest;
 import dev.ivchenko.lwjwae.util.PlatformUtil;
 
 class GtkBackendSelectionTest extends BackendSelectionContractTest {
   @Override
-  protected Class<? extends ApplicationBackendProvider> providerType() {
-    return GtkApplicationBackendProvider.class;
+  protected Class<? extends BackendProvider> providerType() {
+    return GtkBackendProvider.class;
   }
 
   @Override

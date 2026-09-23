@@ -1,6 +1,7 @@
 package dev.ivchenko.lwjwae.gtk;
 
-import dev.ivchenko.lwjwae.ApplicationBackend;
+import dev.ivchenko.lwjwae.Application;
+import dev.ivchenko.lwjwae.Window;
 import dev.ivchenko.lwjwae.testing.contract.WindowContractTest;
 import dev.ivchenko.lwjwae.util.PlatformUtil;
 
@@ -17,7 +18,12 @@ class GtkWindowTest extends WindowContractTest {
   }
 
   @Override
-  protected Class<? extends ApplicationBackend> expectedBackendType() {
-    return GtkApplicationBackend.class;
+  protected Class<? extends Application> expectedApplicationType() {
+    return GtkApplication.class;
+  }
+
+  @Override
+  protected Class<? extends Window> expectedWindowType() {
+    return GtkWindow.class;
   }
 }

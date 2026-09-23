@@ -1,7 +1,7 @@
 package dev.ivchenko.lwjwae.testing.contract;
 
 import dev.ivchenko.lwjwae.Application;
-import dev.ivchenko.lwjwae.ApplicationBackendProvider;
+import dev.ivchenko.lwjwae.BackendProvider;
 import java.util.List;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -14,9 +14,9 @@ import org.junit.jupiter.api.Test;
  */
 public abstract class BackendSelectionContractTest {
   /** Returns the provider class that this module registers in {@code META-INF/services}. */
-  protected abstract Class<? extends ApplicationBackendProvider> providerType();
+  protected abstract Class<? extends BackendProvider> providerType();
 
-  /** Returns the {@link ApplicationBackendProvider#name()} of the provider. */
+  /** Returns the {@link BackendProvider#name()} of the provider. */
   protected abstract String providerName();
 
   /** Checks whether the machine that runs the tests is the platform of this module. */
@@ -24,7 +24,7 @@ public abstract class BackendSelectionContractTest {
 
   @Test
   void providerIsOnTheServicePath() {
-    List<ApplicationBackendProvider> providers = Application.providers();
+    List<BackendProvider> providers = Application.providers();
     Assertions.assertTrue(
         providers.stream().anyMatch(this.providerType()::isInstance),
         this.providerType().getSimpleName()
@@ -34,7 +34,7 @@ public abstract class BackendSelectionContractTest {
 
   @Test
   void providerAnswersForItsOwnPlatformOnly() {
-    ApplicationBackendProvider provider =
+    BackendProvider provider =
         Application.providers().stream()
             .filter(this.providerType()::isInstance)
             .findFirst()

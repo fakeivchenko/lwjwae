@@ -1,8 +1,8 @@
 package dev.ivchenko.lwjwae.gtk;
 
-import dev.ivchenko.lwjwae.ApplicationBackend;
-import dev.ivchenko.lwjwae.ApplicationBackendProvider;
+import dev.ivchenko.lwjwae.Application;
 import dev.ivchenko.lwjwae.ApplicationParameters;
+import dev.ivchenko.lwjwae.BackendProvider;
 import dev.ivchenko.lwjwae.foreign.NativeLibraries;
 import dev.ivchenko.lwjwae.util.PlatformUtil;
 import java.util.ArrayList;
@@ -20,7 +20,7 @@ import java.util.Map;
  * distribution identifiers in {@code /etc/os-release}, so a derivative such as Linux Mint or Rocky
  * Linux gets the hint of its base.
  */
-public class GtkApplicationBackendProvider implements ApplicationBackendProvider {
+public class GtkBackendProvider implements BackendProvider {
   private static final String[] GTK = {"libgtk-3.so.0", "libgtk-3.so"};
   private static final String[] WEBKIT = {"libwebkit2gtk-4.1.so.0", "libwebkit2gtk-4.1.so"};
 
@@ -82,7 +82,7 @@ public class GtkApplicationBackendProvider implements ApplicationBackendProvider
   }
 
   @Override
-  public ApplicationBackend create(ApplicationParameters parameters) {
-    return new GtkApplicationBackend(parameters);
+  public Application create(ApplicationParameters parameters) {
+    return new GtkApplication(parameters);
   }
 }

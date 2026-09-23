@@ -4,7 +4,7 @@
       "glob": "dev/ivchenko/lwjwae/bridge/bootstrap.js"
     },
     {
-      "glob": "META-INF/services/dev.ivchenko.lwjwae.ApplicationBackendProvider"
+      "glob": "META-INF/services/dev.ivchenko.lwjwae.BackendProvider"
     },
     {
       "glob": "META-INF/services/dev.ivchenko.lwjwae.bridge.codec.BridgeCodec"

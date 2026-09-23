@@ -12,7 +12,7 @@
       ]
     },
     {
-      "type": "dev.ivchenko.lwjwae.gtk.GtkApplicationBackend",
+      "type": "dev.ivchenko.lwjwae.gtk.GtkWindow",
       "methods": [
         {
           "name": "onBridgeMessage",
@@ -54,7 +54,12 @@
             "java.lang.foreign.MemorySegment",
             "java.lang.foreign.MemorySegment"
           ]
-        },
+        }
+      ]
+    },
+    {
+      "type": "dev.ivchenko.lwjwae.gtk.GtkApplication",
+      "methods": [
         {
           "name": "onResourceRequest",
           "parameterTypes": [
@@ -65,12 +70,12 @@
       ]
     },
     {
-      "type": "dev.ivchenko.lwjwae.gtk.GtkApplicationBackendProvider"
+      "type": "dev.ivchenko.lwjwae.gtk.GtkBackendProvider"
     }
   ],
   "resources": [
     {
-      "glob": "META-INF/services/dev.ivchenko.lwjwae.ApplicationBackendProvider"
+      "glob": "META-INF/services/dev.ivchenko.lwjwae.BackendProvider"
     }
   ],
   "foreign": {
@@ -252,7 +257,7 @@
     ],
     "directUpcalls": [
       {
-        "class": "dev.ivchenko.lwjwae.gtk.GtkApplicationBackend",
+        "class": "dev.ivchenko.lwjwae.gtk.GtkWindow",
         "method": "onBridgeMessage",
         "returnType": "void",
         "parameterTypes": [
@@ -262,7 +267,7 @@
         ]
       },
       {
-        "class": "dev.ivchenko.lwjwae.gtk.GtkApplicationBackend",
+        "class": "dev.ivchenko.lwjwae.gtk.GtkWindow",
         "method": "onDestroy",
         "returnType": "void",
         "parameterTypes": [
@@ -271,7 +276,7 @@
         ]
       },
       {
-        "class": "dev.ivchenko.lwjwae.gtk.GtkApplicationBackend",
+        "class": "dev.ivchenko.lwjwae.gtk.GtkWindow",
         "method": "onLoadFailed",
         "returnType": "jint",
         "parameterTypes": [
@@ -291,7 +296,7 @@
         ]
       },
       {
-        "class": "dev.ivchenko.lwjwae.gtk.GtkApplicationBackend",
+        "class": "dev.ivchenko.lwjwae.gtk.GtkWindow",
         "method": "onLoadChanged",
         "returnType": "void",
         "parameterTypes": [
@@ -301,7 +306,7 @@
         ]
       },
       {
-        "class": "dev.ivchenko.lwjwae.gtk.GtkApplicationBackend",
+        "class": "dev.ivchenko.lwjwae.gtk.GtkApplication",
         "method": "onResourceRequest",
         "returnType": "void",
         "parameterTypes": [
@@ -310,7 +315,7 @@
         ]
       },
       {
-        "class": "dev.ivchenko.lwjwae.gtk.GtkApplicationBackend",
+        "class": "dev.ivchenko.lwjwae.gtk.GtkWindow",
         "method": "onEvaluationReady",
         "returnType": "void",
         "parameterTypes": [
@@ -320,7 +325,7 @@
         ]
       },
       {
-        "class": "dev.ivchenko.lwjwae.gtk.GtkApplicationBackend",
+        "class": "dev.ivchenko.lwjwae.gtk.GtkWindow",
         "method": "onContextMenu",
         "returnType": "jint",
         "parameterTypes": [

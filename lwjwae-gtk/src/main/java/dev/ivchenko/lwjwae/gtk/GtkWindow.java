@@ -1,12 +1,11 @@
 package dev.ivchenko.lwjwae.gtk;
 
-import dev.ivchenko.lwjwae.AbstractApplicationBackend;
-import dev.ivchenko.lwjwae.ApplicationParameters;
+import dev.ivchenko.lwjwae.AbstractWindow;
+import dev.ivchenko.lwjwae.WindowParameters;
 import dev.ivchenko.lwjwae.WindowPosition;
 import dev.ivchenko.lwjwae.bridge.BridgeProtocol;
 import dev.ivchenko.lwjwae.event.LoadEvent;
 import dev.ivchenko.lwjwae.event.LoadState;
-import dev.ivchenko.lwjwae.exception.ResourceNotFoundException;
 import dev.ivchenko.lwjwae.foreign.CallbackRegistry;
 import dev.ivchenko.lwjwae.foreign.NativeLibraries;
 import dev.ivchenko.lwjwae.gtk.binding.Gdk;
@@ -14,8 +13,6 @@ import dev.ivchenko.lwjwae.gtk.binding.Glib;
 import dev.ivchenko.lwjwae.gtk.binding.Gtk;
 import dev.ivchenko.lwjwae.gtk.binding.Signatures;
 import dev.ivchenko.lwjwae.gtk.binding.WebKit;
-import dev.ivchenko.lwjwae.util.MimeTypeUtil;
-import dev.ivchenko.lwjwae.util.ResourceUtil;
 import dev.ivchenko.lwjwae.util.ThrowableUtil;
 import java.lang.foreign.MemorySegment;
 import java.lang.invoke.MethodHandles;
@@ -24,38 +21,35 @@ import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * A window backed by GTK 3 and WebKitGTK 4.1, bound entirely through the Foreign Function and
- * Memory API, without JNI and without native artifacts of its own.
+ * A window backed by GTK 3 and WebKitGTK 4.1, opened by a {@link GtkApplication}.
  *
  * <p>Instances are safe to use from any thread. Every call is forwarded to the shared GTK thread.
  * Native callbacks are static and dispatch through {@link CallbackRegistry}, so a single upcall
  * stub serves every window instead of one stub per instance.
  */
-public class GtkApplicationBackend extends AbstractApplicationBackend {
-  private static final String ERROR_DOMAIN = "lwjwae";
-
-  private static final CallbackRegistry<GtkApplicationBackend> WINDOWS = new CallbackRegistry<>();
+public class GtkWindow extends AbstractWindow {
+  private static final CallbackRegistry<GtkWindow> WINDOWS = new CallbackRegistry<>();
   private static final CallbackRegistry<CompletableFuture<String>> PENDING_EVALUATIONS =
       new CallbackRegistry<>();
 
   private static final MemorySegment ON_DESTROY =
       NativeLibraries.upcall(
           MethodHandles.lookup(),
-          GtkApplicationBackend.class,
+          GtkWindow.class,
           "onDestroy",
           MethodType.methodType(void.class, MemorySegment.class, MemorySegment.class),
           Signatures.WIDGET_CALLBACK);
   private static final MemorySegment ON_LOAD_CHANGED =
       NativeLibraries.upcall(
           MethodHandles.lookup(),
-          GtkApplicationBackend.class,
+          GtkWindow.class,
           "onLoadChanged",
           MethodType.methodType(void.class, MemorySegment.class, int.class, MemorySegment.class),
           Signatures.LOAD_CHANGED_CALLBACK);
   private static final MemorySegment ON_LOAD_FAILED =
       NativeLibraries.upcall(
           MethodHandles.lookup(),
-          GtkApplicationBackend.class,
+          GtkWindow.class,
           "onLoadFailed",
           MethodType.methodType(
               int.class,
@@ -68,7 +62,7 @@ public class GtkApplicationBackend extends AbstractApplicationBackend {
   private static final MemorySegment ON_CONTEXT_MENU =
       NativeLibraries.upcall(
           MethodHandles.lookup(),
-          GtkApplicationBackend.class,
+          GtkWindow.class,
           "onContextMenu",
           MethodType.methodType(
               int.class,
@@ -81,7 +75,7 @@ public class GtkApplicationBackend extends AbstractApplicationBackend {
   private static final MemorySegment ON_EVALUATION_READY =
       NativeLibraries.upcall(
           MethodHandles.lookup(),
-          GtkApplicationBackend.class,
+          GtkWindow.class,
           "onEvaluationReady",
           MethodType.methodType(
               void.class, MemorySegment.class, MemorySegment.class, MemorySegment.class),
@@ -89,52 +83,39 @@ public class GtkApplicationBackend extends AbstractApplicationBackend {
   private static final MemorySegment ON_BRIDGE_MESSAGE =
       NativeLibraries.upcall(
           MethodHandles.lookup(),
-          GtkApplicationBackend.class,
+          GtkWindow.class,
           "onBridgeMessage",
           MethodType.methodType(
               void.class, MemorySegment.class, MemorySegment.class, MemorySegment.class),
           Signatures.SCRIPT_MESSAGE_CALLBACK);
-  private static final MemorySegment ON_RESOURCE_REQUEST =
-      NativeLibraries.upcall(
-          MethodHandles.lookup(),
-          GtkApplicationBackend.class,
-          "onResourceRequest",
-          MethodType.methodType(void.class, MemorySegment.class, MemorySegment.class),
-          Signatures.URI_SCHEME_REQUEST_CALLBACK);
-
-  private final long id;
+  private final long callbackId;
 
   private volatile MemorySegment window;
   private volatile MemorySegment webView;
   private volatile MemorySegment userContentManager;
 
-  /** Creates a window with {@link ApplicationParameters#createDefault()}. */
-  public GtkApplicationBackend() {
-    this(ApplicationParameters.createDefault());
-  }
-
   /**
    * Creates the native window on the GTK thread and returns when it exists. The window is hidden
    * until {@link #show()}.
    *
-   * @throws IllegalStateException If GTK can't open a display.
+   * <p>Suppressed warnings: {@code resource}: on the failure path, {@code unregister} hands back
+   * this window, which looks like an unclosed resource. It is not: there is no native window left
+   * to close, and the exception tells the caller that nothing was opened.
    */
-  public GtkApplicationBackend(ApplicationParameters parameters) {
-    super(GtkDispatcher.instance(), parameters);
-    this.id = WINDOWS.register(this);
+  @SuppressWarnings("resource")
+  GtkWindow(GtkApplication application, long id, WindowParameters parameters) {
+    super(application, id);
+    this.callbackId = WINDOWS.register(this);
     try {
       this.dispatcher().run(() -> this.createWindow(parameters));
     } catch (RuntimeException | Error e) {
-      WINDOWS.unregister(this.id);
+      WINDOWS.unregister(this.callbackId);
       throw e;
     }
   }
 
   /** Builds the native widgets. Runs on the GTK thread, once, from the constructor. */
-  private void createWindow(ApplicationParameters parameters) {
-    WebKit.retainDefaultWebContext();
-    WebKit.registerUriScheme(ResourceUtil.SCHEME, ON_RESOURCE_REQUEST);
-
+  private void createWindow(WindowParameters parameters) {
     MemorySegment newWindow = Gtk.windowNew(Gtk.WINDOW_TOPLEVEL);
     Gtk.windowSetTitle(newWindow, parameters.title());
     Gtk.windowSetDefaultSize(newWindow, parameters.width(), parameters.height());
@@ -144,7 +125,7 @@ public class GtkApplicationBackend extends AbstractApplicationBackend {
       Gtk.windowMove(newWindow, parameters.x(), parameters.y());
     }
 
-    MemorySegment userData = CallbackRegistry.userData(this.id);
+    MemorySegment userData = CallbackRegistry.userData(this.callbackId);
 
     // Connect before registering, otherwise early messages race the signal handler.
     MemorySegment manager = WebKit.userContentManagerNew();
@@ -167,11 +148,6 @@ public class GtkApplicationBackend extends AbstractApplicationBackend {
     this.webView = newWebView;
     this.userContentManager = manager;
     this.installBridge();
-  }
-
-  @Override
-  public String engine() {
-    return "WebKitGTK " + WebKit.version();
   }
 
   @Override
@@ -369,16 +345,16 @@ public class GtkApplicationBackend extends AbstractApplicationBackend {
   /**
    * Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
    * binds it by name, so no Java code calls it and the compiler sees a dead private method. {@code
-   * resource}: the backend is {@code AutoCloseable}, and a lookup that returns it looks like an
-   * unclosed resource. It is not: the window owns the backend and closes it, this method only
+   * resource}: the window is {@code AutoCloseable}, and a lookup that returns it looks like an
+   * unclosed resource. It is not: the application owns the window and closes it, this method only
    * borrows it.
    */
   @SuppressWarnings({"unused", "resource"})
   private static void onDestroy(MemorySegment widget, MemorySegment userData) {
     try {
-      GtkApplicationBackend backend = WINDOWS.unregister(userData);
-      if (backend != null) {
-        backend.handleDestroyed();
+      GtkWindow window = WINDOWS.unregister(userData);
+      if (window != null) {
+        window.handleDestroyed();
       }
     } catch (Throwable t) {
       ThrowableUtil.report(t);
@@ -388,15 +364,15 @@ public class GtkApplicationBackend extends AbstractApplicationBackend {
   /**
    * Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
    * binds it by name, so no Java code calls it and the compiler sees a dead private method. {@code
-   * resource}: the backend is {@code AutoCloseable}, and a lookup that returns it looks like an
-   * unclosed resource. It is not: the window owns the backend and closes it, this method only
+   * resource}: the window is {@code AutoCloseable}, and a lookup that returns it looks like an
+   * unclosed resource. It is not: the application owns the window and closes it, this method only
    * borrows it.
    */
   @SuppressWarnings({"unused", "resource"})
   private static void onLoadChanged(MemorySegment webView, int loadEvent, MemorySegment userData) {
     try {
-      GtkApplicationBackend backend = WINDOWS.lookup(userData);
-      if (backend == null) {
+      GtkWindow window = WINDOWS.lookup(userData);
+      if (window == null) {
         return;
       }
 
@@ -409,7 +385,7 @@ public class GtkApplicationBackend extends AbstractApplicationBackend {
             default -> null;
           };
       if (state != null) {
-        backend.emitLoad(LoadEvent.of(state, WebKit.uri(webView)));
+        window.emitLoad(LoadEvent.of(state, WebKit.uri(webView)));
       }
     } catch (Throwable t) {
       ThrowableUtil.report(t);
@@ -419,8 +395,8 @@ public class GtkApplicationBackend extends AbstractApplicationBackend {
   /**
    * Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
    * binds it by name, so no Java code calls it and the compiler sees a dead private method. {@code
-   * resource}: the backend is {@code AutoCloseable}, and a lookup that returns it looks like an
-   * unclosed resource. It is not: the window owns the backend and closes it, this method only
+   * resource}: the window is {@code AutoCloseable}, and a lookup that returns it looks like an
+   * unclosed resource. It is not: the application owns the window and closes it, this method only
    * borrows it.
    */
   @SuppressWarnings({"unused", "resource"})
@@ -431,9 +407,9 @@ public class GtkApplicationBackend extends AbstractApplicationBackend {
       MemorySegment error,
       MemorySegment userData) {
     try {
-      GtkApplicationBackend backend = WINDOWS.lookup(userData);
-      if (backend != null) {
-        backend.emitLoad(
+      GtkWindow window = WINDOWS.lookup(userData);
+      if (window != null) {
+        window.emitLoad(
             LoadEvent.failed(NativeLibraries.string(failingUri), Glib.errorMessage(error)));
       }
     } catch (Throwable t) {
@@ -449,8 +425,8 @@ public class GtkApplicationBackend extends AbstractApplicationBackend {
    *
    * <p>Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
    * binds it by name, so no Java code calls it and the compiler sees a dead private method. {@code
-   * resource}: the backend is {@code AutoCloseable}, and a lookup that returns it looks like an
-   * unclosed resource. It is not: the window owns the backend and closes it, this method only
+   * resource}: the window is {@code AutoCloseable}, and a lookup that returns it looks like an
+   * unclosed resource. It is not: the application owns the window and closes it, this method only
    * borrows it.
    */
   @SuppressWarnings({"unused", "resource"})
@@ -461,8 +437,8 @@ public class GtkApplicationBackend extends AbstractApplicationBackend {
       MemorySegment hitTest,
       MemorySegment userData) {
     try {
-      GtkApplicationBackend backend = WINDOWS.lookup(userData);
-      if (backend != null && WebKit.isDeveloperExtrasEnabled(webView)) {
+      GtkWindow window = WINDOWS.lookup(userData);
+      if (window != null && WebKit.isDeveloperExtrasEnabled(webView)) {
         return 0;
       }
     } catch (Throwable t) {
@@ -493,52 +469,22 @@ public class GtkApplicationBackend extends AbstractApplicationBackend {
   /**
    * Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
    * binds it by name, so no Java code calls it and the compiler sees a dead private method. {@code
-   * resource}: the backend is {@code AutoCloseable}, and a lookup that returns it looks like an
-   * unclosed resource. It is not: the window owns the backend and closes it, this method only
+   * resource}: the window is {@code AutoCloseable}, and a lookup that returns it looks like an
+   * unclosed resource. It is not: the application owns the window and closes it, this method only
    * borrows it.
    */
   @SuppressWarnings({"unused", "resource"})
   private static void onBridgeMessage(
       MemorySegment manager, MemorySegment javascriptResult, MemorySegment userData) {
     try {
-      GtkApplicationBackend backend = WINDOWS.lookup(userData);
-      if (backend == null) {
+      GtkWindow window = WINDOWS.lookup(userData);
+      if (window == null) {
         return;
       }
 
-      backend.handleBridgeMessage(WebKit.scriptMessageText(javascriptResult));
+      window.handleBridgeMessage(WebKit.scriptMessageText(javascriptResult));
     } catch (Throwable t) {
       ThrowableUtil.report(t);
-    }
-  }
-
-  /**
-   * Serves one {@code app://} request from the classpath.
-   *
-   * <p>This handler isn't tied to a window. The scheme is registered on the process-wide default
-   * web context, so a single handler answers for every web view.
-   *
-   * <p>Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
-   * binds it by name, so no Java code calls it and the compiler sees a dead private method.
-   */
-  @SuppressWarnings("unused")
-  private static void onResourceRequest(MemorySegment request, MemorySegment userData) {
-    String path = "";
-    try {
-      path = WebKit.uriSchemeRequestPath(request);
-      byte[] content = ResourceUtil.read(path);
-      MemorySegment stream = Glib.memoryInputStream(Glib.copyToNative(content), content.length);
-      try {
-        WebKit.uriSchemeRequestFinish(request, stream, content.length, MimeTypeUtil.of(path));
-      } finally {
-        Glib.unref(stream);
-      }
-    } catch (ResourceNotFoundException e) {
-      WebKit.uriSchemeRequestFinishError(request, Glib.error(ERROR_DOMAIN, 404, e.getMessage()));
-    } catch (Throwable t) {
-      ThrowableUtil.report(t);
-      WebKit.uriSchemeRequestFinishError(
-          request, Glib.error(ERROR_DOMAIN, 500, "Could not serve " + path));
     }
   }
 }

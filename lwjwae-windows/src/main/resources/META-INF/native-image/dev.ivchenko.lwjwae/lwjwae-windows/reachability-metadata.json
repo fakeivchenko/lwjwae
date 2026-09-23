@@ -1,7 +1,7 @@
 {
   "reflection": [
     {
-      "type": "dev.ivchenko.lwjwae.windows.WindowsApplicationBackend",
+      "type": "dev.ivchenko.lwjwae.windows.WindowsWindow",
       "methods": [
         {
           "name": "windowProc",
@@ -15,7 +15,7 @@
       ]
     },
     {
-      "type": "dev.ivchenko.lwjwae.windows.WindowsApplicationBackendProvider"
+      "type": "dev.ivchenko.lwjwae.windows.WindowsBackendProvider"
     },
     {
       "type": "dev.ivchenko.lwjwae.windows.binding.ComCallback",
@@ -61,13 +61,13 @@
   ],
   "resources": [
     {
-      "glob": "META-INF/services/dev.ivchenko.lwjwae.ApplicationBackendProvider"
+      "glob": "META-INF/services/dev.ivchenko.lwjwae.BackendProvider"
     }
   ],
   "foreign": {
     "directUpcalls": [
       {
-        "class": "dev.ivchenko.lwjwae.windows.WindowsApplicationBackend",
+        "class": "dev.ivchenko.lwjwae.windows.WindowsWindow",
         "method": "windowProc",
         "returnType": "jlong",
         "parameterTypes": [

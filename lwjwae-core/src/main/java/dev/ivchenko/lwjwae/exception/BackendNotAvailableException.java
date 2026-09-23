@@ -1,5 +1,7 @@
 package dev.ivchenko.lwjwae.exception;
 
+import java.io.Serial;
+
 /**
  * Thrown when no backend on the classpath supports the machine that the application runs on.
  *
@@ -8,6 +10,8 @@ package dev.ivchenko.lwjwae.exception;
  * message lists what was found, so you can tell the two cases apart without a debugger.
  */
 public class BackendNotAvailableException extends RuntimeException {
+  @Serial private static final long serialVersionUID = 1L;
+
   public BackendNotAvailableException(String message) {
     super(message);
   }

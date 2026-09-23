@@ -13,7 +13,12 @@ import org.junit.jupiter.api.Test;
  * <p>A codec module subclasses this test and names its codec. The page half can't be run here,
  * because the JVM has no JavaScript engine; {@link BridgeContractTest} covers it against a real
  * engine, with the codec registered on the test classpath of the module.
+ *
+ * <p>Suppressed warnings: {@code unused}: the test methods look unused because nothing in this
+ * project extends the class. The codec modules of {@code lwjwae-codecs} do, and JUnit runs the
+ * methods there.
  */
+@SuppressWarnings("unused")
 public abstract class BridgeCodecContractTest {
   /** Returns the codec class that the module registers in {@code META-INF/services}. */
   protected abstract Class<? extends BridgeCodec> codecType();

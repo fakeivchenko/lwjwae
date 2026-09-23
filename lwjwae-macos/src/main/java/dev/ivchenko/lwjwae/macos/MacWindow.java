@@ -1,7 +1,7 @@
 package dev.ivchenko.lwjwae.macos;
 
-import dev.ivchenko.lwjwae.AbstractApplicationBackend;
-import dev.ivchenko.lwjwae.ApplicationParameters;
+import dev.ivchenko.lwjwae.AbstractWindow;
+import dev.ivchenko.lwjwae.WindowParameters;
 import dev.ivchenko.lwjwae.WindowPosition;
 import dev.ivchenko.lwjwae.bridge.BridgeProtocol;
 import dev.ivchenko.lwjwae.event.LoadEvent;
@@ -30,18 +30,19 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * An {@code NSWindow} that holds a {@code WKWebView}, driven through the Objective-C runtime.
+ * An {@code NSWindow} that holds a {@code WKWebView}, driven through the Objective-C runtime and
+ * opened by a {@link MacApplication}.
  *
  * <p>Everything that WebKit and AppKit tell the backend arrives through one Objective-C class
  * defined at runtime, {@code LwjwaeDelegate}, whose methods are Java upcall stubs. It's the window
  * delegate, the navigation delegate, the script message handler, and the URL scheme handler of one
  * window. Each window gets its own instance, and the instance address is the key back to the
- * backend.
+ * window.
  *
  * <p>A URL scheme handler serves the files of the application under {@code app://local/}, the same
  * scheme that WebKitGTK uses, so the same page runs unchanged on both.
  */
-public class MacApplicationBackend extends AbstractApplicationBackend {
+public class MacWindow extends AbstractWindow {
   /**
    * The page-side switch that the context menu script reads. The engine has no setting to suppress
    * its menu, so a user script cancels {@code contextmenu} unless this global is set, which {@link
@@ -49,7 +50,7 @@ public class MacApplicationBackend extends AbstractApplicationBackend {
    */
   private static final String CONTEXT_MENU_FLAG = "__lwjwaeContextMenu";
 
-  private static final Map<Long, MacApplicationBackend> DELEGATES = new ConcurrentHashMap<>();
+  private static final Map<Long, MacWindow> DELEGATES = new ConcurrentHashMap<>();
   private static final CallbackRegistry<PendingEvaluation> PENDING_EVALUATIONS =
       new CallbackRegistry<>();
 
@@ -66,7 +67,7 @@ public class MacApplicationBackend extends AbstractApplicationBackend {
   private static final MemorySegment ON_EVALUATION_COMPLETE =
       NativeLibraries.upcall(
           MethodHandles.lookup(),
-          MacApplicationBackend.class,
+          MacWindow.class,
           "onEvaluationComplete",
           MethodType.methodType(
               void.class, MemorySegment.class, MemorySegment.class, MemorySegment.class),
@@ -95,24 +96,18 @@ public class MacApplicationBackend extends AbstractApplicationBackend {
   private volatile MemorySegment delegate;
   private volatile String loading = "about:blank";
   private volatile String reportedFailure;
-  private volatile boolean runningApplication;
-
-  /** Creates a window with {@link ApplicationParameters#createDefault()}. */
-  public MacApplicationBackend() {
-    this(ApplicationParameters.createDefault());
-  }
 
   /**
    * Creates the window and the web view on the main thread and returns when they exist. The window
    * is hidden until {@link #show()}.
    */
-  public MacApplicationBackend(ApplicationParameters parameters) {
-    super(MacDispatcher.instance(), parameters);
+  MacWindow(MacApplication application, long id, WindowParameters parameters) {
+    super(application, id);
     this.dispatcher().run(() -> this.createWindow(parameters));
   }
 
   /** Builds the delegate, the web view, and the window. Runs on the main thread, once. */
-  private void createWindow(ApplicationParameters parameters) {
+  private void createWindow(WindowParameters parameters) {
     MemorySegment newDelegate = ObjC.send(ObjC.send(DELEGATE_CLASS, "alloc"), "init");
     DELEGATES.put(newDelegate.address(), this);
 
@@ -144,11 +139,6 @@ public class MacApplicationBackend extends AbstractApplicationBackend {
             + CONTEXT_MENU_FLAG
             + ") event.preventDefault(); });");
     this.installBridge();
-  }
-
-  @Override
-  public String engine() {
-    return this.dispatcher().call(() -> "WKWebView " + WebKit.version());
   }
 
   @Override
@@ -306,26 +296,6 @@ public class MacApplicationBackend extends AbstractApplicationBackend {
             });
   }
 
-  /**
-   * {@inheritDoc}
-   *
-   * <p>On the main thread of a process that hasn't started its application loop yet, such as the
-   * {@code main} method of a native image, this call runs the loop, and it returns when the window
-   * closes. Everywhere else, the loop is already running on the main thread, and the caller only
-   * waits.
-   */
-  @Override
-  public void run() {
-    MacDispatcher dispatcher = (MacDispatcher) this.dispatcher();
-    if (!dispatcher.isDispatchThread() || dispatcher.isApplicationRunning()) {
-      super.run();
-      return;
-    }
-    this.show();
-    this.runningApplication = true;
-    dispatcher.runApplication();
-  }
-
   @Override
   public void close() {
     if (this.isClosed()) {
@@ -370,9 +340,9 @@ public class MacApplicationBackend extends AbstractApplicationBackend {
   }
 
   /**
-   * Suppressed warnings: {@code resource}: the backend is {@code AutoCloseable}, and a lookup that
-   * returns it looks like an unclosed resource. It is not: the window owns the backend and closes
-   * it, this method only borrows it.
+   * Suppressed warnings: {@code resource}: the window is {@code AutoCloseable}, and a lookup that
+   * returns it looks like an unclosed resource. It is not: the application owns the window and
+   * closes it, this method only borrows it.
    */
   @SuppressWarnings("resource")
   private void handleDestroyed() {
@@ -380,7 +350,6 @@ public class MacApplicationBackend extends AbstractApplicationBackend {
     if (closingDelegate != null) {
       DELEGATES.remove(closingDelegate.address());
     }
-    this.markClosed();
 
     MemorySegment closingWebView = this.webView;
     if (closingWebView != null) {
@@ -397,11 +366,8 @@ public class MacApplicationBackend extends AbstractApplicationBackend {
     this.webView = null;
     this.userContentController = null;
     this.delegate = null;
-
-    if (this.runningApplication) {
-      this.runningApplication = false;
-      AppKit.stopRunLoop();
-    }
+    // Last: the application stops the run loop once its window list is empty.
+    this.markClosed();
   }
 
   private void handleLoadFailed(MemorySegment error) {
@@ -446,7 +412,7 @@ public class MacApplicationBackend extends AbstractApplicationBackend {
     }
     return NativeLibraries.upcall(
         MethodHandles.lookup(),
-        MacApplicationBackend.class,
+        MacWindow.class,
         method,
         type,
         switch (arguments) {
@@ -456,7 +422,7 @@ public class MacApplicationBackend extends AbstractApplicationBackend {
         });
   }
 
-  private static MacApplicationBackend backendOf(MemorySegment delegate) {
+  private static MacWindow windowOf(MemorySegment delegate) {
     return DELEGATES.get(delegate.address());
   }
 
@@ -466,17 +432,17 @@ public class MacApplicationBackend extends AbstractApplicationBackend {
   /**
    * Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
    * binds it by name, so no Java code calls it and the compiler sees a dead private method. {@code
-   * resource}: the backend is {@code AutoCloseable}, and a lookup that returns it looks like an
-   * unclosed resource. It is not: the window owns the backend and closes it, this method only
+   * resource}: the window is {@code AutoCloseable}, and a lookup that returns it looks like an
+   * unclosed resource. It is not: the application owns the window and closes it, this method only
    * borrows it.
    */
   @SuppressWarnings({"unused", "resource"})
   private static void onWindowWillClose(
       MemorySegment self, MemorySegment command, MemorySegment notification) {
     try {
-      MacApplicationBackend backend = backendOf(self);
-      if (backend != null) {
-        backend.handleDestroyed();
+      MacWindow window = windowOf(self);
+      if (window != null) {
+        window.handleDestroyed();
       }
     } catch (Throwable t) {
       ThrowableUtil.report(t);
@@ -486,17 +452,17 @@ public class MacApplicationBackend extends AbstractApplicationBackend {
   /**
    * Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
    * binds it by name, so no Java code calls it and the compiler sees a dead private method. {@code
-   * resource}: the backend is {@code AutoCloseable}, and a lookup that returns it looks like an
-   * unclosed resource. It is not: the window owns the backend and closes it, this method only
+   * resource}: the window is {@code AutoCloseable}, and a lookup that returns it looks like an
+   * unclosed resource. It is not: the application owns the window and closes it, this method only
    * borrows it.
    */
   @SuppressWarnings({"unused", "resource"})
   private static void onDidStartProvisionalNavigation(
       MemorySegment self, MemorySegment command, MemorySegment webView, MemorySegment navigation) {
     try {
-      MacApplicationBackend backend = backendOf(self);
-      if (backend != null) {
-        backend.emitLoad(LoadEvent.of(LoadState.STARTED, backend.url()));
+      MacWindow window = windowOf(self);
+      if (window != null) {
+        window.emitLoad(LoadEvent.of(LoadState.STARTED, window.url()));
       }
     } catch (Throwable t) {
       ThrowableUtil.report(t);
@@ -506,17 +472,17 @@ public class MacApplicationBackend extends AbstractApplicationBackend {
   /**
    * Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
    * binds it by name, so no Java code calls it and the compiler sees a dead private method. {@code
-   * resource}: the backend is {@code AutoCloseable}, and a lookup that returns it looks like an
-   * unclosed resource. It is not: the window owns the backend and closes it, this method only
+   * resource}: the window is {@code AutoCloseable}, and a lookup that returns it looks like an
+   * unclosed resource. It is not: the application owns the window and closes it, this method only
    * borrows it.
    */
   @SuppressWarnings({"unused", "resource"})
   private static void onDidCommitNavigation(
       MemorySegment self, MemorySegment command, MemorySegment webView, MemorySegment navigation) {
     try {
-      MacApplicationBackend backend = backendOf(self);
-      if (backend != null) {
-        backend.emitLoad(LoadEvent.of(LoadState.COMMITTED, backend.url()));
+      MacWindow window = windowOf(self);
+      if (window != null) {
+        window.emitLoad(LoadEvent.of(LoadState.COMMITTED, window.url()));
       }
     } catch (Throwable t) {
       ThrowableUtil.report(t);
@@ -526,17 +492,17 @@ public class MacApplicationBackend extends AbstractApplicationBackend {
   /**
    * Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
    * binds it by name, so no Java code calls it and the compiler sees a dead private method. {@code
-   * resource}: the backend is {@code AutoCloseable}, and a lookup that returns it looks like an
-   * unclosed resource. It is not: the window owns the backend and closes it, this method only
+   * resource}: the window is {@code AutoCloseable}, and a lookup that returns it looks like an
+   * unclosed resource. It is not: the application owns the window and closes it, this method only
    * borrows it.
    */
   @SuppressWarnings({"unused", "resource"})
   private static void onDidFinishNavigation(
       MemorySegment self, MemorySegment command, MemorySegment webView, MemorySegment navigation) {
     try {
-      MacApplicationBackend backend = backendOf(self);
-      if (backend != null) {
-        backend.emitLoad(LoadEvent.of(LoadState.FINISHED, backend.url()));
+      MacWindow window = windowOf(self);
+      if (window != null) {
+        window.emitLoad(LoadEvent.of(LoadState.FINISHED, window.url()));
       }
     } catch (Throwable t) {
       ThrowableUtil.report(t);
@@ -546,8 +512,8 @@ public class MacApplicationBackend extends AbstractApplicationBackend {
   /**
    * Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
    * binds it by name, so no Java code calls it and the compiler sees a dead private method. {@code
-   * resource}: the backend is {@code AutoCloseable}, and a lookup that returns it looks like an
-   * unclosed resource. It is not: the window owns the backend and closes it, this method only
+   * resource}: the window is {@code AutoCloseable}, and a lookup that returns it looks like an
+   * unclosed resource. It is not: the application owns the window and closes it, this method only
    * borrows it.
    */
   @SuppressWarnings({"unused", "resource"})
@@ -558,9 +524,9 @@ public class MacApplicationBackend extends AbstractApplicationBackend {
       MemorySegment navigation,
       MemorySegment error) {
     try {
-      MacApplicationBackend backend = backendOf(self);
-      if (backend != null) {
-        backend.handleLoadFailed(error);
+      MacWindow window = windowOf(self);
+      if (window != null) {
+        window.handleLoadFailed(error);
       }
     } catch (Throwable t) {
       ThrowableUtil.report(t);
@@ -570,17 +536,17 @@ public class MacApplicationBackend extends AbstractApplicationBackend {
   /**
    * Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
    * binds it by name, so no Java code calls it and the compiler sees a dead private method. {@code
-   * resource}: the backend is {@code AutoCloseable}, and a lookup that returns it looks like an
-   * unclosed resource. It is not: the window owns the backend and closes it, this method only
+   * resource}: the window is {@code AutoCloseable}, and a lookup that returns it looks like an
+   * unclosed resource. It is not: the application owns the window and closes it, this method only
    * borrows it.
    */
   @SuppressWarnings({"unused", "resource"})
   private static void onDidReceiveScriptMessage(
       MemorySegment self, MemorySegment command, MemorySegment controller, MemorySegment message) {
     try {
-      MacApplicationBackend backend = backendOf(self);
-      if (backend != null) {
-        backend.handleBridgeMessage(WebKit.messageBody(message));
+      MacWindow window = windowOf(self);
+      if (window != null) {
+        window.handleBridgeMessage(WebKit.messageBody(message));
       }
     } catch (Throwable t) {
       ThrowableUtil.report(t);
@@ -590,17 +556,17 @@ public class MacApplicationBackend extends AbstractApplicationBackend {
   /**
    * Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
    * binds it by name, so no Java code calls it and the compiler sees a dead private method. {@code
-   * resource}: the backend is {@code AutoCloseable}, and a lookup that returns it looks like an
-   * unclosed resource. It is not: the window owns the backend and closes it, this method only
+   * resource}: the window is {@code AutoCloseable}, and a lookup that returns it looks like an
+   * unclosed resource. It is not: the application owns the window and closes it, this method only
    * borrows it.
    */
   @SuppressWarnings({"unused", "resource"})
   private static void onStartUrlSchemeTask(
       MemorySegment self, MemorySegment command, MemorySegment webView, MemorySegment task) {
     try {
-      MacApplicationBackend backend = backendOf(self);
-      if (backend != null) {
-        backend.serveResource(task);
+      MacWindow window = windowOf(self);
+      if (window != null) {
+        window.serveResource(task);
       }
     } catch (Throwable t) {
       ThrowableUtil.report(t);

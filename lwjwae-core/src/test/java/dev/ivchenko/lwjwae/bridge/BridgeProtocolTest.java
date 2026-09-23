@@ -1,5 +1,6 @@
 package dev.ivchenko.lwjwae.bridge;
 
+import dev.ivchenko.lwjwae.WindowParameters;
 import dev.ivchenko.lwjwae.event.Event;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -34,8 +35,11 @@ class BridgeProtocolTest {
     Assertions.assertTrue(script.contains("const codec = fakeCodec;"));
     Assertions.assertTrue(script.contains("window." + BridgeProtocol.CHANNEL + " = {"));
     Assertions.assertTrue(
-        script.contains("window." + BridgeProtocol.PAGE_API + " = { listen, once, emit };"));
+        script.contains(
+            "window." + BridgeProtocol.PAGE_API + " = { listen, once, emit, open, close };"));
     Assertions.assertTrue(script.contains("call(\"" + BridgeProtocol.EVENT_CALL + "\""));
+    Assertions.assertTrue(script.contains("call(\"" + BridgeProtocol.OPEN_CALL + "\""));
+    Assertions.assertTrue(script.contains("call(\"" + BridgeProtocol.CLOSE_CALL + "\""));
     Assertions.assertTrue(
         script.contains("if (window." + BridgeProtocol.CHANNEL + ") return;"),
         "must be safe to inject twice");
@@ -66,10 +70,43 @@ class BridgeProtocolTest {
   void parseEventReadsTheTypedFlagTheNameAndThePayload() {
     String sep = BridgeProtocol.SEPARATOR;
     Event typed = BridgeProtocol.parseEvent("1" + sep + "moved" + sep + "3,4" + sep + "tail");
-    Assertions.assertEquals(new Event("moved", 0, "3,4" + sep + "tail", true), typed);
+    Assertions.assertEquals(new Event("moved", 0, "3,4" + sep + "tail", true, null), typed);
     Assertions.assertEquals(
-        new Event("plain", 0, "", false), BridgeProtocol.parseEvent("0" + sep + "plain" + sep));
+        new Event("plain", 0, "", false, null),
+        BridgeProtocol.parseEvent("0" + sep + "plain" + sep));
     Assertions.assertNull(BridgeProtocol.parseEvent("0" + sep + "only-two"));
+  }
+
+  @Test
+  void parseWindowParametersReadsEveryFieldAndAppliesDefaults() {
+    String sep = BridgeProtocol.SEPARATOR;
+    WindowParameters full =
+        BridgeProtocol.parseWindowParameters(
+            String.join(sep, "Docs", "640", "480", "10", "20", "1", "https://x", "app/i.html"));
+    Assertions.assertEquals("Docs", full.title());
+    Assertions.assertEquals(640, full.width());
+    Assertions.assertEquals(480, full.height());
+    Assertions.assertEquals(10, full.x());
+    Assertions.assertEquals(20, full.y());
+    Assertions.assertTrue(full.centered());
+    Assertions.assertEquals("https://x", full.url());
+    Assertions.assertEquals("app/i.html", full.resource());
+
+    WindowParameters empty = BridgeProtocol.parseWindowParameters(sep.repeat(7));
+    Assertions.assertEquals(WindowParameters.createDefault(), empty);
+
+    Assertions.assertNull(BridgeProtocol.parseWindowParameters("garbage"));
+    Assertions.assertNull(
+        BridgeProtocol.parseWindowParameters(String.join(sep, "", "wide", "", "", "", "", "", "")));
+  }
+
+  @Test
+  void checkIdentifierAcceptsJavaScriptNamesOnly() {
+    Assertions.assertDoesNotThrow(() -> BridgeProtocol.checkIdentifier("$_ok9"));
+    Assertions.assertThrows(
+        IllegalArgumentException.class, () -> BridgeProtocol.checkIdentifier("not valid"));
+    Assertions.assertThrows(
+        IllegalArgumentException.class, () -> BridgeProtocol.checkIdentifier("lwjwae:emit"));
   }
 
   @Test

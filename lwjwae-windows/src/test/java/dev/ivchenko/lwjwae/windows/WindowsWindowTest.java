@@ -1,6 +1,7 @@
 package dev.ivchenko.lwjwae.windows;
 
-import dev.ivchenko.lwjwae.ApplicationBackend;
+import dev.ivchenko.lwjwae.Application;
+import dev.ivchenko.lwjwae.Window;
 import dev.ivchenko.lwjwae.testing.contract.WindowContractTest;
 import dev.ivchenko.lwjwae.util.PlatformUtil;
 
@@ -11,7 +12,12 @@ class WindowsWindowTest extends WindowContractTest {
   }
 
   @Override
-  protected Class<? extends ApplicationBackend> expectedBackendType() {
-    return WindowsApplicationBackend.class;
+  protected Class<? extends Application> expectedApplicationType() {
+    return WindowsApplication.class;
+  }
+
+  @Override
+  protected Class<? extends Window> expectedWindowType() {
+    return WindowsWindow.class;
   }
 }

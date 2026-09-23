@@ -13,7 +13,7 @@
       ]
     },
     {
-      "type": "dev.ivchenko.lwjwae.macos.MacApplicationBackend",
+      "type": "dev.ivchenko.lwjwae.macos.MacWindow",
       "methods": [
         {
           "name": "onWindowWillClose",
@@ -98,12 +98,12 @@
       ]
     },
     {
-      "type": "dev.ivchenko.lwjwae.macos.MacApplicationBackendProvider"
+      "type": "dev.ivchenko.lwjwae.macos.MacBackendProvider"
     }
   ],
   "resources": [
     {
-      "glob": "META-INF/services/dev.ivchenko.lwjwae.ApplicationBackendProvider"
+      "glob": "META-INF/services/dev.ivchenko.lwjwae.BackendProvider"
     }
   ],
   "foreign": {
@@ -356,7 +356,7 @@
         ]
       },
       {
-        "class": "dev.ivchenko.lwjwae.macos.MacApplicationBackend",
+        "class": "dev.ivchenko.lwjwae.macos.MacWindow",
         "method": "onWindowWillClose",
         "returnType": "void",
         "parameterTypes": [
@@ -366,7 +366,7 @@
         ]
       },
       {
-        "class": "dev.ivchenko.lwjwae.macos.MacApplicationBackend",
+        "class": "dev.ivchenko.lwjwae.macos.MacWindow",
         "method": "onDidStartProvisionalNavigation",
         "returnType": "void",
         "parameterTypes": [
@@ -377,7 +377,7 @@
         ]
       },
       {
-        "class": "dev.ivchenko.lwjwae.macos.MacApplicationBackend",
+        "class": "dev.ivchenko.lwjwae.macos.MacWindow",
         "method": "onDidCommitNavigation",
         "returnType": "void",
         "parameterTypes": [
@@ -388,7 +388,7 @@
         ]
       },
       {
-        "class": "dev.ivchenko.lwjwae.macos.MacApplicationBackend",
+        "class": "dev.ivchenko.lwjwae.macos.MacWindow",
         "method": "onDidFinishNavigation",
         "returnType": "void",
         "parameterTypes": [
@@ -399,7 +399,7 @@
         ]
       },
       {
-        "class": "dev.ivchenko.lwjwae.macos.MacApplicationBackend",
+        "class": "dev.ivchenko.lwjwae.macos.MacWindow",
         "method": "onDidFailNavigation",
         "returnType": "void",
         "parameterTypes": [
@@ -411,7 +411,7 @@
         ]
       },
       {
-        "class": "dev.ivchenko.lwjwae.macos.MacApplicationBackend",
+        "class": "dev.ivchenko.lwjwae.macos.MacWindow",
         "method": "onDidReceiveScriptMessage",
         "returnType": "void",
         "parameterTypes": [
@@ -422,7 +422,7 @@
         ]
       },
       {
-        "class": "dev.ivchenko.lwjwae.macos.MacApplicationBackend",
+        "class": "dev.ivchenko.lwjwae.macos.MacWindow",
         "method": "onStartUrlSchemeTask",
         "returnType": "void",
         "parameterTypes": [
@@ -433,7 +433,7 @@
         ]
       },
       {
-        "class": "dev.ivchenko.lwjwae.macos.MacApplicationBackend",
+        "class": "dev.ivchenko.lwjwae.macos.MacWindow",
         "method": "onStopUrlSchemeTask",
         "returnType": "void",
         "parameterTypes": [
@@ -444,7 +444,7 @@
         ]
       },
       {
-        "class": "dev.ivchenko.lwjwae.macos.MacApplicationBackend",
+        "class": "dev.ivchenko.lwjwae.macos.MacWindow",
         "method": "onEvaluationComplete",
         "returnType": "void",
         "parameterTypes": [

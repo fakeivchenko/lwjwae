@@ -1,11 +1,13 @@
 package dev.ivchenko.lwjwae.bridge;
 
+import dev.ivchenko.lwjwae.WindowParameters;
 import dev.ivchenko.lwjwae.event.Event;
 import dev.ivchenko.lwjwae.util.ScriptUtil;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
+import java.util.regex.Pattern;
 import lombok.experimental.UtilityClass;
 
 /**
@@ -30,8 +32,8 @@ public class BridgeProtocol {
   public final String CHANNEL = "__lwjwaeBridge";
 
   /**
-   * The global that holds the event API of the page: {@code window.lwjwae.listen(name, handler)},
-   * {@code once}, and {@code emit}.
+   * The global that holds the page API: {@code window.lwjwae.listen(name, handler)}, {@code once},
+   * {@code emit}, {@code open}, and {@code close}.
    */
   public final String PAGE_API = "lwjwae";
 
@@ -42,6 +44,22 @@ public class BridgeProtocol {
    * itself.
    */
   public final String EVENT_CALL = "lwjwae:emit";
+
+  /**
+   * The name under which a page asks for a new window, through {@code window.lwjwae.open(options)}.
+   * Reserved like {@link #EVENT_CALL}. The payload is what {@link #parseWindowParameters} reads;
+   * the promise resolves to the ID of the window.
+   */
+  public final String OPEN_CALL = "lwjwae:open";
+
+  /**
+   * The name under which a page closes its own window, through {@code window.lwjwae.close()}.
+   * Reserved like {@link #EVENT_CALL}. The promise never settles: the document is gone first.
+   */
+  public final String CLOSE_CALL = "lwjwae:close";
+
+  /** What a bound name must look like. */
+  private final Pattern IDENTIFIER = Pattern.compile("[A-Za-z_$][A-Za-z0-9_$]*");
 
   /**
    * The field separator inside a bridge message.
@@ -99,6 +117,8 @@ public class BridgeProtocol {
         .replace("${channel}", CHANNEL)
         .replace("${pageApi}", PAGE_API)
         .replace("${eventCall}", EVENT_CALL)
+        .replace("${openCall}", OPEN_CALL)
+        .replace("${closeCall}", CLOSE_CALL)
         .replace("${separator}", "\u001f")
         .replace("${post}", postMessage)
         .replace("${codec}", pageCodec);
@@ -145,7 +165,52 @@ public class BridgeProtocol {
     if (parts.length != 3) {
       return null;
     }
-    return new Event(parts[1], 0, parts[2], parts[0].equals("1"));
+    return new Event(parts[1], 0, parts[2], parts[0].equals("1"), null);
+  }
+
+  /**
+   * Parses the payload of an {@link #OPEN_CALL}: the components of {@link WindowParameters} in
+   * declaration order, separated by {@link #SEPARATOR}, an empty field for one that the page left
+   * unset, and {@code 1} for a set flag.
+   *
+   * @return The parameters, defaults applied, or {@code null} if the text doesn't have the shape or
+   *     a number doesn't parse.
+   */
+  public WindowParameters parseWindowParameters(String payload) {
+    String[] parts = payload.split(SEPARATOR, -1);
+    if (parts.length != 8) {
+      return null;
+    }
+    try {
+      return WindowParameters.builder()
+          .title(parts[0])
+          .width(integer(parts[1]))
+          .height(integer(parts[2]))
+          .x(parts[3].isEmpty() ? null : Integer.valueOf(parts[3]))
+          .y(parts[4].isEmpty() ? null : Integer.valueOf(parts[4]))
+          .centered(parts[5].equals("1"))
+          .url(parts[6])
+          .resource(parts[7])
+          .build();
+    } catch (NumberFormatException _) {
+      return null;
+    }
+  }
+
+  /**
+   * Checks that a name can be bound on {@code window}.
+   *
+   * @throws IllegalArgumentException If {@code name} isn't a JavaScript identifier.
+   */
+  public void checkIdentifier(String name) {
+    if (!IDENTIFIER.matcher(name).matches()) {
+      throw new IllegalArgumentException("Not a JavaScript identifier: " + name);
+    }
+  }
+
+  /** A number field, or {@code 0}, which the window parameters read as their default. */
+  private int integer(String text) {
+    return text.isEmpty() ? 0 : Integer.parseInt(text);
   }
 
   /** Completes the page-side promise {@code id} with {@code value}. */

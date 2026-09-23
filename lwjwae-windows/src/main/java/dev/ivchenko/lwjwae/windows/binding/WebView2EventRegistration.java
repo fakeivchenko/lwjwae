@@ -8,6 +8,9 @@ import java.lang.foreign.MemorySegment;
  */
 @FunctionalInterface
 public interface WebView2EventRegistration {
-  /** Subscribes {@code handler}, a {@link ComCallback#event}, to the event on {@code webView}. */
+  /**
+   * Subscribes {@code handler}, a {@link ComCallback#event(MemorySegment, ComEvent)}, to the event
+   * on {@code webView}.
+   */
   void add(MemorySegment webView, MemorySegment handler);
 }

@@ -5,8 +5,8 @@ import java.util.ServiceLoader;
 
 /**
  * Converts Java objects to text and back for the typed half of the bridge: {@link
- * dev.ivchenko.lwjwae.ApplicationBackend#bind(String, Class, java.util.function.Function)} and
- * {@link dev.ivchenko.lwjwae.ApplicationBackend#emit(String, Object)}.
+ * dev.ivchenko.lwjwae.Window#bind(String, Class, java.util.function.Function)} and {@link
+ * dev.ivchenko.lwjwae.Window#emit(String, Object)}.
  *
  * <p>A codec has two halves. The Java half is this interface. The page half is a JavaScript object
  * with the same two operations, which {@link #pageScript()} returns as source text and the bridge

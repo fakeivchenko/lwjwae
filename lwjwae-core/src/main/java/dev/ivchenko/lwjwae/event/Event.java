@@ -1,16 +1,18 @@
 package dev.ivchenko.lwjwae.event;
 
+import dev.ivchenko.lwjwae.Window;
+
 /**
- * One delivery of a named event to a Java listener, from the page or from Java itself.
+ * An event that a Java listener receives, from the page or from Java.
  *
- * <p>The payload is text either way. A typed event carries the text that the codec produced, and a
- * typed listener decodes it; an untyped one carries the string that was emitted, as it is.
- *
- * @param name The name that the event was emitted under.
- * @param id A number that counts deliveries in this window, so a listener can tell two deliveries
- *     of the same event apart.
- * @param payload The payload as text. Empty when the event was emitted without one.
- * @param typed Whether {@link #payload()} is the encoding of a value by the codec, as opposed to a
- *     string that was emitted as is.
+ * @param name The event name, as given to {@code emit}.
+ * @param id A number that counts deliveries to the listeners of the window or of the application,
+ *     starting at one.
+ * @param payload The payload as text. For a typed event, the text that the codec produced; for an
+ *     untyped one, the string that was emitted, or an empty string for no payload.
+ * @param typed Whether {@code payload} went through the codec and needs decoding.
+ * @param window The window that the event came through: the page that emitted it, or the window
+ *     that {@code emit} was called on. {@code null} for an event that {@code Application.emit}
+ *     delivers to the listeners of the application.
  */
-public record Event(String name, long id, String payload, boolean typed) {}
+public record Event(String name, long id, String payload, boolean typed, Window window) {}

@@ -7,7 +7,7 @@ The Windows backend: a Win32 window with a WebView2 view, no `WebView2Loader.dll
 - Windows, x64.
 - The WebView2 Evergreen runtime. Windows 11 ships it; on Windows 10, Edge installs it.
 
-The provider [`WindowsApplicationBackendProvider`](src/main/java/dev/ivchenko/lwjwae/windows/WindowsApplicationBackendProvider.java) registers under the name `win32-webview2`. It
+The provider [`WindowsBackendProvider`](src/main/java/dev/ivchenko/lwjwae/windows/WindowsBackendProvider.java) registers under the name `win32-webview2`. It
 checks the operating system first, so the JAR file is harmless on a Linux or macOS classpath, and
 then looks for the runtime in the registry without loading it.
 
@@ -15,7 +15,8 @@ then looks for the runtime in the registry without loading it.
 
 | Class                                                                                                                                                                                                                                                               | Role                                                               |
 |---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------|
-| [`WindowsApplicationBackend`](src/main/java/dev/ivchenko/lwjwae/windows/WindowsApplicationBackend.java)                                                                                                                                                             | The window. Forwards every call to the UI thread.                  |
+| [`WindowsApplication`](src/main/java/dev/ivchenko/lwjwae/windows/WindowsApplication.java)                                                                                                                                                                           | The application. Owns the WebView2 environment; opens windows.     |
+| [`WindowsWindow`](src/main/java/dev/ivchenko/lwjwae/windows/WindowsWindow.java)                                                                                                                                                                                     | The window. Forwards every call to the UI thread.                  |
 | [`WindowsDispatcher`](src/main/java/dev/ivchenko/lwjwae/windows/WindowsDispatcher.java)                                                                                                                                                                             | The one UI thread of the process, which is also the COM apartment. |
 | [`binding.User32`](src/main/java/dev/ivchenko/lwjwae/windows/binding/User32.java)                                                                                                                                                                                   | The window class, the window, and the message loop.                |
 | [`binding.Kernel32`](src/main/java/dev/ivchenko/lwjwae/windows/binding/Kernel32.java)                                                                                                                                                                               | Module handles, thread IDs, `LoadLibraryExW`, `GetProcAddress`.    |
@@ -27,7 +28,7 @@ then looks for the runtime in the registry without loading it.
 | [`binding.Com`](src/main/java/dev/ivchenko/lwjwae/windows/binding/Com.java)                                                                                                                                                                                         | Calling a COM method through its vtable.                           |
 | [`binding.ComCallback`](src/main/java/dev/ivchenko/lwjwae/windows/binding/ComCallback.java), [`ComCompletion`](src/main/java/dev/ivchenko/lwjwae/windows/binding/ComCompletion.java), [`ComEvent`](src/main/java/dev/ivchenko/lwjwae/windows/binding/ComEvent.java) | COM objects implemented in Java.                                   |
 | [`binding.Wide`](src/main/java/dev/ivchenko/lwjwae/windows/binding/Wide.java)                                                                                                                                                                                       | UTF-16 strings.                                                    |
-| [`binding.Signatures`](../lwjwae-gtk/src/main/java/dev/ivchenko/lwjwae/gtk/binding/Signatures.java)                                                                                                                                                                 | Every `FunctionDescriptor` the module binds, named by shape.       |
+| [`binding.Signatures`](src/main/java/dev/ivchenko/lwjwae/windows/binding/Signatures.java)                                                                                                                                                                           | Every `FunctionDescriptor` the module binds, named by shape.       |
 | [`exception.ComCallFailedException`](src/main/java/dev/ivchenko/lwjwae/windows/exception/ComCallFailedException.java)                                                                                                                                               | A failure `HRESULT`.                                               |
 | [`util.JsonStringUtil`](src/main/java/dev/ivchenko/lwjwae/windows/util/JsonStringUtil.java)                                                                                                                                                                         | Decodes the JSON string that `ExecuteScript` returns.              |
 
@@ -81,45 +82,61 @@ receives its callbacks, and must pump messages for them to arrive. [`WindowsDisp
    the message is `WM_APP`, or calls `TranslateMessage` and `DispatchMessageW`.
 4. `wakeUp()` posts `WM_APP` to the thread with `PostThreadMessageW`, which is safe from any thread.
 
+## Creating the application
+
+`new WindowsApplication(parameters)` starts the UI thread if it isn't running, then, on it, calls
+`CreateWebViewEnvironmentWithOptionsInternal` with a user data folder under
+`%LOCALAPPDATA%\lwjwae\WebView2` and a completion handler, and waits up to 60 seconds for the
+`ICoreWebView2Environment` (see [Waiting on the UI thread](#waiting-on-the-ui-thread)). One environment means one browser process and
+one profile for every window of the application. `engine()` reads its browser version. The
+environment is released on the UI thread once `quit()` closed the last window.
+
+## Waiting on the UI thread
+
+WebView2 answers `CreateWebViewEnvironmentWithOptionsInternal` and `CreateCoreWebView2Controller`
+through the message queue of the UI thread. Any other thread just blocks on the future.
+The UI thread can't: blocking it would starve the very completion it waits for. So
+`WindowsDispatcher.await` runs a nested `GetMessageW` loop there until the future settles or the
+deadline passes, the way a modal dialog does. This is what lets an `onLoad` listener, which runs on
+the UI thread, open a window. Everything the outer loop would have run in the meantime, queued
+tasks and callbacks of other windows included, runs inside that wait.
+
 ## Creating a window
 
-`new WindowsApplicationBackend(parameters)` must not run on the UI thread, because creation pumps
-messages. It does the following:
+`application.open(parameters)` does the following:
 
-1. Registers the backend in `WINDOWS`, a [`CallbackRegistry`](../lwjwae-core/src/main/java/dev/ivchenko/lwjwae/foreign/CallbackRegistry.java), and gets an ID.
+1. Registers the window in `WINDOWS`, a [`CallbackRegistry`](../lwjwae-core/src/main/java/dev/ivchenko/lwjwae/foreign/CallbackRegistry.java), and gets an ID.
 2. On the UI thread, registers the window class `lwjwae` once per process, with the static
    `windowProc` stub. The class loads icon resource 1 of the running module, so a native image
    built with an icon shows it in the title bar and the taskbar, and `java.exe` shows the stock
    icon.
 3. Creates the window with `CreateWindowExW` and `WS_OVERLAPPEDWINDOW`, hidden, at the requested
-   position or at `CW_USEDEFAULT`. Stores the backend ID in the `GWLP_USERDATA` slot of the window,
-   which is how `windowProc` finds the backend. Resizes the window so that the client area, not the
-   outer frame, has the requested size, and centers it in the work area of its monitor
+   position or at `CW_USEDEFAULT`. Stores the registry ID in the `GWLP_USERDATA` slot of the
+   window, which is how `windowProc` finds the window. Resizes the window so that the client area,
+   not the outer frame, has the requested size, and centers it in the work area of its monitor
    (`MonitorFromWindow`, `GetMonitorInfoW`) when asked. `position()` reads `GetWindowRect`;
    `position(x, y)` is `SetWindowPos` with `SWP_NOSIZE`.
-4. Calls `CreateWebViewEnvironmentWithOptionsInternal` with a user data folder under
-   `%LOCALAPPDATA%\lwjwae\WebView2` and a completion handler.
-5. Back on the calling thread, waits up to 60 seconds on a future that the completion chain
-   settles.
-6. In `onEnvironmentCreated`, keeps a reference to the environment and calls
-   `CreateCoreWebView2Controller` with the window handle and another completion handler.
-7. In `onControllerCreated`, keeps a reference to the controller, gets the `ICoreWebView2`, sizes
+4. Calls `CreateCoreWebView2Controller` on the environment of the application with the window
+   handle and a completion handler.
+5. Back on the calling thread, waits up to 60 seconds on a future that the completion settles
+   (see [Waiting on the UI thread](#waiting-on-the-ui-thread)).
+6. In `onControllerCreated`, keeps a reference to the controller, gets the `ICoreWebView2`, sizes
    the view to the client area, switches the developer tools and the default context menu off,
    subscribes to `NavigationStarting`, `ContentLoading`, `NavigationCompleted`,
    `WebMessageReceived`, and `WebResourceRequested`, adds the `http://app.localhost/*` filter,
    calls `installBridge()`, and completes the future.
 
-A failure at any step, including the timeout, unregisters the backend, destroys the window, and
-rethrows.
+A failure at any step, including the timeout, unregisters the window, destroys it, and rethrows.
 
 ## The window procedure
 
-`windowProc` is one static stub for every window. It looks the backend up through
+`windowProc` is one static stub for every window. It looks the window up through
 `GWLP_USERDATA`, handles two messages, and hands everything to `DefWindowProcW`:
 
 - `WM_SIZE`: resizes the WebView2 controller to the new client area.
-- `WM_DESTROY`: unregisters the backend, closes the controller, releases the COM references, and
-  calls `markClosed()`.
+- `WM_DESTROY`: unregisters the window, closes the controller, releases the COM references, and
+  calls `markClosed()` last, so that the application releases the environment only after the
+  controller is gone.
 
 ## Events
 
@@ -172,8 +189,10 @@ source", and "Inspect". With the tools on, the menu stays, because "Inspect" liv
 ## Closing
 
 `close()` calls `DestroyWindow` on the UI thread. Windows sends `WM_DESTROY` synchronously, so the
-window procedure completes the close before `close()` returns. Closing the window with the title
-bar button takes the same path. `close()` is idempotent.
+window procedure completes the close before `close()` returns, and the last window to close
+releases every thread blocked in `Application.run()`. Closing the window with the title bar button
+takes the same path. `close()` is idempotent. `Application.quit()` closes every window this way and
+then releases the environment; the UI thread and the window class stay for the process.
 
 ## Tests
 

@@ -1,13 +1,13 @@
 package dev.ivchenko.lwjwae.windows;
 
-import dev.ivchenko.lwjwae.ApplicationBackendProvider;
+import dev.ivchenko.lwjwae.BackendProvider;
 import dev.ivchenko.lwjwae.testing.contract.BackendSelectionContractTest;
 import dev.ivchenko.lwjwae.util.PlatformUtil;
 
 class WindowsBackendSelectionTest extends BackendSelectionContractTest {
   @Override
-  protected Class<? extends ApplicationBackendProvider> providerType() {
-    return WindowsApplicationBackendProvider.class;
+  protected Class<? extends BackendProvider> providerType() {
+    return WindowsBackendProvider.class;
   }
 
   @Override

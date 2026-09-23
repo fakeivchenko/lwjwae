@@ -8,7 +8,12 @@ import org.junit.jupiter.api.Test;
  * The extra guarantees of a codec whose format is JSON: the exact text of simple values, so that
  * two JSON codecs are interchangeable, and a page half built on {@code JSON.stringify} and {@code
  * JSON.parse}.
+ *
+ * <p>Suppressed warnings: {@code unused}: the test methods look unused because nothing in this
+ * project extends the class. The codec modules of {@code lwjwae-codecs} do, and JUnit runs the
+ * methods there.
  */
+@SuppressWarnings("unused")
 public abstract class JsonBridgeCodecContractTest extends BridgeCodecContractTest {
   @Test
   void writesCanonicalJsonForRecord() {

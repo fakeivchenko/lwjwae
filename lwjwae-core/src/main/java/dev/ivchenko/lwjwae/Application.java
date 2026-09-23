@@ -1,5 +1,8 @@
 package dev.ivchenko.lwjwae;
 
+import dev.ivchenko.lwjwae.bridge.codec.BridgeCodec;
+import dev.ivchenko.lwjwae.event.Event;
+import dev.ivchenko.lwjwae.event.EventSubscription;
 import dev.ivchenko.lwjwae.exception.BackendNotAvailableException;
 import dev.ivchenko.lwjwae.util.PlatformUtil;
 import java.util.ArrayList;
@@ -7,92 +10,94 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.ServiceLoader;
+import java.util.function.BiFunction;
+import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.stream.Collectors;
-import lombok.experimental.UtilityClass;
 
 /**
- * The entry point. Creates an application window with the backend that fits the machine it runs on.
+ * One desktop application: the process-wide half of the library, and the entry point.
  *
- * <pre>{@code
- * try (ApplicationBackend application = Application.create(ApplicationParameters.builder()
- *         .title("Docs")
- *         .url("https://example.com")
- *         .build())) {
- *     application.run();
- * }
- * }</pre>
+ * <p>An application owns what exists once per process: the UI thread of the toolkit, the codec of
+ * the bridge, the development server setting, and the list of open windows. A {@link Window} is one
+ * native window with a web view inside; the application opens as many as the program needs, and
+ * they share everything above. {@link #run()} blocks the calling thread while any window is open,
+ * so the shape of a program is: create the application, open a window, show it, run.
  *
- * <p>Backends are found with {@link ServiceLoader}, so the runtime classpath decides the selection.
- * Put the backend artifact for your platform on the classpath, and no code changes.
+ * <p>The bridge exists at both levels. A binding or a listener on a window belongs to that window
+ * alone. A binding on the application reaches every window, the ones already open and the ones
+ * opened later, and its handler learns which window called. A listener on the application hears an
+ * event from any window, with {@link Event#window()} saying which one. {@link #emit} on the
+ * application delivers to every page. A window-level binding wins over an application-level one of
+ * the same name in that window.
+ *
+ * <p>{@link #create} picks the backend for the machine it runs on: it loads every {@link
+ * BackendProvider} on the classpath, drops the ones that don't support the machine, and takes the
+ * one with the highest priority, or the one named by the {@value #BACKEND_PROPERTY} system property
+ * or the {@value #BACKEND_VARIABLE} environment variable. A backend module registers its provider
+ * in {@code META-INF/services/dev.ivchenko.lwjwae.BackendProvider}.
+ *
+ * <p>Every method is safe to call from any thread. Closing the application closes every window.
  */
-@UtilityClass
-public class Application {
+public interface Application extends AutoCloseable {
   /**
-   * The system property that names the backend to use. It overrides {@link
-   * ApplicationBackendProvider#priority}.
+   * The system property that names the backend to use, by {@link BackendProvider#name()}. Wins over
+   * the priority of the providers, as long as the named provider supports the machine.
    */
-  public final String BACKEND_PROPERTY = "lwjwae.backend";
+  String BACKEND_PROPERTY = "lwjwae.backend";
 
   /** The environment variable with the same meaning as {@link #BACKEND_PROPERTY}. */
-  public final String BACKEND_VARIABLE = "LWJWAE_BACKEND";
+  String BACKEND_VARIABLE = "LWJWAE_BACKEND";
 
   /**
-   * Creates a window with {@link ApplicationParameters#createDefault()}.
+   * Creates an application with every default: the first codec on the classpath and no development
+   * server, unless the environment says otherwise.
    *
-   * @throws BackendNotAvailableException If no backend supports this machine.
+   * @throws BackendNotAvailableException If no backend on the classpath supports this machine.
    */
-  public ApplicationBackend create() {
+  static Application create() {
     return create(ApplicationParameters.createDefault());
   }
 
   /**
-   * Creates a window with the supported backend of the highest priority, and navigates to {@link
-   * ApplicationParameters#url()} when one is set.
+   * Creates an application on the backend of this machine. No window exists yet: {@link #open}
+   * creates one.
    *
-   * @throws BackendNotAvailableException If no backend supports this machine.
+   * @throws BackendNotAvailableException If no backend on the classpath supports this machine.
    */
-  public ApplicationBackend create(ApplicationParameters parameters) {
-    ApplicationBackendProvider provider =
+  static Application create(ApplicationParameters parameters) {
+    BackendProvider provider =
         provider().orElseThrow(() -> new BackendNotAvailableException(noBackendMessage()));
-    ApplicationBackend backend = provider.create(parameters);
-    if (parameters.url() != null) {
-      backend.navigate(parameters.url());
-    }
-    return backend;
+    return provider.create(parameters);
   }
 
   /**
-   * Returns the backend that {@link #create} would use, if any.
-   *
-   * <p>Normally, this is the supported provider of the highest priority. {@code
-   * -Dlwjwae.backend=NAME} or the {@code LWJWAE_BACKEND} environment variable names one explicitly
-   * instead, for example to try a fallback on a machine that also has the native one. The setting
-   * applies only if that provider supports the machine.
+   * The provider that {@link #create} would use: the supported one with the highest priority, or
+   * the one that {@link #BACKEND_PROPERTY} or {@link #BACKEND_VARIABLE} names, if it's supported.
    */
-  public Optional<ApplicationBackendProvider> provider() {
+  static Optional<BackendProvider> provider() {
     String requested = requestedBackend();
     return providers().stream()
-        .filter(ApplicationBackendProvider::isSupported)
+        .filter(BackendProvider::isSupported)
         .filter(provider -> requested == null || provider.name().equals(requested))
-        .max(Comparator.comparingInt(ApplicationBackendProvider::priority));
+        .max(Comparator.comparingInt(BackendProvider::priority));
   }
 
-  /** Returns every backend on the classpath, supported or not. Useful for diagnostics. */
-  public List<ApplicationBackendProvider> providers() {
-    List<ApplicationBackendProvider> found = new ArrayList<>();
-    ServiceLoader.load(
-            ApplicationBackendProvider.class, ApplicationBackendProvider.class.getClassLoader())
+  /** Every provider on the classpath, supported or not, in service-loader order. */
+  static List<BackendProvider> providers() {
+    List<BackendProvider> found = new ArrayList<>();
+    ServiceLoader.load(BackendProvider.class, BackendProvider.class.getClassLoader())
         .forEach(found::add);
     return List.copyOf(found);
   }
 
-  private String requestedBackend() {
+  private static String requestedBackend() {
     String name = System.getProperty(BACKEND_PROPERTY, System.getenv(BACKEND_VARIABLE));
     return name == null || name.isBlank() ? null : name.strip();
   }
 
-  private String noBackendMessage() {
-    List<ApplicationBackendProvider> providers = providers();
+  private static String noBackendMessage() {
+    List<BackendProvider> providers = providers();
     String requested = requestedBackend();
     if (requested != null) {
       return "Backend '"
@@ -102,9 +107,7 @@ public class Application {
           + " / "
           + BACKEND_VARIABLE
           + ") is not on the classpath or does not support this machine. Found: "
-          + providers.stream()
-              .map(ApplicationBackendProvider::name)
-              .collect(Collectors.joining(", "));
+          + providers.stream().map(BackendProvider::name).collect(Collectors.joining(", "));
     }
     if (providers.isEmpty()) {
       return "No backend on the classpath. Add one, for example lwjwae-gtk on Linux.";
@@ -118,5 +121,132 @@ public class Application {
         + ")."
         + System.lineSeparator()
         + rejected;
+  }
+
+  /** The parameters that the application was created with, defaults applied. */
+  ApplicationParameters parameters();
+
+  /** The name and version of the engine that draws the pages, such as {@code WebKitGTK 2.46.5}. */
+  String engine();
+
+  /** Opens a window with every default. The window stays hidden until {@link Window#show()}. */
+  Window open();
+
+  /**
+   * Opens a window. The window stays hidden until {@link Window#show()}, so a page can load before
+   * anything appears on screen. When {@code parameters} carry a URL or a resource, the window
+   * navigates there before this method returns.
+   *
+   * @throws IllegalStateException If the application is closed.
+   */
+  Window open(WindowParameters parameters);
+
+  /** The windows that are open right now, oldest first. */
+  List<Window> windows();
+
+  /** The open window with the given {@link Window#id()}, if there is one. */
+  Optional<Window> window(long id);
+
+  /**
+   * Exposes a function to every page as {@code window.NAME(payload)}, which returns a promise. The
+   * binding reaches every open window and every window opened later.
+   *
+   * @param name A JavaScript identifier.
+   * @param handler Called on a virtual thread with the payload as text. The value that it returns
+   *     resolves the promise; an exception rejects it with the message of the root cause.
+   * @throws IllegalArgumentException If {@code name} isn't a JavaScript identifier.
+   */
+  void bind(String name, Function<String, String> handler);
+
+  /**
+   * The same as {@link #bind(String, Function)}, for a handler that needs to know which window
+   * called.
+   */
+  void bind(String name, BiFunction<Window, String, String> handler);
+
+  /**
+   * Exposes a function to every page that takes and returns objects through the codec. The page
+   * passes any value and receives the decoded result.
+   *
+   * @param name A JavaScript identifier.
+   * @param argumentType The type to decode the argument into. {@code Void.class} for a function
+   *     without an argument; the handler then receives {@code null}.
+   * @param handler Called on a virtual thread. The value that it returns is encoded and resolves
+   *     the promise; {@code null} resolves it with {@code null}.
+   * @throws IllegalStateException If there is no codec.
+   */
+  <T, R> void bind(String name, Class<T> argumentType, Function<T, R> handler);
+
+  /**
+   * The same as {@link #bind(String, Class, Function)}, for a handler that needs to know which
+   * window called.
+   */
+  <T, R> void bind(String name, Class<T> argumentType, BiFunction<Window, T, R> handler);
+
+  /**
+   * Delivers an event to every open window and to the listeners of this application. The Java
+   * listeners of each window hear it too, with that window as {@link Event#window()}; the listeners
+   * of the application hear it once, with no window.
+   *
+   * @param name The event name.
+   * @param payload The payload as text. {@code null} is delivered as an empty string.
+   */
+  void emit(String name, String payload);
+
+  /**
+   * The same as {@link #emit(String, String)}, with the payload encoded by the codec. The pages
+   * receive the decoded object.
+   *
+   * @throws IllegalStateException If there is no codec.
+   */
+  void emit(String name, Object payload);
+
+  /**
+   * Listens to an event from any window, or from {@link #emit} on this application. Listeners run
+   * on one virtual thread, in order.
+   *
+   * @return The subscription, to stop listening.
+   */
+  EventSubscription listen(String name, Consumer<Event> listener);
+
+  /**
+   * The same as {@link #listen(String, Consumer)}, with the payload decoded by the codec. {@code
+   * String.class} takes an untyped payload as it is.
+   */
+  <T> EventSubscription listen(String name, Class<T> type, Consumer<T> listener);
+
+  /** Listens to the next event of the name, then stops. */
+  EventSubscription once(String name, Consumer<Event> listener);
+
+  /** The same as {@link #once(String, Consumer)}, with the payload decoded by the codec. */
+  <T> EventSubscription once(String name, Class<T> type, Consumer<T> listener);
+
+  /**
+   * Blocks the calling thread while any window is open, or until {@link #quit()}. Returns at once
+   * when no window is open. A window opened from another thread, or from a page, in the meantime
+   * keeps the application running.
+   *
+   * @throws IllegalStateException If called from the UI thread, where blocking would freeze every
+   *     window. The macOS backend is the exception: there the main thread runs the application loop
+   *     itself, and {@code run()} on it returns when the last window closes.
+   */
+  void run();
+
+  /**
+   * Closes every window and the application. Every thread blocked in {@link #run()} returns.
+   * Nothing can be opened afterwards. Idempotent.
+   */
+  void quit();
+
+  /** Whether {@link #quit()} or {@link #close()} was called. */
+  boolean isClosed();
+
+  /** The same as {@link #quit()}. */
+  @Override
+  void close();
+
+  /** The codec behind the typed bridge methods, or {@code null} if there is none. */
+  default BridgeCodec codec() {
+    return this.parameters().codec();
   }
 }

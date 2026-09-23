@@ -1,0 +1,71 @@
+package dev.ivchenko.lwjwae.macos;
+
+import dev.ivchenko.lwjwae.AbstractApplication;
+import dev.ivchenko.lwjwae.AbstractWindow;
+import dev.ivchenko.lwjwae.ApplicationParameters;
+import dev.ivchenko.lwjwae.WindowParameters;
+import dev.ivchenko.lwjwae.macos.binding.AppKit;
+import dev.ivchenko.lwjwae.macos.binding.WebKit;
+
+/**
+ * An application backed by Cocoa and WebKit, driven through the Objective-C runtime.
+ *
+ * <p>Cocoa runs its application loop on the main thread of the process, which the library doesn't
+ * own. {@link MacDispatcher} starts the loop from a background thread when it can; when the process
+ * is already on the main thread, as the {@code main} method of a native image is, {@link #run()}
+ * runs the loop itself and stops it once the last window closed. Each window is a {@link
+ * MacWindow}.
+ */
+public class MacApplication extends AbstractApplication {
+  private volatile boolean runningApplication;
+
+  /** Creates an application with {@link ApplicationParameters#createDefault()}. */
+  public MacApplication() {
+    this(ApplicationParameters.createDefault());
+  }
+
+  /** Makes sure that {@code NSApplication} exists and has launched. Opens no window. */
+  public MacApplication(ApplicationParameters parameters) {
+    super(MacDispatcher.instance(), parameters);
+  }
+
+  @Override
+  public String engine() {
+    return this.dispatcher().call(() -> "WKWebView " + WebKit.version());
+  }
+
+  @Override
+  protected AbstractWindow createWindow(long id, WindowParameters parameters) {
+    return new MacWindow(this, id, parameters);
+  }
+
+  /**
+   * {@inheritDoc}
+   *
+   * <p>On the main thread of a process that hasn't started its application loop yet, such as the
+   * {@code main} method of a native image, this call runs the loop, and it returns when the last
+   * window closes or on {@link #quit()}. Everywhere else, the loop is already running on the main
+   * thread, and the caller only waits.
+   */
+  @Override
+  public void run() {
+    MacDispatcher dispatcher = (MacDispatcher) this.dispatcher();
+    if (!dispatcher.isDispatchThread() || dispatcher.isApplicationRunning()) {
+      super.run();
+      return;
+    }
+    if (!this.isRunnable()) {
+      return;
+    }
+    this.runningApplication = true;
+    dispatcher.runApplication();
+  }
+
+  @Override
+  protected void onIdle() {
+    if (this.runningApplication) {
+      this.runningApplication = false;
+      AppKit.stopRunLoop();
+    }
+  }
+}
