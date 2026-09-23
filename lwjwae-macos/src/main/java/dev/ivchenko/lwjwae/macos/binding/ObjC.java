@@ -58,6 +58,8 @@ public class ObjC {
       NativeLibraries.downcall(OBJC, "objc_msgSend", Signatures.MSG_LONG);
   private final MethodHandle MSG_ID_ID =
       NativeLibraries.downcall(OBJC, "objc_msgSend", Signatures.MSG_ID_ID);
+  private final MethodHandle MSG_ID_DOUBLE =
+      NativeLibraries.downcall(OBJC, "objc_msgSend", Signatures.MSG_ID_DOUBLE);
   private final MethodHandle MSG_ID_BOOL =
       NativeLibraries.downcall(OBJC, "objc_msgSend", Signatures.MSG_ID_BOOL);
   private final MethodHandle MSG_VOID_ID =
@@ -66,6 +68,8 @@ public class ObjC {
       NativeLibraries.downcall(OBJC, "objc_msgSend", Signatures.MSG_VOID_LONG);
   private final MethodHandle MSG_VOID_BOOL =
       NativeLibraries.downcall(OBJC, "objc_msgSend", Signatures.MSG_VOID_BOOL);
+  private final MethodHandle MSG_BOOL =
+      NativeLibraries.downcall(OBJC, "objc_msgSend", Signatures.MSG_BOOL);
   private final MethodHandle MSG_BOOL_LONG =
       NativeLibraries.downcall(OBJC, "objc_msgSend", Signatures.MSG_BOOL_LONG);
   private final MethodHandle MSG_ID_ID_ID =
@@ -205,6 +209,12 @@ public class ObjC {
   @SneakyThrows
   public MemorySegment send(MemorySegment receiver, String selector) {
     return (MemorySegment) MSG_ID.invokeExact(receiver, sel(selector));
+  }
+
+  /** Sends {@code selector} to {@code receiver}: {@code id -[receiver selector:CGFloat]}. */
+  @SneakyThrows
+  public MemorySegment send(MemorySegment receiver, String selector, double argument) {
+    return (MemorySegment) MSG_ID_DOUBLE.invokeExact(receiver, sel(selector), argument);
   }
 
   /** Sends {@code selector} to {@code receiver}: {@code id -[receiver selector:BOOL]}. */
@@ -350,6 +360,12 @@ public class ObjC {
   @SneakyThrows
   public long sendLong(MemorySegment receiver, String selector) {
     return (long) MSG_LONG.invokeExact(receiver, sel(selector));
+  }
+
+  /** Sends {@code selector} to {@code receiver}: {@code BOOL -[receiver selector]}. */
+  @SneakyThrows
+  public boolean sendBool(MemorySegment receiver, String selector) {
+    return (boolean) MSG_BOOL.invokeExact(receiver, sel(selector));
   }
 
   /** Sends {@code selector} to {@code receiver}: {@code BOOL -[receiver selector:NSInteger]}. */

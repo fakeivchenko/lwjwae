@@ -19,10 +19,11 @@ The provider [`MacBackendProvider`](src/main/java/dev/ivchenko/lwjwae/macos/MacB
 | [`MacApplication`](src/main/java/dev/ivchenko/lwjwae/macos/MacApplication.java)               | The application. Runs the loop from the main thread of a native image.        |
 | [`MacWindow`](src/main/java/dev/ivchenko/lwjwae/macos/MacWindow.java)                         | The window. Forwards every call to the main thread.                           |
 | [`MacDispatcher`](src/main/java/dev/ivchenko/lwjwae/macos/MacDispatcher.java)                 | The main thread of the process, and how work reaches it.                      |
+| [`MacTray`](src/main/java/dev/ivchenko/lwjwae/macos/MacTray.java) | A tray icon: an `NSStatusItem` in the menu bar. |
 | [`PendingEvaluation`](src/main/java/dev/ivchenko/lwjwae/macos/PendingEvaluation.java)         | A future and the arena of its completion block.                               |
 | [`binding.ObjC`](src/main/java/dev/ivchenko/lwjwae/macos/binding/ObjC.java)                   | The runtime: classes, selectors, `objc_msgSend`, blocks, autorelease pools.   |
 | [`binding.Foundation`](src/main/java/dev/ivchenko/lwjwae/macos/binding/Foundation.java)       | Strings, URLs, data, errors, geometry structs.                                |
-| [`binding.AppKit`](src/main/java/dev/ivchenko/lwjwae/macos/binding/AppKit.java)               | The application object and windows.                                           |
+| [`binding.AppKit`](src/main/java/dev/ivchenko/lwjwae/macos/binding/AppKit.java)               | The application object, windows, the status bar, and menus.                   |
 | [`binding.WebKit`](src/main/java/dev/ivchenko/lwjwae/macos/binding/WebKit.java)               | The view, its configuration, user scripts, messages, scheme tasks.            |
 | [`binding.MethodStub`](src/main/java/dev/ivchenko/lwjwae/macos/binding/MethodStub.java)       | One method of a class defined at runtime.                                     |
 | [`binding.Signatures`](src/main/java/dev/ivchenko/lwjwae/macos/binding/Signatures.java)       | Every `FunctionDescriptor` the module binds, mostly shapes of `objc_msgSend`. |
@@ -159,6 +160,26 @@ every later one, which lets the menu through. `isDevToolsEnabled()` reads the pr
   When the last window closes, or on `quit()`, `onIdle()` calls `stop:` and posts an
   application-defined event, because `stop:` takes effect only after the loop processes an event.
   `run` returns, and so does `run()`.
+
+## Tray
+
+`Application.tray(TrayIcon)` creates a [`MacTray`](src/main/java/dev/ivchenko/lwjwae/macos/MacTray.java): an
+`NSStatusItem` on the system status bar, with the image scaled to 18 points and the tooltip on its
+button. AppKit reports clicks as actions sent to a target, so each tray has a target object of its
+own, of a class defined at runtime, `LwjwaeTrayTarget`, whose two methods are upcall stubs: one for
+the button, one for the menu entries. Each entry carries its position plus one as its tag.
+
+Without `onActivate`, the menu belongs to the status item, and AppKit opens it on any click, as it
+does for every other menu bar extra. With a handler, the button sends its action on a release of
+either mouse button: a primary click runs the handler, and a secondary or Control click lends the
+menu to the status item for one `performClick:`, which opens the menu and returns when it closes.
+Entry actions and `onActivate` run on a virtual thread, off the main thread.
+
+The tray closes with its application, on `quit()`, or earlier through `Tray.close()`. Until then it
+keeps `Application.run()` going, so an application can live in the menu bar with no window open.
+
+> **Untested.** The macOS tray compiles and follows the Windows and GTK trays, but no Mac has run it
+> yet, neither on the JVM nor as a native image.
 
 ## Closing
 

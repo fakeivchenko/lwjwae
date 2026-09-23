@@ -57,6 +57,20 @@
           ]
         }
       ]
+    },
+    {
+      "type": "dev.ivchenko.lwjwae.windows.WindowsTray",
+      "methods": [
+        {
+          "name": "trayProc",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "int",
+            "long",
+            "long"
+          ]
+        }
+      ]
     }
   ],
   "resources": [
@@ -121,6 +135,17 @@
         "returnType": "jint",
         "parameterTypes": [
           "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.windows.WindowsTray",
+        "method": "trayProc",
+        "returnType": "jlong",
+        "parameterTypes": [
+          "void*",
+          "jint",
+          "jlong",
+          "jlong"
         ]
       }
     ],
@@ -336,6 +361,65 @@
         "returnType": "jint",
         "parameterTypes": [
           "void*",
+          "jint",
+          "jint",
+          "jint"
+        ]
+      },
+      {
+        "returnType": "jint",
+        "parameterTypes": [
+          "jint"
+        ]
+      },
+      {
+        "returnType": "jint",
+        "parameterTypes": [
+          "jint",
+          "void*"
+        ]
+      },
+      {
+        "returnType": "jint",
+        "parameterTypes": [
+          "void*",
+          "jint",
+          "jlong",
+          "void*"
+        ]
+      },
+      {
+        "returnType": "jint",
+        "parameterTypes": [
+          "void*",
+          "jint",
+          "jlong",
+          "jlong"
+        ]
+      },
+      {
+        "returnType": "jint",
+        "parameterTypes": [
+          "void*",
+          "jint",
+          "jint",
+          "jint",
+          "jint",
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "returnType": "void*",
+        "parameterTypes": []
+      },
+      {
+        "returnType": "void*",
+        "parameterTypes": [
+          "void*",
+          "jint",
+          "jint",
+          "jint",
           "jint",
           "jint",
           "jint"

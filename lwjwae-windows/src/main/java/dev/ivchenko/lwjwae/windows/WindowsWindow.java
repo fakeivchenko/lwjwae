@@ -287,9 +287,35 @@ public class WindowsWindow extends AbstractWindow {
     this.dispatcher()
         .run(
             () -> {
-              User32.show(this.window());
+              MemorySegment current = this.window();
+              User32.show(current);
               WebView2.setVisible(this.controller, true);
+              User32.setForeground(current);
             });
+  }
+
+  @Override
+  public void requestClose() {
+    this.dispatcher().run(() -> User32.requestClose(this.window()));
+  }
+
+  @Override
+  public void hide() {
+    this.dispatcher().run(this::hideNow);
+  }
+
+  @Override
+  public boolean isVisible() {
+    return this.dispatcher().call(() -> User32.isVisible(this.window()));
+  }
+
+  /**
+   * Hides the window and tells WebView2 that its view is hidden, which lets it throttle the page.
+   * Runs on the UI thread.
+   */
+  private void hideNow() {
+    WebView2.setVisible(this.controller, false);
+    User32.hide(this.window());
   }
 
   @Override
@@ -510,6 +536,10 @@ public class WindowsWindow extends AbstractWindow {
       if (window != null) {
         if (message == User32.WM_SIZE && window.controller != null) {
           window.fitWebView();
+        } else if (message == User32.WM_CLOSE && window.hidesOnCloseRequest()) {
+          // Not passed on: DefWindowProc would destroy the window.
+          window.hideNow();
+          return 0;
         } else if (message == User32.WM_DESTROY) {
           WINDOWS.unregister(window.callbackId);
           window.handleDestroyed();

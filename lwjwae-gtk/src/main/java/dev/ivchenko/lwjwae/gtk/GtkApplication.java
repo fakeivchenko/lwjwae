@@ -9,12 +9,15 @@ import dev.ivchenko.lwjwae.foreign.NativeLibraries;
 import dev.ivchenko.lwjwae.gtk.binding.Glib;
 import dev.ivchenko.lwjwae.gtk.binding.Signatures;
 import dev.ivchenko.lwjwae.gtk.binding.WebKit;
+import dev.ivchenko.lwjwae.tray.Tray;
+import dev.ivchenko.lwjwae.tray.TrayIcon;
 import dev.ivchenko.lwjwae.util.MimeTypeUtil;
 import dev.ivchenko.lwjwae.util.ResourceUtil;
 import dev.ivchenko.lwjwae.util.ThrowableUtil;
 import java.lang.foreign.MemorySegment;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
+import java.util.function.Consumer;
 
 /**
  * An application backed by GTK 3 and WebKitGTK 4.1, bound entirely through the Foreign Function and
@@ -66,6 +69,11 @@ public class GtkApplication extends AbstractApplication {
   @Override
   protected AbstractWindow createWindow(long id, WindowParameters parameters) {
     return new GtkWindow(this, id, parameters);
+  }
+
+  @Override
+  protected Tray createTray(TrayIcon icon, Consumer<Tray> closed) {
+    return new GtkTray(this.dispatcher(), icon, closed);
   }
 
   /**

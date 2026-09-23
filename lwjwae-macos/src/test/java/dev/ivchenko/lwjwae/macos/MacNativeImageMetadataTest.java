@@ -30,6 +30,7 @@ class MacNativeImageMetadataTest extends NativeImageMetadataContractTest {
         WebKit.class,
         MacDispatcher.class,
         MacWindow.class,
-        MacApplication.class);
+        MacApplication.class,
+        MacTray.class);
   }
 }

@@ -18,11 +18,13 @@ then looks for the runtime in the registry without loading it.
 | [`WindowsApplication`](src/main/java/dev/ivchenko/lwjwae/windows/WindowsApplication.java)                                                                                                                                                                           | The application. Owns the WebView2 environment; opens windows.     |
 | [`WindowsWindow`](src/main/java/dev/ivchenko/lwjwae/windows/WindowsWindow.java)                                                                                                                                                                                     | The window. Forwards every call to the UI thread.                  |
 | [`WindowsDispatcher`](src/main/java/dev/ivchenko/lwjwae/windows/WindowsDispatcher.java)                                                                                                                                                                             | The one UI thread of the process, which is also the COM apartment. |
+| [`WindowsTray`](src/main/java/dev/ivchenko/lwjwae/windows/WindowsTray.java) | A tray icon in the notification area, through `Shell_NotifyIconW`. |
 | [`binding.User32`](src/main/java/dev/ivchenko/lwjwae/windows/binding/User32.java)                                                                                                                                                                                   | The window class, the window, and the message loop.                |
 | [`binding.Kernel32`](src/main/java/dev/ivchenko/lwjwae/windows/binding/Kernel32.java)                                                                                                                                                                               | Module handles, thread IDs, `LoadLibraryExW`, `GetProcAddress`.    |
 | [`binding.Ole32`](src/main/java/dev/ivchenko/lwjwae/windows/binding/Ole32.java)                                                                                                                                                                                     | The COM apartment and task memory.                                 |
 | [`binding.Advapi32`](src/main/java/dev/ivchenko/lwjwae/windows/binding/Advapi32.java)                                                                                                                                                                               | The registry, to find the runtime.                                 |
 | [`binding.Shlwapi`](src/main/java/dev/ivchenko/lwjwae/windows/binding/Shlwapi.java)                                                                                                                                                                                 | An in-memory `IStream` for resource responses.                     |
+| [`binding.Shell32`](src/main/java/dev/ivchenko/lwjwae/windows/binding/Shell32.java) | `Shell_NotifyIconW`: adds, changes, and removes a tray icon. |
 | [`binding.WebView2Runtime`](src/main/java/dev/ivchenko/lwjwae/windows/binding/WebView2Runtime.java)                                                                                                                                                                 | Where `EmbeddedBrowserWebView.dll` is.                             |
 | [`binding.WebView2`](src/main/java/dev/ivchenko/lwjwae/windows/binding/WebView2.java)                                                                                                                                                                               | The `ICoreWebView2*` methods the backend uses, by vtable slot.     |
 | [`binding.Com`](src/main/java/dev/ivchenko/lwjwae/windows/binding/Com.java)                                                                                                                                                                                         | Calling a COM method through its vtable.                           |
@@ -185,6 +187,26 @@ and serializes every result as JSON. So `eval(script)` doesn't send the script a
 `ICoreWebView2Settings`. A shipped application wants neither: the menu offers "Reload", "View
 source", and "Inspect". With the tools on, the menu stays, because "Inspect" lives there.
 `isDevToolsEnabled()` reads `AreDevToolsEnabled` back.
+
+## Tray
+
+`Application.tray(TrayIcon)` creates a [`WindowsTray`](src/main/java/dev/ivchenko/lwjwae/windows/WindowsTray.java):
+an icon in the notification area, added with `Shell_NotifyIconW`. The shell reports clicks as a message
+to a window, so each tray has a hidden window of its own on the UI thread. The window is a top-level
+`WS_EX_TOOLWINDOW` window rather than a message-only one: only top-level windows receive the
+`TaskbarCreated` broadcast that Explorer sends when it restarts, and the tray adds its icon again on it.
+Without that, the icon would be gone for the rest of the process after an Explorer crash.
+
+The PNG becomes an `HICON` through `CreateIconFromResourceEx`, which reads PNG data as it reads an icon
+resource. A left click runs `onActivate`, or opens the menu when there is none; a right click, or the
+context-menu key, opens the menu. The menu is built from the current entries on every click and shown
+with `TrackPopupMenu` and `TPM_RETURNCMD`, so it answers with the entry picked and no menu handle
+outlives the click. Before it opens, the tray window takes the foreground, and afterwards it posts
+`WM_NULL`: the documented workaround without which the menu doesn't close on a click elsewhere. Entry
+actions and `onActivate` run on a virtual thread, off the UI thread.
+
+The tray closes with its application, on `quit()`, or earlier through `Tray.close()`. Until then it
+keeps `Application.run()` going, so an application can live in the tray with no window open.
 
 ## Closing
 

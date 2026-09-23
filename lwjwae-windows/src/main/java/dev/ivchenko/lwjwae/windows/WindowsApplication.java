@@ -4,6 +4,8 @@ import dev.ivchenko.lwjwae.AbstractApplication;
 import dev.ivchenko.lwjwae.AbstractWindow;
 import dev.ivchenko.lwjwae.ApplicationParameters;
 import dev.ivchenko.lwjwae.WindowParameters;
+import dev.ivchenko.lwjwae.tray.Tray;
+import dev.ivchenko.lwjwae.tray.TrayIcon;
 import dev.ivchenko.lwjwae.windows.binding.Com;
 import dev.ivchenko.lwjwae.windows.binding.ComCallback;
 import dev.ivchenko.lwjwae.windows.binding.WebView2;
@@ -16,6 +18,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 
 /**
  * An application backed by Win32 and WebView2, bound entirely through the Foreign Function and
@@ -95,6 +98,11 @@ public class WindowsApplication extends AbstractApplication {
   @Override
   protected AbstractWindow createWindow(long id, WindowParameters parameters) {
     return new WindowsWindow(this, id, parameters);
+  }
+
+  @Override
+  protected Tray createTray(TrayIcon icon, Consumer<Tray> closed) {
+    return new WindowsTray(this.dispatcher(), icon, closed);
   }
 
   @Override

@@ -15,6 +15,9 @@ import java.util.function.Function;
  * page, a listener hears the events of this page and of this window's own {@link #emit}. The
  * application-level counterparts reach every window.
  *
+ * <p>A window that the user closes is closed, unless its {@link #closeAction()} is {@link
+ * CloseAction#HIDE}: then it is hidden, stays open, and {@link #show()} brings it back.
+ *
  * <p>Every method is safe to call from any thread. The backend forwards the call to the UI thread
  * of its toolkit, and a getter blocks until the UI thread has answered. Once the window is closed,
  * from Java or by the user, every method throws {@link IllegalStateException}, except {@link
@@ -155,8 +158,34 @@ public interface Window extends AutoCloseable {
   /** Registers a listener for the load lifecycle of every navigation. Runs on the UI thread. */
   void onLoad(Consumer<LoadEvent> listener);
 
-  /** Puts the window on screen. */
+  /** Puts the window on screen, or back on it after {@link #hide()}, and brings it to the front. */
   void show();
+
+  /**
+   * Takes the window off the screen without closing it. The window keeps its page, its bindings,
+   * and its place in {@link Application#windows()}, and {@link #show()} brings it back.
+   */
+  void hide();
+
+  /** Whether the window is on screen: shown, and not hidden since. */
+  boolean isVisible();
+
+  /**
+   * Asks the window to close the way the user does from its title bar: it closes, or hides when its
+   * {@link #closeAction()} is {@link CloseAction#HIDE}. Returns before the window has done either
+   * on some platforms; {@link #isVisible()} and {@link #isClosed()} tell when it has. Unlike {@link
+   * #close()}, which always closes, this is the one to call from a close button of the page.
+   */
+  void requestClose();
+
+  /** What the window does when the user closes it. */
+  CloseAction closeAction();
+
+  /**
+   * Changes what the window does when the user closes it, for example to {@link CloseAction#HIDE}
+   * while a tray icon can bring it back. Takes effect with the next request.
+   */
+  void closeAction(CloseAction action);
 
   /** Whether the native window is gone, closed from Java or by the user. */
   boolean isClosed();

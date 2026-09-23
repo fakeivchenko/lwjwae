@@ -1,5 +1,6 @@
 package dev.ivchenko.lwjwae.windows.binding;
 
+import dev.ivchenko.lwjwae.foreign.Layouts;
 import dev.ivchenko.lwjwae.foreign.NativeLibraries;
 import java.lang.foreign.Arena;
 import java.lang.foreign.MemoryLayout;
@@ -22,6 +23,7 @@ public class User32 {
   public final int WS_THICKFRAME = 0x00040000;
   public final int WS_MAXIMIZEBOX = 0x00010000;
   public final int CW_USEDEFAULT = 0x80000000;
+  public final int SW_HIDE = 0;
   public final int SW_SHOW = 5;
   public final int GWL_STYLE = -16;
   public final int GWLP_USERDATA = -21;
@@ -34,11 +36,38 @@ public class User32 {
   public final int PM_NOREMOVE = 0x0000;
   public final int WM_DESTROY = 0x0002;
   public final int WM_SIZE = 0x0005;
+  public final int WM_CLOSE = 0x0010;
+  public final int WM_NULL = 0x0000;
+  public final int WM_CONTEXTMENU = 0x007B;
+  public final int WM_LBUTTONUP = 0x0202;
+  public final int WM_RBUTTONUP = 0x0205;
+
+  /** {@code MF_STRING}, {@code MF_GRAYED}, {@code MF_SEPARATOR}: the kinds of menu entry. */
+  public final int MF_STRING = 0x0000;
+
+  public final int MF_GRAYED = 0x0001;
+  public final int MF_SEPARATOR = 0x0800;
+
+  /**
+   * {@code TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_NONOTIFY}: the menu answers with the entry picked.
+   */
+  public final int TPM_RETURNCMD_RIGHTBUTTON = 0x0100 | 0x0002 | 0x0080;
+
+  /** {@code SM_CXSMICON}, {@code SM_CYSMICON}: the size of a small icon at the current DPI. */
+  public final int SM_CXSMICON = 49;
+
+  public final int SM_CYSMICON = 50;
   public final int WM_USER = 0x0400;
   public final int WM_APP = 0x8000;
 
   /** {@code COLOR_WINDOW + 1}: the class background brush that GTK-style applications use. */
   private final MemorySegment WINDOW_BACKGROUND = MemorySegment.ofAddress(5 + 1);
+
+  /** {@code WS_EX_TOOLWINDOW}: no taskbar button, no Alt+Tab entry. */
+  private final int WS_EX_TOOLWINDOW = 0x00000080;
+
+  /** The icon resource format version that {@code CreateIconFromResourceEx} expects. */
+  private final int ICON_RESOURCE_VERSION = 0x00030000;
 
   /** {@code IDC_ARROW}. */
   private final MemorySegment IDC_ARROW = MemorySegment.ofAddress(32512);
@@ -69,6 +98,34 @@ public class User32 {
       NativeLibraries.downcall(USER32, "ShowWindow", Signatures.INT_POINTER_INT);
   private final MethodHandle DESTROY_WINDOW =
       NativeLibraries.downcall(USER32, "DestroyWindow", Signatures.INT_POINTER);
+  private final MethodHandle SEND_MESSAGE =
+      NativeLibraries.downcall(USER32, "SendMessageW", Signatures.LONG_POINTER_INT_LONG_LONG);
+  private final MethodHandle POST_MESSAGE =
+      NativeLibraries.downcall(USER32, "PostMessageW", Signatures.INT_POINTER_INT_LONG_LONG);
+  private final MethodHandle REGISTER_WINDOW_MESSAGE =
+      NativeLibraries.downcall(USER32, "RegisterWindowMessageW", Signatures.INT_POINTER);
+  private final MethodHandle CREATE_POPUP_MENU =
+      NativeLibraries.downcall(USER32, "CreatePopupMenu", Signatures.POINTER_VOID);
+  private final MethodHandle APPEND_MENU =
+      NativeLibraries.downcall(USER32, "AppendMenuW", Signatures.INT_POINTER_INT_LONG_POINTER);
+  private final MethodHandle TRACK_POPUP_MENU =
+      NativeLibraries.downcall(
+          USER32, "TrackPopupMenu", Signatures.INT_POINTER_INT_X4_POINTER_POINTER);
+  private final MethodHandle DESTROY_MENU =
+      NativeLibraries.downcall(USER32, "DestroyMenu", Signatures.INT_POINTER);
+  private final MethodHandle GET_CURSOR_POS =
+      NativeLibraries.downcall(USER32, "GetCursorPos", Signatures.INT_POINTER);
+  private final MethodHandle GET_SYSTEM_METRICS =
+      NativeLibraries.downcall(USER32, "GetSystemMetrics", Signatures.INT_INT);
+  private final MethodHandle CREATE_ICON_FROM_RESOURCE_EX =
+      NativeLibraries.downcall(
+          USER32, "CreateIconFromResourceEx", Signatures.POINTER_POINTER_INT_X6);
+  private final MethodHandle DESTROY_ICON =
+      NativeLibraries.downcall(USER32, "DestroyIcon", Signatures.INT_POINTER);
+  private final MethodHandle IS_WINDOW_VISIBLE =
+      NativeLibraries.downcall(USER32, "IsWindowVisible", Signatures.INT_POINTER);
+  private final MethodHandle SET_FOREGROUND_WINDOW =
+      NativeLibraries.downcall(USER32, "SetForegroundWindow", Signatures.INT_POINTER);
   private final MethodHandle SET_WINDOW_TEXT =
       NativeLibraries.downcall(USER32, "SetWindowTextW", Signatures.INT_POINTER_POINTER);
   private final MethodHandle GET_WINDOW_TEXT_LENGTH =
@@ -176,6 +233,172 @@ public class User32 {
   @SneakyThrows
   public void show(MemorySegment hwnd) {
     int _ = (int) SHOW_WINDOW.invokeExact(hwnd, SW_SHOW);
+  }
+
+  /** Calls {@code ShowWindow(hwnd, SW_HIDE)}: the window leaves the screen and the taskbar. */
+  @SneakyThrows
+  public void hide(MemorySegment hwnd) {
+    int _ = (int) SHOW_WINDOW.invokeExact(hwnd, SW_HIDE);
+  }
+
+  /**
+   * Sends {@code WM_CLOSE}, the message of the close button of the title bar, through the window
+   * procedure. Called on the thread of the window, it runs the procedure before it returns.
+   */
+  public void requestClose(MemorySegment hwnd) {
+    long _ = send(hwnd, WM_CLOSE, 0L, 0L);
+  }
+
+  /**
+   * Calls {@code SendMessageW}: runs the window procedure of {@code hwnd} with the message and
+   * returns its answer. From another thread, it waits until the thread of the window handles it.
+   */
+  @SneakyThrows
+  public long send(MemorySegment hwnd, int message, long wordParameter, long longParameter) {
+    return (long) SEND_MESSAGE.invokeExact(hwnd, message, wordParameter, longParameter);
+  }
+
+  /** Calls {@code PostMessageW}: queues {@code message} for {@code hwnd} and returns at once. */
+  @SneakyThrows
+  public void post(MemorySegment hwnd, int message) {
+    int _ = (int) POST_MESSAGE.invokeExact(hwnd, message, 0L, 0L);
+  }
+
+  /** Calls {@code RegisterWindowMessageW}: the process-wide number of a named message. */
+  @SneakyThrows
+  public int registerMessage(String name) {
+    try (Arena arena = Arena.ofConfined()) {
+      return (int) REGISTER_WINDOW_MESSAGE.invokeExact(Wide.allocate(arena, name));
+    }
+  }
+
+  /**
+   * A window of {@code className} that is never shown and has no taskbar button: a tool window,
+   * which is what a tray icon needs to receive messages. It is a top-level window rather than a
+   * message-only one, because only top-level windows hear broadcasts such as {@code
+   * TaskbarCreated}.
+   */
+  @SneakyThrows
+  public MemorySegment createHiddenToolWindow(String className) {
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment hwnd =
+          (MemorySegment)
+              CREATE_WINDOW_EX.invokeExact(
+                  WS_EX_TOOLWINDOW,
+                  Wide.allocate(arena, className),
+                  Wide.allocate(arena, className),
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  MemorySegment.NULL,
+                  MemorySegment.NULL,
+                  Kernel32.moduleHandle(),
+                  MemorySegment.NULL);
+      if (hwnd.equals(MemorySegment.NULL)) {
+        throw new IllegalStateException("CreateWindowExW failed, error " + Kernel32.lastError());
+      }
+      return hwnd;
+    }
+  }
+
+  /** Calls {@code CreatePopupMenu}: an empty menu, which {@link #destroyMenu} frees. */
+  @SneakyThrows
+  public MemorySegment createPopupMenu() {
+    return (MemorySegment) CREATE_POPUP_MENU.invokeExact();
+  }
+
+  /**
+   * Calls {@code AppendMenuW} with a text entry that {@link #trackPopupMenu} answers with {@code
+   * id}.
+   */
+  @SneakyThrows
+  public void appendMenuItem(MemorySegment menu, int id, String label, boolean enabled) {
+    try (Arena arena = Arena.ofConfined()) {
+      int flags = MF_STRING | (enabled ? 0 : MF_GRAYED);
+      int _ = (int) APPEND_MENU.invokeExact(menu, flags, (long) id, Wide.allocate(arena, label));
+    }
+  }
+
+  /** Calls {@code AppendMenuW} with a separator. */
+  @SneakyThrows
+  public void appendMenuSeparator(MemorySegment menu) {
+    int _ = (int) APPEND_MENU.invokeExact(menu, MF_SEPARATOR, 0L, MemorySegment.NULL);
+  }
+
+  /**
+   * Shows {@code menu} at the mouse pointer and waits for the user.
+   *
+   * @return The ID of the entry picked, or 0 when the menu was dismissed.
+   */
+  @SneakyThrows
+  public int trackPopupMenu(MemorySegment menu, MemorySegment owner) {
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment point = arena.allocate(Signatures.POINT);
+      int _ = (int) GET_CURSOR_POS.invokeExact(point);
+      return (int)
+          TRACK_POPUP_MENU.invokeExact(
+              menu,
+              TPM_RETURNCMD_RIGHTBUTTON,
+              point.get(Signatures.C_INT, 0),
+              point.get(Signatures.C_INT, 4),
+              0,
+              owner,
+              MemorySegment.NULL);
+    }
+  }
+
+  /** Calls {@code DestroyMenu}. */
+  @SneakyThrows
+  public void destroyMenu(MemorySegment menu) {
+    int _ = (int) DESTROY_MENU.invokeExact(menu);
+  }
+
+  /**
+   * Makes a small icon from PNG bytes with {@code CreateIconFromResourceEx}, which takes a PNG as
+   * an icon image since Windows Vista. The size is the small-icon size of the current DPI.
+   *
+   * @throws IllegalArgumentException If Windows can't read the image.
+   */
+  @SneakyThrows
+  public MemorySegment iconFromPng(byte[] png) {
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment bytes = arena.allocateFrom(Layouts.C_CHAR, png);
+      int width = (int) GET_SYSTEM_METRICS.invokeExact(SM_CXSMICON);
+      int height = (int) GET_SYSTEM_METRICS.invokeExact(SM_CYSMICON);
+      MemorySegment icon =
+          (MemorySegment)
+              CREATE_ICON_FROM_RESOURCE_EX.invokeExact(
+                  bytes, png.length, 1, ICON_RESOURCE_VERSION, width, height, 0);
+      if (icon.equals(MemorySegment.NULL)) {
+        throw new IllegalArgumentException(
+            "CreateIconFromResourceEx can't read the image, error " + Kernel32.lastError());
+      }
+      return icon;
+    }
+  }
+
+  /** Calls {@code DestroyIcon}. */
+  @SneakyThrows
+  public void destroyIcon(MemorySegment icon) {
+    int _ = (int) DESTROY_ICON.invokeExact(icon);
+  }
+
+  /** Calls {@code IsWindowVisible}. */
+  @SneakyThrows
+  public boolean isVisible(MemorySegment hwnd) {
+    return (int) IS_WINDOW_VISIBLE.invokeExact(hwnd) != 0;
+  }
+
+  /**
+   * Calls {@code SetForegroundWindow}. Windows grants it only to the process the user last used, so
+   * a window shown from the tray menu comes to the front, and one shown from a background timer may
+   * only flash in the taskbar.
+   */
+  @SneakyThrows
+  public void setForeground(MemorySegment hwnd) {
+    int _ = (int) SET_FOREGROUND_WINDOW.invokeExact(hwnd);
   }
 
   /** {@code DestroyWindow}: sends {@code WM_DESTROY} synchronously before returning. */

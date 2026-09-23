@@ -94,11 +94,40 @@
             "java.lang.foreign.MemorySegment",
             "java.lang.foreign.MemorySegment"
           ]
+        },
+        {
+          "name": "onWindowShouldClose",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
         }
       ]
     },
     {
       "type": "dev.ivchenko.lwjwae.macos.MacBackendProvider"
+    },
+    {
+      "type": "dev.ivchenko.lwjwae.macos.MacTray",
+      "methods": [
+        {
+          "name": "onButtonClicked",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
+        },
+        {
+          "name": "onMenuItemClicked",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
+        }
+      ]
     }
   ],
   "resources": [
@@ -343,6 +372,21 @@
           "void*",
           "jboolean"
         ]
+      },
+      {
+        "returnType": "jboolean",
+        "parameterTypes": [
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "returnType": "void*",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "jdouble"
+        ]
       }
     ],
     "directUpcalls": [
@@ -446,6 +490,36 @@
       {
         "class": "dev.ivchenko.lwjwae.macos.MacWindow",
         "method": "onEvaluationComplete",
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.macos.MacWindow",
+        "method": "onWindowShouldClose",
+        "returnType": "jboolean",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.macos.MacTray",
+        "method": "onButtonClicked",
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.macos.MacTray",
+        "method": "onMenuItemClicked",
         "returnType": "void",
         "parameterTypes": [
           "void*",

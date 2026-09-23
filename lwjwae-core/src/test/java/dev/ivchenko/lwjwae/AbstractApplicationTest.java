@@ -6,8 +6,11 @@ import dev.ivchenko.lwjwae.testing.FakeApplication;
 import dev.ivchenko.lwjwae.testing.FakeWindow;
 import dev.ivchenko.lwjwae.testing.Point;
 import dev.ivchenko.lwjwae.testing.PointCodec;
+import dev.ivchenko.lwjwae.tray.Tray;
+import dev.ivchenko.lwjwae.tray.TrayIcon;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Assertions;
@@ -53,6 +56,61 @@ class AbstractApplicationTest {
           application.openFake(
               WindowParameters.builder().url("https://example.com").resource("app/x.html").build());
       Assertions.assertEquals(List.of("app://local/app/x.html"), resource.navigated);
+    }
+  }
+
+  @Test
+  void trayIconKeepsRunGoingAfterTheLastWindowAndQuitClosesIt() throws Exception {
+    try (FakeApplication application = new FakeApplication()) {
+      FakeWindow window = application.openFake();
+      final Tray tray = application.tray(TrayIcon.builder().icon(new byte[] {1}).build());
+      CompletableFuture<Void> running = CompletableFuture.runAsync(application::run);
+
+      window.close();
+      Thread.sleep(200);
+      Assertions.assertFalse(running.isDone(), "the tray icon still counts");
+
+      application.quit();
+      running.get(5, TimeUnit.SECONDS);
+      Assertions.assertTrue(tray.isClosed(), "quit() takes the tray icon down");
+      Assertions.assertThrows(
+          IllegalStateException.class,
+          () -> application.tray(TrayIcon.builder().icon(new byte[] {1}).build()));
+    }
+  }
+
+  @Test
+  void closingTheLastTrayIconWithNoWindowReleasesRun() throws Exception {
+    try (FakeApplication application = new FakeApplication()) {
+      Tray tray = application.tray(TrayIcon.builder().icon(new byte[] {1}).build());
+      CompletableFuture<Void> running = CompletableFuture.runAsync(application::run);
+      Thread.sleep(200);
+      Assertions.assertFalse(running.isDone());
+
+      tray.close();
+      running.get(5, TimeUnit.SECONDS);
+      Assertions.assertFalse(application.isClosed(), "closing the icon doesn't quit");
+    }
+  }
+
+  @Test
+  void windowThatHidesOnCloseKeepsRunGoingUntilItReallyCloses() throws Exception {
+    try (FakeApplication application = new FakeApplication()) {
+      FakeWindow window =
+          application.openFake(WindowParameters.builder().closeAction(CloseAction.HIDE).build());
+      window.show();
+      final CompletableFuture<Void> running = CompletableFuture.runAsync(application::run);
+
+      window.requestClose();
+      Assertions.assertFalse(window.isVisible());
+      Assertions.assertFalse(window.isClosed());
+      Thread.sleep(200);
+      Assertions.assertFalse(running.isDone(), "a hidden window is still open");
+
+      window.closeAction(CloseAction.CLOSE);
+      window.requestClose();
+      running.get(5, TimeUnit.SECONDS);
+      Assertions.assertTrue(window.isClosed());
     }
   }
 

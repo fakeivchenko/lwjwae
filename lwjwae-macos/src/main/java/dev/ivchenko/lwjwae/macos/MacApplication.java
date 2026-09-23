@@ -6,6 +6,9 @@ import dev.ivchenko.lwjwae.ApplicationParameters;
 import dev.ivchenko.lwjwae.WindowParameters;
 import dev.ivchenko.lwjwae.macos.binding.AppKit;
 import dev.ivchenko.lwjwae.macos.binding.WebKit;
+import dev.ivchenko.lwjwae.tray.Tray;
+import dev.ivchenko.lwjwae.tray.TrayIcon;
+import java.util.function.Consumer;
 
 /**
  * An application backed by Cocoa and WebKit, driven through the Objective-C runtime.
@@ -14,7 +17,7 @@ import dev.ivchenko.lwjwae.macos.binding.WebKit;
  * own. {@link MacDispatcher} starts the loop from a background thread when it can; when the process
  * is already on the main thread, as the {@code main} method of a native image is, {@link #run()}
  * runs the loop itself and stops it once the last window closed. Each window is a {@link
- * MacWindow}.
+ * MacWindow}, and each tray icon a {@link MacTray}.
  */
 public class MacApplication extends AbstractApplication {
   private volatile boolean runningApplication;
@@ -37,6 +40,11 @@ public class MacApplication extends AbstractApplication {
   @Override
   protected AbstractWindow createWindow(long id, WindowParameters parameters) {
     return new MacWindow(this, id, parameters);
+  }
+
+  @Override
+  protected Tray createTray(TrayIcon icon, Consumer<Tray> closed) {
+    return new MacTray(this.dispatcher(), icon, closed);
   }
 
   /**

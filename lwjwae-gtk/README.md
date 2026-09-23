@@ -34,9 +34,11 @@ checks the operating system first and the libraries second, because probing a li
 | [`GtkApplication`](src/main/java/dev/ivchenko/lwjwae/gtk/GtkApplication.java)               | The application. Prepares the web context and serves `app://`; opens `GtkWindow`s.          |
 | [`GtkWindow`](src/main/java/dev/ivchenko/lwjwae/gtk/GtkWindow.java)                         | The window. Forwards every call to the GTK thread.                                          |
 | [`GtkDispatcher`](src/main/java/dev/ivchenko/lwjwae/gtk/GtkDispatcher.java)                 | The one GTK thread of the process.                                                          |
+| [`GtkTray`](src/main/java/dev/ivchenko/lwjwae/gtk/GtkTray.java)                             | A tray icon, through libappindicator or `GtkStatusIcon`.                                    |
 | [`binding.Gtk`](src/main/java/dev/ivchenko/lwjwae/gtk/binding/Gtk.java)                     | `gtk_*` functions: the window and the main loop.                                            |
 | [`binding.WebKit`](src/main/java/dev/ivchenko/lwjwae/gtk/binding/WebKit.java)               | `webkit_*` functions: the view, user scripts, message handlers, the URI scheme, evaluation. |
 | [`binding.Glib`](src/main/java/dev/ivchenko/lwjwae/gtk/binding/Glib.java)                   | `g_*` functions: signals, idle sources, memory streams, errors.                             |
+| [`binding.AppIndicator`](src/main/java/dev/ivchenko/lwjwae/gtk/binding/AppIndicator.java)   | `app_indicator_*` functions, from an optional library.                                      |
 | [`binding.Signatures`](src/main/java/dev/ivchenko/lwjwae/gtk/binding/Signatures.java)       | Every `FunctionDescriptor` the module binds, named by shape.                                |
 
 The binding classes are Lombok `@UtilityClass`es with `static final` method handles. `invokeExact`
@@ -134,6 +136,33 @@ wrapper that the Windows and macOS backends use.
 `devToolsEnabled(true)` sets `enable-developer-extras` on the `WebKitSettings` of the view. That
 enables the Web Inspector and adds "Inspect Element" to the context menu, which the backend then
 stops suppressing. `isDevToolsEnabled()` reads the same setting back.
+
+## Tray
+
+`Application.tray(TrayIcon)` creates a [`GtkTray`](src/main/java/dev/ivchenko/lwjwae/gtk/GtkTray.java). Linux
+has two tray protocols, and the class speaks both:
+
+1. **StatusNotifierItem** over D-Bus, through libappindicator (`libayatana-appindicator3.so.1` or
+   `libappindicator3.so.1`), when the library loads. This is what KDE, GNOME with its AppIndicator
+   extension, and most other panels take, and the only tray that works on Wayland. The indicator
+   shows the menu on any click; there is no primary-click event, so `onActivate` never runs on
+   this path.
+2. **XEmbed**, through `GtkStatusIcon`, otherwise. Deprecated in GTK 3.14 but still in the
+   library; needs X11 and a panel with a legacy tray. The `activate` signal runs `onActivate`, and
+   `popup-menu` opens the menu at the pointer.
+
+Both hosts read the image from a file, and a StatusNotifier host caches it by name, so every image
+becomes a fresh PNG file under a name that no previous image had, in a temporary directory that the
+tray deletes when it closes. The menu is a `GtkMenu` with one `activate` handler per labeled entry;
+each entry has its own ID in a `CallbackRegistry`, so one upcall stub serves every entry of every
+tray. Entry actions and `onActivate` run on a virtual thread, off the GTK thread.
+
+The library is optional, so [`binding.AppIndicator`](src/main/java/dev/ivchenko/lwjwae/gtk/binding/AppIndicator.java)
+binds through `NativeLibraries.downcallIfPresent`, which records the descriptor whether the library
+loaded or not: the reachability metadata of the module stays the same on a machine without it.
+
+The tray closes with its application, on `quit()`, or earlier through `Tray.close()`. Until then it
+keeps `Application.run()` going, so an application can live in the tray with no window open.
 
 ## Closing
 

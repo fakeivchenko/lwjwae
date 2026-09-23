@@ -7,6 +7,7 @@ import dev.ivchenko.lwjwae.windows.binding.Com;
 import dev.ivchenko.lwjwae.windows.binding.ComCallback;
 import dev.ivchenko.lwjwae.windows.binding.Kernel32;
 import dev.ivchenko.lwjwae.windows.binding.Ole32;
+import dev.ivchenko.lwjwae.windows.binding.Shell32;
 import dev.ivchenko.lwjwae.windows.binding.Shlwapi;
 import dev.ivchenko.lwjwae.windows.binding.User32;
 import dev.ivchenko.lwjwae.windows.binding.WebView2;
@@ -32,12 +33,14 @@ class WindowsNativeImageMetadataTest extends NativeImageMetadataContractTest {
         User32.class,
         Ole32.class,
         Shlwapi.class,
+        Shell32.class,
         Advapi32.class,
         Com.class,
         ComCallback.class,
         WebView2.class,
         WindowsDispatcher.class,
         WindowsWindow.class,
+        WindowsTray.class,
         WindowsApplication.class);
   }
 }

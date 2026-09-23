@@ -39,6 +39,14 @@ public class GtkWindow extends AbstractWindow {
           "onDestroy",
           MethodType.methodType(void.class, MemorySegment.class, MemorySegment.class),
           Signatures.WIDGET_CALLBACK);
+  private static final MemorySegment ON_DELETE_EVENT =
+      NativeLibraries.upcall(
+          MethodHandles.lookup(),
+          GtkWindow.class,
+          "onDeleteEvent",
+          MethodType.methodType(
+              int.class, MemorySegment.class, MemorySegment.class, MemorySegment.class),
+          Signatures.DELETE_EVENT_CALLBACK);
   private static final MemorySegment ON_LOAD_CHANGED =
       NativeLibraries.upcall(
           MethodHandles.lookup(),
@@ -139,6 +147,7 @@ public class GtkWindow extends AbstractWindow {
     MemorySegment newWebView = WebKit.webViewNew(manager);
     Gtk.containerAdd(newWindow, newWebView);
 
+    Glib.signalConnect(newWindow, "delete-event", ON_DELETE_EVENT, userData);
     Glib.signalConnect(newWindow, "destroy", ON_DESTROY, userData);
     Glib.signalConnect(newWebView, "load-changed", ON_LOAD_CHANGED, userData);
     Glib.signalConnect(newWebView, "load-failed", ON_LOAD_FAILED, userData);
@@ -293,7 +302,28 @@ public class GtkWindow extends AbstractWindow {
 
   @Override
   public void show() {
-    this.dispatcher().run(() -> Gtk.widgetShowAll(this.window()));
+    this.dispatcher()
+        .run(
+            () -> {
+              MemorySegment current = this.window();
+              Gtk.widgetShowAll(current);
+              Gtk.windowPresent(current);
+            });
+  }
+
+  @Override
+  public void requestClose() {
+    this.dispatcher().run(() -> Gtk.windowClose(this.window()));
+  }
+
+  @Override
+  public void hide() {
+    this.dispatcher().run(() -> Gtk.widgetHide(this.window()));
+  }
+
+  @Override
+  public boolean isVisible() {
+    return this.dispatcher().call(() -> Gtk.isWidgetVisible(this.window()));
   }
 
   @Override
@@ -341,6 +371,31 @@ public class GtkWindow extends AbstractWindow {
   }
 
   // --- signal handlers, bound by name from the upcall stubs above; signatures are GTK's ---
+
+  /**
+   * The user asked to close the window, from the title bar or the desktop. {@code TRUE} cancels the
+   * close; with {@link dev.ivchenko.lwjwae.CloseAction#HIDE}, the window is hidden instead.
+   *
+   * <p>Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
+   * binds it by name, so no Java code calls it and the compiler sees a dead private method. {@code
+   * resource}: the window is {@code AutoCloseable}, and a lookup that returns it looks like an
+   * unclosed resource. It is not: the application owns the window and closes it, this method only
+   * borrows it.
+   */
+  @SuppressWarnings({"unused", "resource"})
+  private static int onDeleteEvent(
+      MemorySegment widget, MemorySegment event, MemorySegment userData) {
+    try {
+      GtkWindow window = WINDOWS.lookup(userData);
+      if (window != null && window.hidesOnCloseRequest()) {
+        Gtk.widgetHide(widget);
+        return 1;
+      }
+    } catch (Throwable t) {
+      ThrowableUtil.report(t);
+    }
+    return 0;
+  }
 
   /**
    * Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that

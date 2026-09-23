@@ -107,6 +107,10 @@ public class Signatures {
   public final FunctionDescriptor VOID_POINTER_X5 =
       FunctionDescriptor.ofVoid(C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER);
 
+  /** {@code T* f(const gchar*, const gchar*, gint)}: {@code app_indicator_new}. */
+  public final FunctionDescriptor POINTER_POINTER_POINTER_INT =
+      FunctionDescriptor.of(C_POINTER, C_POINTER, C_POINTER, C_INT);
+
   // --- named signatures, too long to describe by shape ---
 
   /**
@@ -139,8 +143,25 @@ public class Signatures {
   /** {@code void (*GAsyncReadyCallback)(GObject*, GAsyncResult*, gpointer)}. */
   public final FunctionDescriptor G_ASYNC_READY_CALLBACK = VOID_POINTER_POINTER_POINTER;
 
-  /** {@code void (*)(GtkWidget*, gpointer)}: the {@code destroy} signal. */
+  /**
+   * {@code void (*)(GtkWidget*, gpointer)}: the {@code destroy} signal of a window, the {@code
+   * activate} signal of a menu item or a status icon.
+   */
   public final FunctionDescriptor WIDGET_CALLBACK = VOID_POINTER_POINTER;
+
+  /**
+   * {@code gboolean (*)(GtkWidget*, GdkEvent*, gpointer)}: the {@code delete-event} signal of a
+   * window, whose {@code TRUE} cancels the close.
+   */
+  public final FunctionDescriptor DELETE_EVENT_CALLBACK =
+      FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_POINTER);
+
+  /**
+   * {@code void (*)(GtkStatusIcon*, guint button, guint activate_time, gpointer)}: the {@code
+   * popup-menu} signal of a status icon.
+   */
+  public final FunctionDescriptor STATUS_ICON_POPUP_MENU_CALLBACK =
+      FunctionDescriptor.ofVoid(C_POINTER, C_INT, C_INT, C_POINTER);
 
   /**
    * {@code void (*)(WebKitUserContentManager*, WebKitJavascriptResult*, gpointer)}: bridge
