@@ -9,12 +9,17 @@ import dev.ivchenko.lwjwae.foreign.NativeLibraries;
 import dev.ivchenko.lwjwae.gtk4.binding.Glib;
 import dev.ivchenko.lwjwae.gtk4.binding.Signatures;
 import dev.ivchenko.lwjwae.gtk4.binding.WebKit;
+import dev.ivchenko.lwjwae.notification.Notification;
+import dev.ivchenko.lwjwae.notification.NotificationHandle;
+import dev.ivchenko.lwjwae.tray.Tray;
+import dev.ivchenko.lwjwae.tray.TrayIcon;
 import dev.ivchenko.lwjwae.util.MimeTypeUtil;
 import dev.ivchenko.lwjwae.util.ResourceUtil;
 import dev.ivchenko.lwjwae.util.ThrowableUtil;
 import java.lang.foreign.MemorySegment;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
+import java.util.function.Consumer;
 
 /**
  * An application backed by GTK 4 and WebKitGTK 6.0, bound entirely through the Foreign Function and
@@ -24,10 +29,8 @@ import java.lang.invoke.MethodType;
  * Gtk4Dispatcher}, and the default web context, which serves {@code app://} for every web view.
  * Both outlive the application, because GTK can't be initialized twice and a web context can't be
  * unregistered, so creating the application only makes sure that they exist. Each window is a
- * {@link Gtk4Window} on that thread.
- *
- * <p>The tray and notifications are not there yet: {@link #tray} and {@link #showNotification}
- * throw {@link UnsupportedOperationException}, as for any backend without them.
+ * {@link Gtk4Window} on that thread, each tray icon a {@link Gtk4Tray}, and each notification a
+ * {@link Gtk4Notification}.
  */
 public class Gtk4Application extends AbstractApplication {
   private static final String ERROR_DOMAIN = "lwjwae";
@@ -39,6 +42,8 @@ public class Gtk4Application extends AbstractApplication {
           "onResourceRequest",
           MethodType.methodType(void.class, MemorySegment.class, MemorySegment.class),
           Signatures.URI_SCHEME_REQUEST_CALLBACK);
+
+  private Gtk4Notifier notifier;
 
   /** Creates an application with {@link ApplicationParameters#createDefault()}. */
   public Gtk4Application() {
@@ -69,6 +74,37 @@ public class Gtk4Application extends AbstractApplication {
   @Override
   protected AbstractWindow createWindow(long id, WindowParameters parameters) {
     return new Gtk4Window(this, id, parameters);
+  }
+
+  @Override
+  protected Tray createTray(TrayIcon icon, Consumer<Tray> closed) {
+    return new Gtk4Tray(this.dispatcher(), icon, closed);
+  }
+
+  @Override
+  protected NotificationHandle createNotification(
+      Notification notification, Consumer<NotificationHandle> closed) {
+    return this.notifier().show(notification, closed);
+  }
+
+  /** The notifier, connected to the bus on the first notification rather than at startup. */
+  private synchronized Gtk4Notifier notifier() {
+    if (this.notifier == null) {
+      this.notifier = new Gtk4Notifier(this.dispatcher(), this.parameters().name());
+    }
+    return this.notifier;
+  }
+
+  @Override
+  protected void onClose() {
+    Gtk4Notifier current;
+    synchronized (this) {
+      current = this.notifier;
+      this.notifier = null;
+    }
+    if (current != null) {
+      current.close();
+    }
   }
 
   /**

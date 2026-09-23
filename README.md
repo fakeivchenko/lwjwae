@@ -72,7 +72,7 @@ that shows every feature on one page.
 
 | Platform | Needs                                                                                                                                                            |
 |----------|------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Linux    | GTK 3 and WebKitGTK 2.40 or newer with the 4.1 API (`libwebkit2gtk-4.1.so.0`). See [`lwjwae-gtk`](lwjwae-gtk#requirements) for the package of each distribution. Or GTK 4 and the 6.0 API (`libwebkitgtk-6.0.so.4`) with [`lwjwae-gtk4`](lwjwae-gtk4#requirements), which has no tray or notifications yet. |
+| Linux    | GTK 3 and WebKitGTK 2.40 or newer with the 4.1 API (`libwebkit2gtk-4.1.so.0`). See [`lwjwae-gtk`](lwjwae-gtk#requirements) for the package of each distribution. Or GTK 4 and the 6.0 API (`libwebkitgtk-6.0.so.4`) with [`lwjwae-gtk4`](lwjwae-gtk4#requirements), which can't place windows. |
 | Windows  | Windows 10 or 11, x64, with the WebView2 Evergreen runtime. Windows 11 ships it; Edge installs it on Windows 10.                                                 |
 | macOS    | macOS on arm64 or x86_64. AppKit and WebKit are part of the system.                                                                                              |
 
@@ -149,7 +149,7 @@ dependencies {
 |------------------------------------|-------------------------------------------------------------------------------------------------------------|
 | [`lwjwae-core`](lwjwae-core)       | The API, the bridge, backend discovery, FFM helpers, and the contract tests that every backend runs.        |
 | [`lwjwae-gtk`](lwjwae-gtk)         | The Linux backend.                                                                                          |
-| [`lwjwae-gtk4`](lwjwae-gtk4)       | The Linux backend on GTK 4 and WebKitGTK 6.0, without the tray and notifications yet.                       |
+| [`lwjwae-gtk4`](lwjwae-gtk4)       | The Linux backend on GTK 4 and WebKitGTK 6.0. Serves its tray over D-Bus itself; can't place windows.       |
 | [`lwjwae-windows`](lwjwae-windows) | The Windows backend. Finds the WebView2 runtime without `WebView2Loader.dll` and talks COM through vtables. |
 | [`lwjwae-macos`](lwjwae-macos)     | The macOS backend. Drives Cocoa through the Objective-C runtime.                                            |
 

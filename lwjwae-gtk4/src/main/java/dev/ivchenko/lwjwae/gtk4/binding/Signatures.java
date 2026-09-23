@@ -95,6 +95,54 @@ public class Signatures {
   public final FunctionDescriptor VOID_POINTER_X5 =
       FunctionDescriptor.ofVoid(C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER);
 
+  /** {@code T* f(gint)}: {@code g_variant_new_uint32}. */
+  public final FunctionDescriptor POINTER_INT = FunctionDescriptor.of(C_POINTER, C_INT);
+
+  /** {@code T* f(U*, V*)}: {@code g_dbus_node_info_new_for_xml}. */
+  public final FunctionDescriptor POINTER_POINTER_POINTER =
+      FunctionDescriptor.of(C_POINTER, C_POINTER, C_POINTER);
+
+  /** {@code T* f(U*, gsize)}: {@code g_variant_new_tuple}, {@code g_variant_get_child_value}. */
+  public final FunctionDescriptor POINTER_POINTER_LONG =
+      FunctionDescriptor.of(C_POINTER, C_POINTER, C_LONG);
+
+  /** {@code T* f(U*, V*, gsize)}: {@code g_variant_new_array}. */
+  public final FunctionDescriptor POINTER_POINTER_POINTER_LONG =
+      FunctionDescriptor.of(C_POINTER, C_POINTER, C_POINTER, C_LONG);
+
+  /** {@code T* f(gint, U*, V*)}: {@code g_bus_get_sync}. */
+  public final FunctionDescriptor POINTER_INT_POINTER_POINTER =
+      FunctionDescriptor.of(C_POINTER, C_INT, C_POINTER, C_POINTER);
+
+  /** {@code gsize f(T*)}: {@code g_variant_n_children}. */
+  public final FunctionDescriptor LONG_POINTER = FunctionDescriptor.of(C_LONG, C_POINTER);
+
+  /** {@code gboolean f(T*, guint)}: {@code g_dbus_connection_unregister_object}. */
+  public final FunctionDescriptor INT_POINTER_INT = FunctionDescriptor.of(C_INT, C_POINTER, C_INT);
+
+  /**
+   * {@code T* f(const gchar*, GDBusConnectionFlags, U*, V*, W*)}: {@code
+   * g_dbus_connection_new_for_address_sync}.
+   */
+  public final FunctionDescriptor POINTER_POINTER_INT_POINTER_POINTER_POINTER =
+      FunctionDescriptor.of(C_POINTER, C_POINTER, C_INT, C_POINTER, C_POINTER, C_POINTER);
+
+  /**
+   * {@code gint f(T*, U*, V*, W*, X*, Y*, Z*)}: {@code g_dbus_connection_register_object} and
+   * {@code g_dbus_connection_emit_signal}.
+   */
+  public final FunctionDescriptor INT_POINTER_X7 =
+      FunctionDescriptor.of(
+          C_INT, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER);
+
+  /** {@code void f(T*, U*, gsize)}: {@code gdk_texture_download}. */
+  public final FunctionDescriptor VOID_POINTER_POINTER_LONG =
+      FunctionDescriptor.ofVoid(C_POINTER, C_POINTER, C_LONG);
+
+  /** {@code T* f(U*, V*, gsize, gsize)}: {@code g_variant_new_fixed_array}. */
+  public final FunctionDescriptor POINTER_POINTER_POINTER_LONG_LONG =
+      FunctionDescriptor.of(C_POINTER, C_POINTER, C_POINTER, C_LONG, C_LONG);
+
   // --- named signatures, too long to describe by shape ---
 
   /**
@@ -118,6 +166,27 @@ public class Signatures {
   public final FunctionDescriptor WEBKIT_EVALUATE_JAVASCRIPT =
       FunctionDescriptor.ofVoid(
           C_POINTER, C_POINTER, C_LONG, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER);
+
+  /**
+   * {@code GVariant* g_dbus_connection_call_sync(GDBusConnection*, const gchar* bus_name, const
+   * gchar* object_path, const gchar* interface_name, const gchar* method_name, GVariant*
+   * parameters, const GVariantType* reply_type, GDBusCallFlags, gint timeout_msec, GCancellable*,
+   * GError**)}.
+   */
+  public final FunctionDescriptor G_DBUS_CONNECTION_CALL_SYNC =
+      FunctionDescriptor.of(
+          C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER,
+          C_INT, C_INT, C_POINTER, C_POINTER);
+
+  /**
+   * {@code guint g_dbus_connection_signal_subscribe(GDBusConnection*, const gchar* sender, const
+   * gchar* interface_name, const gchar* member, const gchar* object_path, const gchar* arg0,
+   * GDBusSignalFlags, GDBusSignalCallback, gpointer, GDestroyNotify)}.
+   */
+  public final FunctionDescriptor G_DBUS_CONNECTION_SIGNAL_SUBSCRIBE =
+      FunctionDescriptor.of(
+          C_INT, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_INT, C_POINTER,
+          C_POINTER, C_POINTER);
 
   // --- callbacks (upcalls) ---
 
@@ -162,4 +231,31 @@ public class Signatures {
    */
   public final FunctionDescriptor LOAD_FAILED_CALLBACK =
       FunctionDescriptor.of(C_INT, C_POINTER, C_INT, C_POINTER, C_POINTER, C_POINTER);
+
+  /**
+   * {@code void GDBusSignalCallback(GDBusConnection*, const gchar* sender_name, const gchar*
+   * object_path, const gchar* interface_name, const gchar* signal_name, GVariant* parameters,
+   * gpointer user_data)}.
+   */
+  public final FunctionDescriptor G_DBUS_SIGNAL_CALLBACK =
+      FunctionDescriptor.ofVoid(
+          C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER);
+
+  /**
+   * {@code void GDBusInterfaceMethodCallFunc(GDBusConnection*, const gchar* sender, const gchar*
+   * object_path, const gchar* interface_name, const gchar* method_name, GVariant* parameters,
+   * GDBusMethodInvocation*, gpointer user_data)}.
+   */
+  public final FunctionDescriptor G_DBUS_METHOD_CALL =
+      FunctionDescriptor.ofVoid(
+          C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER);
+
+  /**
+   * {@code GVariant* GDBusInterfaceGetPropertyFunc(GDBusConnection*, const gchar* sender, const
+   * gchar* object_path, const gchar* interface_name, const gchar* property_name, GError**, gpointer
+   * user_data)}.
+   */
+  public final FunctionDescriptor G_DBUS_GET_PROPERTY =
+      FunctionDescriptor.of(
+          C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER);
 }

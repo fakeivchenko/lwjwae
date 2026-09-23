@@ -1,5 +1,7 @@
 package dev.ivchenko.lwjwae.gtk4;
 
+import dev.ivchenko.lwjwae.gtk4.binding.Dbus;
+import dev.ivchenko.lwjwae.gtk4.binding.Gdk;
 import dev.ivchenko.lwjwae.gtk4.binding.Glib;
 import dev.ivchenko.lwjwae.gtk4.binding.Gtk;
 import dev.ivchenko.lwjwae.gtk4.binding.WebKit;
@@ -28,6 +30,10 @@ class Gtk4NativeImageMetadataTest extends NativeImageMetadataContractTest {
         WebKit.class,
         Gtk4Dispatcher.class,
         Gtk4Window.class,
-        Gtk4Application.class);
+        Gtk4Application.class,
+        Dbus.class,
+        Gdk.class,
+        Gtk4Notifier.class,
+        Gtk4Tray.class);
   }
 }

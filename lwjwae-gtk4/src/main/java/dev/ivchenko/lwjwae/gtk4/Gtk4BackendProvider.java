@@ -15,11 +15,10 @@ import java.util.Map;
  * <p>The provider is discovered through {@code META-INF/services}, so the presence of this JAR file
  * on the classpath makes the backend available on Linux and the BSDs.
  *
- * <p>The backend covers windows, pages, the bridge, and resources, and not yet the tray or
- * notifications, so its priority is below that of the GTK 3 backend: with both on the classpath and
- * both libraries installed, GTK 3 wins, and GTK 4 runs where only it is available, as on
- * distributions that ship WebKitGTK 6.0 without 4.1. {@code -Dlwjwae.backend=gtk4-webkitgtk-6.0}
- * picks it anyway.
+ * <p>GTK 4 can't place a window, which GTK 3 can on X11, so the priority of this backend is below
+ * that of the GTK 3 one: with both on the classpath and both libraries installed, GTK 3 wins, and
+ * GTK 4 runs where only it is available, as on distributions that ship WebKitGTK 6.0 without 4.1.
+ * {@code -Dlwjwae.backend=gtk4-webkitgtk-6.0} picks it anyway.
  *
  * <p>When a library is missing, {@link #unsupportedReason()} names it and, for the distributions
  * that the provider knows, the command that installs it. The package names come from the
