@@ -66,6 +66,8 @@ public class ObjC {
       NativeLibraries.downcall(OBJC, "objc_msgSend", Signatures.MSG_VOID_LONG);
   private final MethodHandle MSG_VOID_BOOL =
       NativeLibraries.downcall(OBJC, "objc_msgSend", Signatures.MSG_VOID_BOOL);
+  private final MethodHandle MSG_BOOL =
+      NativeLibraries.downcall(OBJC, "objc_msgSend", Signatures.MSG_BOOL);
   private final MethodHandle MSG_BOOL_LONG =
       NativeLibraries.downcall(OBJC, "objc_msgSend", Signatures.MSG_BOOL_LONG);
   private final MethodHandle MSG_ID_ID_ID =
@@ -350,6 +352,12 @@ public class ObjC {
   @SneakyThrows
   public long sendLong(MemorySegment receiver, String selector) {
     return (long) MSG_LONG.invokeExact(receiver, sel(selector));
+  }
+
+  /** Sends {@code selector} to {@code receiver}: {@code BOOL -[receiver selector]}. */
+  @SneakyThrows
+  public boolean sendBool(MemorySegment receiver, String selector) {
+    return (boolean) MSG_BOOL.invokeExact(receiver, sel(selector));
   }
 
   /** Sends {@code selector} to {@code receiver}: {@code BOOL -[receiver selector:NSInteger]}. */

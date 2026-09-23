@@ -7,6 +7,7 @@ class WindowParametersTest {
   @Test
   void defaultsFillEveryComponent() {
     WindowParameters parameters = WindowParameters.createDefault();
+    Assertions.assertEquals(CloseAction.CLOSE, parameters.closeAction());
     Assertions.assertEquals("Application", parameters.title());
     Assertions.assertEquals(1024, parameters.width());
     Assertions.assertEquals(768, parameters.height());

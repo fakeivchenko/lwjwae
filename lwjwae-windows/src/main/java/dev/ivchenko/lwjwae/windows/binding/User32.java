@@ -22,6 +22,7 @@ public class User32 {
   public final int WS_THICKFRAME = 0x00040000;
   public final int WS_MAXIMIZEBOX = 0x00010000;
   public final int CW_USEDEFAULT = 0x80000000;
+  public final int SW_HIDE = 0;
   public final int SW_SHOW = 5;
   public final int GWL_STYLE = -16;
   public final int GWLP_USERDATA = -21;
@@ -34,6 +35,7 @@ public class User32 {
   public final int PM_NOREMOVE = 0x0000;
   public final int WM_DESTROY = 0x0002;
   public final int WM_SIZE = 0x0005;
+  public final int WM_CLOSE = 0x0010;
   public final int WM_USER = 0x0400;
   public final int WM_APP = 0x8000;
 
@@ -69,6 +71,12 @@ public class User32 {
       NativeLibraries.downcall(USER32, "ShowWindow", Signatures.INT_POINTER_INT);
   private final MethodHandle DESTROY_WINDOW =
       NativeLibraries.downcall(USER32, "DestroyWindow", Signatures.INT_POINTER);
+  private final MethodHandle SEND_MESSAGE =
+      NativeLibraries.downcall(USER32, "SendMessageW", Signatures.LONG_POINTER_INT_LONG_LONG);
+  private final MethodHandle IS_WINDOW_VISIBLE =
+      NativeLibraries.downcall(USER32, "IsWindowVisible", Signatures.INT_POINTER);
+  private final MethodHandle SET_FOREGROUND_WINDOW =
+      NativeLibraries.downcall(USER32, "SetForegroundWindow", Signatures.INT_POINTER);
   private final MethodHandle SET_WINDOW_TEXT =
       NativeLibraries.downcall(USER32, "SetWindowTextW", Signatures.INT_POINTER_POINTER);
   private final MethodHandle GET_WINDOW_TEXT_LENGTH =
@@ -176,6 +184,37 @@ public class User32 {
   @SneakyThrows
   public void show(MemorySegment hwnd) {
     int _ = (int) SHOW_WINDOW.invokeExact(hwnd, SW_SHOW);
+  }
+
+  /** Calls {@code ShowWindow(hwnd, SW_HIDE)}: the window leaves the screen and the taskbar. */
+  @SneakyThrows
+  public void hide(MemorySegment hwnd) {
+    int _ = (int) SHOW_WINDOW.invokeExact(hwnd, SW_HIDE);
+  }
+
+  /**
+   * Sends {@code WM_CLOSE}, the message of the close button of the title bar, through the window
+   * procedure. Called on the thread of the window, it runs the procedure before it returns.
+   */
+  @SneakyThrows
+  public void requestClose(MemorySegment hwnd) {
+    long _ = (long) SEND_MESSAGE.invokeExact(hwnd, WM_CLOSE, 0L, 0L);
+  }
+
+  /** Calls {@code IsWindowVisible}. */
+  @SneakyThrows
+  public boolean isVisible(MemorySegment hwnd) {
+    return (int) IS_WINDOW_VISIBLE.invokeExact(hwnd) != 0;
+  }
+
+  /**
+   * Calls {@code SetForegroundWindow}. Windows grants it only to the process the user last used, so
+   * a window shown from the tray menu comes to the front, and one shown from a background timer may
+   * only flash in the taskbar.
+   */
+  @SneakyThrows
+  public void setForeground(MemorySegment hwnd) {
+    int _ = (int) SET_FOREGROUND_WINDOW.invokeExact(hwnd);
   }
 
   /** {@code DestroyWindow}: sends {@code WM_DESTROY} synchronously before returning. */

@@ -128,6 +128,9 @@ public class Signatures {
   public final FunctionDescriptor MSG_VOID_BOOL =
       FunctionDescriptor.ofVoid(C_POINTER, C_POINTER, C_BOOL);
 
+  /** {@code BOOL -[receiver selector]}. */
+  public final FunctionDescriptor MSG_BOOL = FunctionDescriptor.of(C_BOOL, C_POINTER, C_POINTER);
+
   /** {@code BOOL -[receiver selector:NSInteger]}. */
   public final FunctionDescriptor MSG_BOOL_LONG =
       FunctionDescriptor.of(C_BOOL, C_POINTER, C_POINTER, C_LONG);
@@ -205,6 +208,13 @@ public class Signatures {
    * {@code _cmd} first.
    */
   public final FunctionDescriptor DELEGATE_1 = VOID_POINTER_POINTER_POINTER;
+
+  /**
+   * A delegate method with one argument that answers {@code BOOL}, such as {@code
+   * windowShouldClose:}.
+   */
+  public final FunctionDescriptor DELEGATE_1_BOOL =
+      FunctionDescriptor.of(C_BOOL, C_POINTER, C_POINTER, C_POINTER);
 
   /** A delegate method with two arguments. */
   public final FunctionDescriptor DELEGATE_2 =

@@ -94,6 +94,14 @@
             "java.lang.foreign.MemorySegment",
             "java.lang.foreign.MemorySegment"
           ]
+        },
+        {
+          "name": "onWindowShouldClose",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
         }
       ]
     },
@@ -343,6 +351,13 @@
           "void*",
           "jboolean"
         ]
+      },
+      {
+        "returnType": "jboolean",
+        "parameterTypes": [
+          "void*",
+          "void*"
+        ]
       }
     ],
     "directUpcalls": [
@@ -447,6 +462,16 @@
         "class": "dev.ivchenko.lwjwae.macos.MacWindow",
         "method": "onEvaluationComplete",
         "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.macos.MacWindow",
+        "method": "onWindowShouldClose",
+        "returnType": "jboolean",
         "parameterTypes": [
           "void*",
           "void*",

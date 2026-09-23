@@ -29,6 +29,8 @@ import lombok.Builder;
  *     call {@link Window#navigate} yourself.
  * @param resource The classpath resource to load after the window exists, the way {@link
  *     Window#loadResource} does, or {@code null}. Wins over {@code url}.
+ * @param closeAction What the window does when the user closes it. Default: {@link
+ *     CloseAction#CLOSE}. {@link Window#closeAction(CloseAction)} changes it later.
  */
 @Builder(toBuilder = true)
 public record WindowParameters(
@@ -39,12 +41,16 @@ public record WindowParameters(
     Integer y,
     boolean centered,
     String url,
-    String resource) {
+    String resource,
+    CloseAction closeAction) {
   private static final String DEFAULT_TITLE = "Application";
   private static final int DEFAULT_WIDTH = 1024;
   private static final int DEFAULT_HEIGHT = 768;
 
   public WindowParameters {
+    if (closeAction == null) {
+      closeAction = CloseAction.CLOSE;
+    }
     if (title == null || title.isBlank()) {
       title = DEFAULT_TITLE;
     }

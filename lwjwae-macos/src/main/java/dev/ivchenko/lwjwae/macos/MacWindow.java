@@ -54,6 +54,14 @@ public class MacWindow extends AbstractWindow {
   private static final CallbackRegistry<PendingEvaluation> PENDING_EVALUATIONS =
       new CallbackRegistry<>();
 
+  private static final MemorySegment ON_WINDOW_SHOULD_CLOSE =
+      NativeLibraries.upcall(
+          MethodHandles.lookup(),
+          MacWindow.class,
+          "onWindowShouldClose",
+          MethodType.methodType(
+              boolean.class, MemorySegment.class, MemorySegment.class, MemorySegment.class),
+          Signatures.DELEGATE_1_BOOL);
   private static final MemorySegment ON_WINDOW_WILL_CLOSE = delegateStub("onWindowWillClose", 1);
   private static final MemorySegment ON_DID_START =
       delegateStub("onDidStartProvisionalNavigation", 2);
@@ -78,6 +86,7 @@ public class MacWindow extends AbstractWindow {
           "LwjwaeDelegate",
           ObjC.cls("NSObject"),
           Map.of(
+              "windowShouldClose:", new MethodStub(ON_WINDOW_SHOULD_CLOSE, "B@:@"),
               "windowWillClose:", new MethodStub(ON_WINDOW_WILL_CLOSE, "v@:@"),
               "webView:didStartProvisionalNavigation:", new MethodStub(ON_DID_START, "v@:@@"),
               "webView:didCommitNavigation:", new MethodStub(ON_DID_COMMIT, "v@:@@"),
@@ -297,6 +306,21 @@ public class MacWindow extends AbstractWindow {
   }
 
   @Override
+  public void requestClose() {
+    this.dispatcher().run(() -> AppKit.performClose(this.window()));
+  }
+
+  @Override
+  public void hide() {
+    this.dispatcher().run(() -> AppKit.hide(this.window()));
+  }
+
+  @Override
+  public boolean isVisible() {
+    return this.dispatcher().call(() -> AppKit.isVisible(this.window()));
+  }
+
+  @Override
   public void close() {
     if (this.isClosed()) {
       return;
@@ -428,6 +452,31 @@ public class MacWindow extends AbstractWindow {
 
   // --- LwjwaeDelegate methods; every one receives self and _cmd first, as Objective-C passes them
   // ---
+
+  /**
+   * The user asked to close the window. {@code NO} cancels the close; with {@link
+   * dev.ivchenko.lwjwae.CloseAction#HIDE}, the window is ordered out instead.
+   *
+   * <p>Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
+   * binds it by name, so no Java code calls it and the compiler sees a dead private method. {@code
+   * resource}: the window is {@code AutoCloseable}, and a lookup that returns it looks like an
+   * unclosed resource. It is not: the application owns the window and closes it, this method only
+   * borrows it.
+   */
+  @SuppressWarnings({"unused", "resource"})
+  private static boolean onWindowShouldClose(
+      MemorySegment self, MemorySegment command, MemorySegment sender) {
+    try {
+      MacWindow window = windowOf(self);
+      if (window != null && window.hidesOnCloseRequest()) {
+        AppKit.hide(window.window);
+        return false;
+      }
+    } catch (Throwable t) {
+      ThrowableUtil.report(t);
+    }
+    return true;
+  }
 
   /**
    * Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that

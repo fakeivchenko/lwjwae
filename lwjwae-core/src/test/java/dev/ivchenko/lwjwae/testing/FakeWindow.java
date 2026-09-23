@@ -182,6 +182,26 @@ public class FakeWindow extends AbstractWindow {
   }
 
   @Override
+  public void hide() {
+    this.shown = false;
+  }
+
+  @Override
+  public boolean isVisible() {
+    return this.shown;
+  }
+
+  /** Plays the part of the close button: hides or closes, as the close action says. */
+  @Override
+  public void requestClose() {
+    if (this.hidesOnCloseRequest()) {
+      this.hide();
+    } else {
+      this.close();
+    }
+  }
+
+  @Override
   public void close() {
     if (!this.isClosed()) {
       this.markClosed();

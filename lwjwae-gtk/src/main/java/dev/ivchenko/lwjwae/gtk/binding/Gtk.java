@@ -58,6 +58,40 @@ public class Gtk {
       NativeLibraries.downcall(GTK, "gtk_widget_show_all", Signatures.VOID_POINTER);
   private final MethodHandle WIDGET_DESTROY =
       NativeLibraries.downcall(GTK, "gtk_widget_destroy", Signatures.VOID_POINTER);
+  private final MethodHandle WIDGET_HIDE =
+      NativeLibraries.downcall(GTK, "gtk_widget_hide", Signatures.VOID_POINTER);
+  private final MethodHandle WIDGET_GET_VISIBLE =
+      NativeLibraries.downcall(GTK, "gtk_widget_get_visible", Signatures.INT_POINTER);
+  private final MethodHandle WINDOW_PRESENT =
+      NativeLibraries.downcall(GTK, "gtk_window_present", Signatures.VOID_POINTER);
+  private final MethodHandle WINDOW_CLOSE =
+      NativeLibraries.downcall(GTK, "gtk_window_close", Signatures.VOID_POINTER);
+  private final MethodHandle WIDGET_SET_SENSITIVE =
+      NativeLibraries.downcall(GTK, "gtk_widget_set_sensitive", Signatures.VOID_POINTER_INT);
+
+  // --- menus, for the tray ---
+  private final MethodHandle MENU_NEW =
+      NativeLibraries.downcall(GTK, "gtk_menu_new", Signatures.POINTER_VOID);
+  private final MethodHandle MENU_ITEM_NEW_WITH_LABEL =
+      NativeLibraries.downcall(GTK, "gtk_menu_item_new_with_label", Signatures.POINTER_POINTER);
+  private final MethodHandle SEPARATOR_MENU_ITEM_NEW =
+      NativeLibraries.downcall(GTK, "gtk_separator_menu_item_new", Signatures.POINTER_VOID);
+  private final MethodHandle MENU_SHELL_APPEND =
+      NativeLibraries.downcall(GTK, "gtk_menu_shell_append", Signatures.VOID_POINTER_POINTER);
+  private final MethodHandle MENU_POPUP_AT_POINTER =
+      NativeLibraries.downcall(GTK, "gtk_menu_popup_at_pointer", Signatures.VOID_POINTER_POINTER);
+
+  // --- GtkStatusIcon: the tray without a StatusNotifier host ---
+  private final MethodHandle STATUS_ICON_NEW_FROM_FILE =
+      NativeLibraries.downcall(GTK, "gtk_status_icon_new_from_file", Signatures.POINTER_POINTER);
+  private final MethodHandle STATUS_ICON_SET_FROM_FILE =
+      NativeLibraries.downcall(
+          GTK, "gtk_status_icon_set_from_file", Signatures.VOID_POINTER_POINTER);
+  private final MethodHandle STATUS_ICON_SET_TOOLTIP_TEXT =
+      NativeLibraries.downcall(
+          GTK, "gtk_status_icon_set_tooltip_text", Signatures.VOID_POINTER_POINTER);
+  private final MethodHandle STATUS_ICON_SET_VISIBLE =
+      NativeLibraries.downcall(GTK, "gtk_status_icon_set_visible", Signatures.VOID_POINTER_INT);
 
   /**
    * Calls {@code gtk_init_check(NULL, NULL)}: initializes GTK on the calling thread, which becomes
@@ -189,5 +223,104 @@ public class Gtk {
   @SneakyThrows
   public void widgetDestroy(MemorySegment widget) {
     WIDGET_DESTROY.invokeExact(widget);
+  }
+
+  /** Calls {@code gtk_widget_hide}: unmaps the widget and keeps it. */
+  @SneakyThrows
+  public void widgetHide(MemorySegment widget) {
+    WIDGET_HIDE.invokeExact(widget);
+  }
+
+  /** Calls {@code gtk_widget_get_visible}: whether the widget is shown, not hidden. */
+  @SneakyThrows
+  public boolean isWidgetVisible(MemorySegment widget) {
+    return (int) WIDGET_GET_VISIBLE.invokeExact(widget) != 0;
+  }
+
+  /**
+   * Calls {@code gtk_window_close}: queues the {@code delete-event} that the close button of the
+   * title bar sends, so the window's own handler decides.
+   */
+  @SneakyThrows
+  public void windowClose(MemorySegment window) {
+    WINDOW_CLOSE.invokeExact(window);
+  }
+
+  /** Calls {@code gtk_window_present}: shows the window and asks the desktop to raise it. */
+  @SneakyThrows
+  public void windowPresent(MemorySegment window) {
+    WINDOW_PRESENT.invokeExact(window);
+  }
+
+  /** Calls {@code gtk_widget_set_sensitive}: an insensitive widget is grayed out. */
+  @SneakyThrows
+  public void widgetSetSensitive(MemorySegment widget, boolean sensitive) {
+    WIDGET_SET_SENSITIVE.invokeExact(widget, sensitive ? 1 : 0);
+  }
+
+  /** Calls {@code gtk_menu_new}. The menu is floating until something takes it. */
+  @SneakyThrows
+  public MemorySegment menuNew() {
+    return (MemorySegment) MENU_NEW.invokeExact();
+  }
+
+  /** Calls {@code gtk_menu_item_new_with_label}. */
+  @SneakyThrows
+  public MemorySegment menuItemNewWithLabel(String label) {
+    try (Arena arena = Arena.ofConfined()) {
+      return (MemorySegment) MENU_ITEM_NEW_WITH_LABEL.invokeExact(arena.allocateFrom(label));
+    }
+  }
+
+  /** Calls {@code gtk_separator_menu_item_new}. */
+  @SneakyThrows
+  public MemorySegment separatorMenuItemNew() {
+    return (MemorySegment) SEPARATOR_MENU_ITEM_NEW.invokeExact();
+  }
+
+  /** Calls {@code gtk_menu_shell_append}: the menu sinks the floating reference of the item. */
+  @SneakyThrows
+  public void menuShellAppend(MemorySegment menu, MemorySegment item) {
+    MENU_SHELL_APPEND.invokeExact(menu, item);
+  }
+
+  /** Calls {@code gtk_menu_popup_at_pointer} for the event being handled. */
+  @SneakyThrows
+  public void menuPopupAtPointer(MemorySegment menu) {
+    MENU_POPUP_AT_POINTER.invokeExact(menu, MemorySegment.NULL);
+  }
+
+  /**
+   * Calls {@code gtk_status_icon_new_from_file}. Deprecated in GTK since 3.14, but still in the
+   * library, and the one tray that works without a StatusNotifier host.
+   */
+  @SneakyThrows
+  public MemorySegment statusIconNewFromFile(String path) {
+    try (Arena arena = Arena.ofConfined()) {
+      return (MemorySegment) STATUS_ICON_NEW_FROM_FILE.invokeExact(arena.allocateFrom(path));
+    }
+  }
+
+  /** Calls {@code gtk_status_icon_set_from_file}. */
+  @SneakyThrows
+  public void statusIconSetFromFile(MemorySegment icon, String path) {
+    try (Arena arena = Arena.ofConfined()) {
+      STATUS_ICON_SET_FROM_FILE.invokeExact(icon, arena.allocateFrom(path));
+    }
+  }
+
+  /** Calls {@code gtk_status_icon_set_tooltip_text}. {@code null} clears the text. */
+  @SneakyThrows
+  public void statusIconSetTooltipText(MemorySegment icon, String text) {
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment value = text == null ? MemorySegment.NULL : arena.allocateFrom(text);
+      STATUS_ICON_SET_TOOLTIP_TEXT.invokeExact(icon, value);
+    }
+  }
+
+  /** Calls {@code gtk_status_icon_set_visible}. */
+  @SneakyThrows
+  public void statusIconSetVisible(MemorySegment icon, boolean visible) {
+    STATUS_ICON_SET_VISIBLE.invokeExact(icon, visible ? 1 : 0);
   }
 }

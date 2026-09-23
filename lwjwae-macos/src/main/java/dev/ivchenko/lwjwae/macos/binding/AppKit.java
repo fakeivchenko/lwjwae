@@ -191,6 +191,24 @@ public class AppKit {
     ObjC.sendVoid(window, "makeKeyAndOrderFront:", MemorySegment.NULL);
   }
 
+  /**
+   * Calls {@code -[NSWindow performClose:]}: what the close button does, including the {@code
+   * windowShouldClose:} question to the delegate.
+   */
+  public void performClose(MemorySegment window) {
+    ObjC.sendVoid(window, "performClose:", MemorySegment.NULL);
+  }
+
+  /** Calls {@code -[NSWindow orderOut:]}: takes the window off the screen and keeps it. */
+  public void hide(MemorySegment window) {
+    ObjC.sendVoid(window, "orderOut:", MemorySegment.NULL);
+  }
+
+  /** Calls {@code -[NSWindow isVisible]}. */
+  public boolean isVisible(MemorySegment window) {
+    return ObjC.sendBool(window, "isVisible");
+  }
+
   /** {@code -[NSWindow close]}. The delegate receives {@code windowWillClose:} synchronously. */
   public void close(MemorySegment window) {
     ObjC.sendVoid(window, "close");

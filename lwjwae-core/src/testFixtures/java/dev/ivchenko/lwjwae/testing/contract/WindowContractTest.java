@@ -1,6 +1,7 @@
 package dev.ivchenko.lwjwae.testing.contract;
 
 import dev.ivchenko.lwjwae.Application;
+import dev.ivchenko.lwjwae.CloseAction;
 import dev.ivchenko.lwjwae.Window;
 import dev.ivchenko.lwjwae.WindowParameters;
 import dev.ivchenko.lwjwae.WindowPosition;
@@ -11,6 +12,7 @@ import dev.ivchenko.lwjwae.testing.Screenshots;
 import dev.ivchenko.lwjwae.testing.Tags;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import java.util.function.BooleanSupplier;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -30,6 +32,49 @@ public abstract class WindowContractTest extends DisplayContractTest {
 
   /** The window class that the application of this backend opens. */
   protected abstract Class<? extends Window> expectedWindowType();
+
+  @Test
+  void hiddenWindowComesBackAndTheCloseActionDecidesTheUsersClose() throws Exception {
+    try (Application application = Application.create()) {
+      Window window =
+          application.open(
+              WindowParameters.builder()
+                  .title("lwjwae :: hide")
+                  .closeAction(CloseAction.HIDE)
+                  .build());
+      window.show();
+      Assertions.assertTrue(window.isVisible());
+      Assertions.assertEquals(CloseAction.HIDE, window.closeAction());
+
+      window.hide();
+      Assertions.assertFalse(window.isVisible());
+      window.show();
+      Assertions.assertTrue(window.isVisible(), "show() brings a hidden window back");
+
+      // What the close button of the title bar does: with HIDE, the window only hides.
+      window.requestClose();
+      awaitTrue(() -> !window.isVisible(), "the user's close hides the window");
+      Assertions.assertFalse(window.isClosed());
+      Assertions.assertEquals(List.of(window), application.windows(), "a hidden window stays open");
+
+      window.show();
+      window.closeAction(CloseAction.CLOSE);
+      window.requestClose();
+      awaitTrue(window::isClosed, "with CLOSE, the user's close closes the window");
+      Assertions.assertTrue(application.windows().isEmpty());
+    }
+  }
+
+  private static void awaitTrue(BooleanSupplier condition, String message)
+      throws InterruptedException {
+    for (int attempt = 0; attempt < 100; attempt++) {
+      if (condition.getAsBoolean()) {
+        return;
+      }
+      Thread.sleep(50);
+    }
+    Assertions.fail(message);
+  }
 
   @Test
   void opensWindowAndRendersPage() throws Exception {
