@@ -45,6 +45,7 @@ public abstract class AbstractWindow implements Window {
   private final long id;
   private final List<Consumer<LoadEvent>> loadListeners = new CopyOnWriteArrayList<>();
   private final Map<String, Function<String, String>> bindings = new ConcurrentHashMap<>();
+  private final Map<String, String> bindingScripts = new ConcurrentHashMap<>();
   private final EventListeners listeners = new EventListeners("lwjwae-events");
 
   private volatile boolean closed;
@@ -331,6 +332,11 @@ public abstract class AbstractWindow implements Window {
     this.bindings.put(name, handler);
 
     String script = BridgeProtocol.bindingScript(name, typed);
+    // The page looks the handler up by name on every call, so a new handler of the same form takes
+    // over without a new script; injecting it again would stack a copy on every document.
+    if (script.equals(this.bindingScripts.put(name, script))) {
+      return;
+    }
     // Once for documents loaded from now on, once for the document already on screen.
     this.injectOnDocumentStart(script);
     this.eval(script);
