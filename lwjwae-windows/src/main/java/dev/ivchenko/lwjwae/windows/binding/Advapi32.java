@@ -9,7 +9,7 @@ import java.util.Optional;
 import lombok.SneakyThrows;
 import lombok.experimental.UtilityClass;
 
-/** Bindings to {@code advapi32.dll}: reading the registry. */
+/** Bindings to {@code advapi32.dll}: reading and writing the registry. */
 @UtilityClass
 public class Advapi32 {
   private final SymbolLookup ADVAPI32 = NativeLibraries.load("advapi32.dll");
@@ -20,9 +20,15 @@ public class Advapi32 {
   /** {@code RRF_RT_REG_SZ}. */
   private final int REG_SZ_ONLY = 0x2;
 
+  /** {@code REG_SZ}. */
+  private final int REG_SZ = 1;
+
   private final int ERROR_SUCCESS = 0;
   private final int BUFFER_CHARS = 2048;
 
+  private final MethodHandle REG_SET_KEY_VALUE =
+      NativeLibraries.downcall(
+          ADVAPI32, "RegSetKeyValueW", Signatures.INT_POINTER_X3_INT_POINTER_INT);
   private final MethodHandle REG_GET_VALUE =
       NativeLibraries.downcall(ADVAPI32, "RegGetValueW", Signatures.INT_POINTER_X3_INT_POINTER_X3);
 
@@ -44,6 +50,31 @@ public class Advapi32 {
                   buffer,
                   size);
       return status == ERROR_SUCCESS ? Optional.of(Wide.read(buffer)) : Optional.empty();
+    }
+  }
+
+  /**
+   * Writes a {@code REG_SZ} value, creating {@code subKey} if it doesn't exist.
+   *
+   * @throws IllegalStateException If the registry refuses the write.
+   */
+  @SneakyThrows
+  public void writeString(MemorySegment root, String subKey, String value, String data) {
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment bytes = Wide.allocate(arena, data);
+      int status =
+          (int)
+              REG_SET_KEY_VALUE.invokeExact(
+                  root,
+                  Wide.allocate(arena, subKey),
+                  Wide.allocate(arena, value),
+                  REG_SZ,
+                  bytes,
+                  (int) bytes.byteSize());
+      if (status != ERROR_SUCCESS) {
+        throw new IllegalStateException(
+            "Could not write " + subKey + "\\" + value + ": error " + status);
+      }
     }
   }
 }

@@ -4,6 +4,7 @@ import dev.ivchenko.lwjwae.foreign.Layouts;
 import java.lang.foreign.AddressLayout;
 import java.lang.foreign.FunctionDescriptor;
 import java.lang.foreign.MemoryLayout;
+import java.lang.foreign.StructLayout;
 import java.lang.foreign.ValueLayout;
 import lombok.experimental.UtilityClass;
 
@@ -97,6 +98,31 @@ public class Signatures {
   /** {@code GUID}: 16 bytes. */
   public final MemoryLayout GUID = MemoryLayout.sequenceLayout(16, Layouts.C_CHAR);
 
+  /**
+   * {@code NOTIFYICONDATAW}, the full structure of Windows Vista and later: 976 bytes on x64. Every
+   * field is declared, padding included, so that {@code cbSize} is the size the shell expects; a
+   * shorter size makes it fall back to an older layout.
+   */
+  public final StructLayout NOTIFYICONDATAW =
+      MemoryLayout.structLayout(
+          C_INT.withName("cbSize"),
+          MemoryLayout.paddingLayout(4),
+          C_POINTER.withName("hWnd"),
+          C_INT.withName("uID"),
+          C_INT.withName("uFlags"),
+          C_INT.withName("uCallbackMessage"),
+          MemoryLayout.paddingLayout(4),
+          C_POINTER.withName("hIcon"),
+          MemoryLayout.sequenceLayout(128, Layouts.C_SHORT).withName("szTip"),
+          C_INT.withName("dwState"),
+          C_INT.withName("dwStateMask"),
+          MemoryLayout.sequenceLayout(256, Layouts.C_SHORT).withName("szInfo"),
+          C_INT.withName("uVersion"),
+          MemoryLayout.sequenceLayout(64, Layouts.C_SHORT).withName("szInfoTitle"),
+          C_INT.withName("dwInfoFlags"),
+          MemoryLayout.sequenceLayout(16, Layouts.C_CHAR).withName("guidItem"),
+          C_POINTER.withName("hBalloonIcon"));
+
   // --- shapes ---
 
   /** {@code void f(T*)}. */
@@ -104,6 +130,31 @@ public class Signatures {
 
   /** {@code int f(void)}. */
   public final FunctionDescriptor INT_VOID = FunctionDescriptor.of(C_INT);
+
+  /** {@code int f(int)}: {@code GetSystemMetrics}. */
+  public final FunctionDescriptor INT_INT = FunctionDescriptor.of(C_INT, C_INT);
+
+  /** {@code int f(int, T*)}: {@code Shell_NotifyIconW}. */
+  public final FunctionDescriptor INT_INT_POINTER = FunctionDescriptor.of(C_INT, C_INT, C_POINTER);
+
+  /** {@code int f(T*, int, long, U*)}: {@code AppendMenuW}. */
+  public final FunctionDescriptor INT_POINTER_INT_LONG_POINTER =
+      FunctionDescriptor.of(C_INT, C_POINTER, C_INT, C_LONG_PTR, C_POINTER);
+
+  /** {@code int f(T*, int, long, long)}: {@code PostMessageW}. */
+  public final FunctionDescriptor INT_POINTER_INT_LONG_LONG =
+      FunctionDescriptor.of(C_INT, C_POINTER, C_INT, C_LONG_PTR, C_LONG_PTR);
+
+  /** {@code int f(T*, int, int, int, int, U*, V*)}: {@code TrackPopupMenu}. */
+  public final FunctionDescriptor INT_POINTER_INT_X4_POINTER_POINTER =
+      FunctionDescriptor.of(C_INT, C_POINTER, C_INT, C_INT, C_INT, C_INT, C_POINTER, C_POINTER);
+
+  /** {@code T* f(void)}: {@code CreatePopupMenu}. */
+  public final FunctionDescriptor POINTER_VOID = FunctionDescriptor.of(C_POINTER);
+
+  /** {@code T* f(U*, int, int, int, int, int, int)}: {@code CreateIconFromResourceEx}. */
+  public final FunctionDescriptor POINTER_POINTER_INT_X6 =
+      FunctionDescriptor.of(C_POINTER, C_POINTER, C_INT, C_INT, C_INT, C_INT, C_INT, C_INT);
 
   /**
    * {@code int f(T*)}: {@code HRESULT (this)}, {@code BOOL f(HWND)}, and {@code ULONG
@@ -156,6 +207,10 @@ public class Signatures {
   public final FunctionDescriptor INT_POINTER_X3_INT_POINTER_X3 =
       FunctionDescriptor.of(
           C_INT, C_POINTER, C_POINTER, C_POINTER, C_INT, C_POINTER, C_POINTER, C_POINTER);
+
+  /** {@code LSTATUS RegSetKeyValueW(HKEY, LPCWSTR, LPCWSTR, DWORD, LPCVOID, DWORD)}. */
+  public final FunctionDescriptor INT_POINTER_X3_INT_POINTER_INT =
+      FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_POINTER, C_INT, C_POINTER, C_INT);
 
   /** {@code int f(T*, U*, int, V*, W*, X*)}: {@code CreateWebResourceResponse}. */
   public final FunctionDescriptor INT_POINTER_POINTER_INT_POINTER_X3 =

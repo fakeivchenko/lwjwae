@@ -1,5 +1,7 @@
 package dev.ivchenko.lwjwae.gtk;
 
+import dev.ivchenko.lwjwae.gtk.binding.AppIndicator;
+import dev.ivchenko.lwjwae.gtk.binding.Dbus;
 import dev.ivchenko.lwjwae.gtk.binding.Gdk;
 import dev.ivchenko.lwjwae.gtk.binding.Glib;
 import dev.ivchenko.lwjwae.gtk.binding.Gtk;
@@ -28,8 +30,12 @@ class GtkNativeImageMetadataTest extends NativeImageMetadataContractTest {
         Gdk.class,
         Gtk.class,
         WebKit.class,
+        AppIndicator.class,
         GtkDispatcher.class,
         GtkWindow.class,
-        GtkApplication.class);
+        GtkApplication.class,
+        GtkTray.class,
+        Dbus.class,
+        GtkNotifier.class);
   }
 }

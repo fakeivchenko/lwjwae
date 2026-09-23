@@ -4,6 +4,10 @@ import dev.ivchenko.lwjwae.bridge.BridgeProtocol;
 import dev.ivchenko.lwjwae.bridge.codec.BridgeCodec;
 import dev.ivchenko.lwjwae.event.Event;
 import dev.ivchenko.lwjwae.event.EventSubscription;
+import dev.ivchenko.lwjwae.notification.Notification;
+import dev.ivchenko.lwjwae.notification.NotificationHandle;
+import dev.ivchenko.lwjwae.tray.Tray;
+import dev.ivchenko.lwjwae.tray.TrayIcon;
 import dev.ivchenko.lwjwae.ui.UiDispatcher;
 import dev.ivchenko.lwjwae.util.ThrowableUtil;
 import java.util.Comparator;
@@ -11,6 +15,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
@@ -24,12 +29,13 @@ import java.util.function.Function;
  * The toolkit-independent half of an application: the window list, the run loop, and the bridge at
  * the application level.
  *
- * <p>A backend supplies the {@link UiDispatcher} and {@link #createWindow}. Everything else lives
- * here so that the three backends agree on what "the application" means: a window that closes, from
- * Java or by the user, leaves the list through {@link AbstractWindow#markClosed()}, and the last
- * one to leave releases {@link #run()}. Nothing here touches the toolkit, because the toolkit keeps
- * running after the application is closed: the dispatcher is a process-wide singleton, and another
- * application can be created on it.
+ * <p>A backend supplies the {@link UiDispatcher}, {@link #createWindow}, and, if it has a tray,
+ * {@link #createTray}. Everything else lives here so that the three backends agree on what "the
+ * application" means: a window that closes, from Java or by the user, leaves the list through
+ * {@link AbstractWindow#markClosed()}, a tray icon leaves its set when it closes, and the last of
+ * either to leave releases {@link #run()}. Nothing here touches the toolkit, because the toolkit
+ * keeps running after the application is closed: the dispatcher is a process-wide singleton, and
+ * another application can be created on it.
  *
  * <p>Application-level bindings are stored as scripts as well as handlers, because a window opened
  * later needs the binding injected into its documents, and only the window knows how. A window that
@@ -39,6 +45,8 @@ public abstract class AbstractApplication implements Application {
   private final UiDispatcher dispatcher;
   private final ApplicationParameters parameters;
   private final Map<Long, AbstractWindow> windows = new ConcurrentHashMap<>();
+  private final Set<Tray> trays = ConcurrentHashMap.newKeySet();
+  private final Set<NotificationHandle> notifications = ConcurrentHashMap.newKeySet();
   private final AtomicLong windowIds = new AtomicLong();
   private final Map<String, BiFunction<Window, String, String>> bindings =
       new ConcurrentHashMap<>();
@@ -88,6 +96,7 @@ public abstract class AbstractApplication implements Application {
     this.checkOpen();
     long id = this.windowIds.incrementAndGet();
     AbstractWindow window = this.createWindow(id, parameters);
+    window.closeAction(parameters.closeAction());
     this.windows.put(id, window);
     // Closed while it was being created: leave the list the way markClosed would have.
     if (this.closed.get()) {
@@ -222,10 +231,81 @@ public abstract class AbstractApplication implements Application {
     this.listeners.deliver(name, payload, typed, window);
   }
 
+  @Override
+  public final Tray tray(TrayIcon icon) {
+    Objects.requireNonNull(icon, "icon");
+    this.checkOpen();
+    Tray tray = this.createTray(icon, this::trayClosed);
+    this.trays.add(tray);
+    // Closed while it was being created: the tray missed the close of quit(), so close it here.
+    if (this.closed.get()) {
+      tray.close();
+      throw new IllegalStateException("The application is closed");
+    }
+    return tray;
+  }
+
+  /**
+   * Puts up the native tray icon. The default throws, for a backend without tray support.
+   *
+   * @param icon What the icon shows and does.
+   * @param closed To run once when the icon goes away, however it goes: the application stops
+   *     counting it for {@link #run()} then.
+   * @throws UnsupportedOperationException If the backend has no tray.
+   */
+  protected Tray createTray(TrayIcon icon, Consumer<Tray> closed) {
+    throw new UnsupportedOperationException("The " + this.engine() + " backend has no tray yet");
+  }
+
+  @Override
+  public final NotificationHandle showNotification(Notification notification) {
+    Objects.requireNonNull(notification, "notification");
+    this.checkOpen();
+    NotificationHandle handle = this.createNotification(notification, this.notifications::remove);
+    this.notifications.add(handle);
+    // Gone before it was added: its callback found nothing to remove, so drop it here.
+    if (handle.isClosed()) {
+      this.notifications.remove(handle);
+    }
+    // Shown while quit() was taking the others back: this one missed it, so take it back here.
+    if (this.closed.get()) {
+      handle.close();
+      throw new IllegalStateException("The application is closed");
+    }
+    return handle;
+  }
+
+  /**
+   * Hands the notification to the desktop. The default throws, for a backend without notifications.
+   *
+   * @param notification What the notification says and offers.
+   * @param closed To run once when the notification goes away, however it goes, so that the
+   *     application stops tracking it.
+   * @throws UnsupportedOperationException If the backend or the desktop can't show notifications.
+   */
+  protected NotificationHandle createNotification(
+      Notification notification, Consumer<NotificationHandle> closed) {
+    throw new UnsupportedOperationException(
+        "The " + this.engine() + " backend has no notifications yet");
+  }
+
   /** Called by a window once its native window is gone. The last one wakes {@link #run()}. */
   final void windowClosed(AbstractWindow window) {
     this.windows.remove(window.id(), window);
-    if (this.windows.isEmpty()) {
+    if (!this.isRunnable()) {
+      this.signalIdle();
+    }
+  }
+
+  /** Whether a tray icon is up: the way back to a window that {@link CloseAction#HIDE} hid. */
+  final boolean hasTrayIcon() {
+    return !this.trays.isEmpty();
+  }
+
+  /** Called by a tray icon once it is gone. The last thing to go wakes {@link #run()}. */
+  private void trayClosed(Tray tray) {
+    this.trays.remove(tray);
+    if (!this.isRunnable()) {
       this.signalIdle();
     }
   }
@@ -245,9 +325,9 @@ public abstract class AbstractApplication implements Application {
     }
   }
 
-  /** Whether {@link #run()} has something to wait for. */
+  /** Whether {@link #run()} has something to wait for: an open window or a tray icon. */
   protected final boolean isRunnable() {
-    return !this.closed.get() && !this.windows.isEmpty();
+    return !this.closed.get() && (!this.windows.isEmpty() || !this.trays.isEmpty());
   }
 
   @Override
@@ -256,6 +336,20 @@ public abstract class AbstractApplication implements Application {
       return;
     }
     this.forEachWindow(AbstractWindow::close);
+    for (Tray tray : List.copyOf(this.trays)) {
+      try {
+        tray.close();
+      } catch (Throwable t) {
+        ThrowableUtil.report(t);
+      }
+    }
+    for (NotificationHandle notification : List.copyOf(this.notifications)) {
+      try {
+        notification.close();
+      } catch (Throwable t) {
+        ThrowableUtil.report(t);
+      }
+    }
     this.listeners.shutdown();
     this.signalIdle();
     this.onClose();

@@ -4,6 +4,10 @@ import dev.ivchenko.lwjwae.bridge.codec.BridgeCodec;
 import dev.ivchenko.lwjwae.event.Event;
 import dev.ivchenko.lwjwae.event.EventSubscription;
 import dev.ivchenko.lwjwae.exception.BackendNotAvailableException;
+import dev.ivchenko.lwjwae.notification.Notification;
+import dev.ivchenko.lwjwae.notification.NotificationHandle;
+import dev.ivchenko.lwjwae.tray.Tray;
+import dev.ivchenko.lwjwae.tray.TrayIcon;
 import dev.ivchenko.lwjwae.util.PlatformUtil;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -222,9 +226,35 @@ public interface Application extends AutoCloseable {
   <T> EventSubscription once(String name, Class<T> type, Consumer<T> listener);
 
   /**
-   * Blocks the calling thread while any window is open, or until {@link #quit()}. Returns at once
-   * when no window is open. A window opened from another thread, or from a page, in the meantime
-   * keeps the application running.
+   * Puts an icon in the system tray, with the menu and the handlers of {@code icon}, and returns
+   * the handle that changes or removes it.
+   *
+   * <p>A tray icon belongs to the application, not to a window: it stays when every window is
+   * closed, and it keeps {@link #run()} running, which is what lets an application live in the tray
+   * with its window hidden or gone. It goes away with {@link Tray#close()} or with the application.
+   *
+   * @throws UnsupportedOperationException If this backend has no tray support yet.
+   * @throws IllegalStateException If the application is closed.
+   */
+  Tray tray(TrayIcon icon);
+
+  /**
+   * Shows a desktop notification and returns the handle that takes it back.
+   *
+   * <p>The notification belongs to the application. It stays when every window is closed, but it
+   * doesn't keep {@link #run()} running, and it goes away with the application, because its buttons
+   * and its {@code onActivate} handler go with it.
+   *
+   * @throws UnsupportedOperationException If this backend has no notifications yet, or the desktop
+   *     has nothing that shows them.
+   * @throws IllegalStateException If the application is closed.
+   */
+  NotificationHandle showNotification(Notification notification);
+
+  /**
+   * Blocks the calling thread while any window is open or any tray icon is up, or until {@link
+   * #quit()}. Returns at once when there is neither. A window opened from another thread, or from a
+   * page, in the meantime keeps the application running.
    *
    * @throws IllegalStateException If called from the UI thread, where blocking would freeze every
    *     window. The macOS backend is the exception: there the main thread runs the application loop
@@ -233,8 +263,8 @@ public interface Application extends AutoCloseable {
   void run();
 
   /**
-   * Closes every window and the application. Every thread blocked in {@link #run()} returns.
-   * Nothing can be opened afterwards. Idempotent.
+   * Closes every window, every tray icon, every notification, and the application. Every thread
+   * blocked in {@link #run()} returns. Nothing can be opened afterwards. Idempotent.
    */
   void quit();
 

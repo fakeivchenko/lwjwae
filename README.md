@@ -69,11 +69,11 @@ that shows every feature on one page.
   without one, such as session 0 on Windows, can't open a window.
 - The window and the engine of the platform:
 
-| Platform | Needs                                                                                                                      |
-|----------|----------------------------------------------------------------------------------------------------------------------------|
+| Platform | Needs                                                                                                                                                            |
+|----------|------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | Linux    | GTK 3 and WebKitGTK 2.40 or newer with the 4.1 API (`libwebkit2gtk-4.1.so.0`). See [`lwjwae-gtk`](lwjwae-gtk#requirements) for the package of each distribution. |
-| Windows  | Windows 10 or 11, x64, with the WebView2 Evergreen runtime. Windows 11 ships it; Edge installs it on Windows 10.           |
-| macOS    | macOS on arm64 or x86_64. AppKit and WebKit are part of the system.                                                       |
+| Windows  | Windows 10 or 11, x64, with the WebView2 Evergreen runtime. Windows 11 ships it; Edge installs it on Windows 10.                                                 |
+| macOS    | macOS on arm64 or x86_64. AppKit and WebKit are part of the system.                                                                                              |
 
 When a backend can't run, `Application.create` throws `BackendNotAvailableException` with the
 reason of every backend it found and, on Linux, the command that installs the missing packages.
@@ -125,6 +125,15 @@ dependencies {
   one called, a listener hears every window, and `emit` reaches every page. Handlers run on virtual
   threads, so a slow one doesn't freeze the window. The protocol is a string, so the core has no
   serialization dependency; a codec adds typed calls with records and objects.
+- **A tray icon, and windows that hide.** `Application.tray(TrayIcon)` puts an icon with a menu in
+  the notification area on Windows, the menu bar on macOS, or the StatusNotifier or XEmbed tray on
+  Linux. With `CloseAction.HIDE`, the close button hides a window instead of closing it while a tray
+  icon is up to bring it back, and `run` keeps going while a tray icon is up, so an application can
+  live in the tray.
+- **Notifications.** `Application.showNotification(Notification)` shows a desktop notification with
+  a title, a body, an image, and buttons, and runs a handler on a click: a toast on Windows,
+  `UNUserNotificationCenter` on macOS for an `.app` bundle, and the `org.freedesktop.Notifications`
+  service on Linux.
 - **Pages from the classpath.** `loadResource("app/index.html")` serves the files of the
   application under a custom scheme, so relative links, stylesheets, scripts, and `fetch` resolve
   as on a web server. During development, `LWJWAE_DEV_SERVER_URL` points every window at a Vite
@@ -139,7 +148,7 @@ dependencies {
 | [`lwjwae-core`](lwjwae-core)       | The API, the bridge, backend discovery, FFM helpers, and the contract tests that every backend runs.        |
 | [`lwjwae-gtk`](lwjwae-gtk)         | The Linux backend.                                                                                          |
 | [`lwjwae-windows`](lwjwae-windows) | The Windows backend. Finds the WebView2 runtime without `WebView2Loader.dll` and talks COM through vtables. |
-| [`lwjwae-macos`](lwjwae-macos)     | The macOS backend. Drives Cocoa through the Objective-C runtime. Unverified on a Mac since the port.        |
+| [`lwjwae-macos`](lwjwae-macos)     | The macOS backend. Drives Cocoa through the Objective-C runtime.                                            |
 
 Each module has a README that walks through what happens on its platform: the UI thread, window
 creation, callbacks, resources, script evaluation, and closing.

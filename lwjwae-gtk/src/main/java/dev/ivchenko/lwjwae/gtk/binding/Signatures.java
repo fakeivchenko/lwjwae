@@ -107,6 +107,22 @@ public class Signatures {
   public final FunctionDescriptor VOID_POINTER_X5 =
       FunctionDescriptor.ofVoid(C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER);
 
+  /** {@code T* f(const gchar*, const gchar*, gint)}: {@code app_indicator_new}. */
+  public final FunctionDescriptor POINTER_POINTER_POINTER_INT =
+      FunctionDescriptor.of(C_POINTER, C_POINTER, C_POINTER, C_INT);
+
+  /** {@code T* f(U*, gsize)}: {@code g_variant_new_tuple}, {@code g_variant_get_child_value}. */
+  public final FunctionDescriptor POINTER_POINTER_LONG =
+      FunctionDescriptor.of(C_POINTER, C_POINTER, C_LONG);
+
+  /** {@code T* f(U*, V*, gsize)}: {@code g_variant_new_array}. */
+  public final FunctionDescriptor POINTER_POINTER_POINTER_LONG =
+      FunctionDescriptor.of(C_POINTER, C_POINTER, C_POINTER, C_LONG);
+
+  /** {@code T* f(gint, U*, V*)}: {@code g_bus_get_sync}. */
+  public final FunctionDescriptor POINTER_INT_POINTER_POINTER =
+      FunctionDescriptor.of(C_POINTER, C_INT, C_POINTER, C_POINTER);
+
   // --- named signatures, too long to describe by shape ---
 
   /**
@@ -115,6 +131,27 @@ public class Signatures {
    */
   public final FunctionDescriptor G_SIGNAL_CONNECT_DATA =
       FunctionDescriptor.of(C_LONG, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_INT);
+
+  /**
+   * {@code GVariant* g_dbus_connection_call_sync(GDBusConnection*, const gchar* bus_name, const
+   * gchar* object_path, const gchar* interface_name, const gchar* method_name, GVariant*
+   * parameters, const GVariantType* reply_type, GDBusCallFlags, gint timeout_msec, GCancellable*,
+   * GError**)}.
+   */
+  public final FunctionDescriptor G_DBUS_CONNECTION_CALL_SYNC =
+      FunctionDescriptor.of(
+          C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER,
+          C_INT, C_INT, C_POINTER, C_POINTER);
+
+  /**
+   * {@code guint g_dbus_connection_signal_subscribe(GDBusConnection*, const gchar* sender, const
+   * gchar* interface_name, const gchar* member, const gchar* object_path, const gchar* arg0,
+   * GDBusSignalFlags, GDBusSignalCallback, gpointer, GDestroyNotify)}.
+   */
+  public final FunctionDescriptor G_DBUS_CONNECTION_SIGNAL_SUBSCRIBE =
+      FunctionDescriptor.of(
+          C_INT, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_INT, C_POINTER,
+          C_POINTER, C_POINTER);
 
   /**
    * {@code WebKitUserScript* webkit_user_script_new(const gchar*, WebKitUserContentInjectedFrames,
@@ -139,8 +176,25 @@ public class Signatures {
   /** {@code void (*GAsyncReadyCallback)(GObject*, GAsyncResult*, gpointer)}. */
   public final FunctionDescriptor G_ASYNC_READY_CALLBACK = VOID_POINTER_POINTER_POINTER;
 
-  /** {@code void (*)(GtkWidget*, gpointer)}: the {@code destroy} signal. */
+  /**
+   * {@code void (*)(GtkWidget*, gpointer)}: the {@code destroy} signal of a window, the {@code
+   * activate} signal of a menu item or a status icon.
+   */
   public final FunctionDescriptor WIDGET_CALLBACK = VOID_POINTER_POINTER;
+
+  /**
+   * {@code gboolean (*)(GtkWidget*, GdkEvent*, gpointer)}: the {@code delete-event} signal of a
+   * window, whose {@code TRUE} cancels the close.
+   */
+  public final FunctionDescriptor DELETE_EVENT_CALLBACK =
+      FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_POINTER);
+
+  /**
+   * {@code void (*)(GtkStatusIcon*, guint button, guint activate_time, gpointer)}: the {@code
+   * popup-menu} signal of a status icon.
+   */
+  public final FunctionDescriptor STATUS_ICON_POPUP_MENU_CALLBACK =
+      FunctionDescriptor.ofVoid(C_POINTER, C_INT, C_INT, C_POINTER);
 
   /**
    * {@code void (*)(WebKitUserContentManager*, WebKitJavascriptResult*, gpointer)}: bridge
@@ -168,4 +222,13 @@ public class Signatures {
    */
   public final FunctionDescriptor LOAD_FAILED_CALLBACK =
       FunctionDescriptor.of(C_INT, C_POINTER, C_INT, C_POINTER, C_POINTER, C_POINTER);
+
+  /**
+   * {@code void GDBusSignalCallback(GDBusConnection*, const gchar* sender_name, const gchar*
+   * object_path, const gchar* interface_name, const gchar* signal_name, GVariant* parameters,
+   * gpointer user_data)}.
+   */
+  public final FunctionDescriptor G_DBUS_SIGNAL_CALLBACK =
+      FunctionDescriptor.ofVoid(
+          C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER);
 }

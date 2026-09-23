@@ -112,6 +112,10 @@ public class Signatures {
   public final FunctionDescriptor MSG_ID_ID =
       FunctionDescriptor.of(C_POINTER, C_POINTER, C_POINTER, C_POINTER);
 
+  /** {@code id -[receiver selector:CGFloat]}. */
+  public final FunctionDescriptor MSG_ID_DOUBLE =
+      FunctionDescriptor.of(C_POINTER, C_POINTER, C_POINTER, C_DOUBLE);
+
   /** {@code id -[receiver selector:BOOL]}. */
   public final FunctionDescriptor MSG_ID_BOOL =
       FunctionDescriptor.of(C_POINTER, C_POINTER, C_POINTER, C_BOOL);
@@ -127,6 +131,9 @@ public class Signatures {
   /** {@code void -[receiver selector:BOOL]}. */
   public final FunctionDescriptor MSG_VOID_BOOL =
       FunctionDescriptor.ofVoid(C_POINTER, C_POINTER, C_BOOL);
+
+  /** {@code BOOL -[receiver selector]}. */
+  public final FunctionDescriptor MSG_BOOL = FunctionDescriptor.of(C_BOOL, C_POINTER, C_POINTER);
 
   /** {@code BOOL -[receiver selector:NSInteger]}. */
   public final FunctionDescriptor MSG_BOOL_LONG =
@@ -169,6 +176,28 @@ public class Signatures {
       FunctionDescriptor.of(
           C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_LONG, C_POINTER);
 
+  /** {@code id -[receiver selector:id selector:id selector:NSUInteger]}. */
+  public final FunctionDescriptor MSG_ID_ID_ID_LONG =
+      FunctionDescriptor.of(C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_LONG);
+
+  /** {@code id -[receiver selector:id selector:id selector:id]}. */
+  public final FunctionDescriptor MSG_ID_ID_ID_ID =
+      FunctionDescriptor.of(C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER);
+
+  /** {@code id -[receiver selector:id selector:id selector:id selector:NSUInteger]}. */
+  public final FunctionDescriptor MSG_ID_ID_ID_ID_LONG =
+      FunctionDescriptor.of(
+          C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_LONG);
+
+  /** {@code id -[receiver selector:id selector:id selector:id error:NSError**]}. */
+  public final FunctionDescriptor MSG_ID_ID_ID_ID_POINTER =
+      FunctionDescriptor.of(
+          C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER);
+
+  /** {@code void -[receiver selector:NSUInteger selector:id]}. */
+  public final FunctionDescriptor MSG_VOID_LONG_ID =
+      FunctionDescriptor.ofVoid(C_POINTER, C_POINTER, C_LONG, C_POINTER);
+
   /**
    * {@code id -[receiver selector:NSRect selector:NSUInteger selector:NSUInteger selector:BOOL]}.
    */
@@ -206,6 +235,13 @@ public class Signatures {
    */
   public final FunctionDescriptor DELEGATE_1 = VOID_POINTER_POINTER_POINTER;
 
+  /**
+   * A delegate method with one argument that answers {@code BOOL}, such as {@code
+   * windowShouldClose:}.
+   */
+  public final FunctionDescriptor DELEGATE_1_BOOL =
+      FunctionDescriptor.of(C_BOOL, C_POINTER, C_POINTER, C_POINTER);
+
   /** A delegate method with two arguments. */
   public final FunctionDescriptor DELEGATE_2 =
       FunctionDescriptor.ofVoid(C_POINTER, C_POINTER, C_POINTER, C_POINTER);
@@ -216,4 +252,19 @@ public class Signatures {
 
   /** {@code void (^)(id result, NSError* error)}. It receives the block itself first. */
   public final FunctionDescriptor COMPLETION_BLOCK = VOID_POINTER_POINTER_POINTER;
+
+  /** {@code void (^)(NSError* error)}. It receives the block itself first. */
+  public final FunctionDescriptor ERROR_BLOCK = DELEGATE_0;
+
+  /** {@code void (^)(BOOL granted, NSError* error)}. It receives the block itself first. */
+  public final FunctionDescriptor AUTHORIZATION_BLOCK =
+      FunctionDescriptor.ofVoid(C_POINTER, C_BOOL, C_POINTER);
+
+  // --- calling a block that the runtime passed in: the invoke function, with the block first ---
+
+  /** {@code void (^)(void)}. */
+  public final FunctionDescriptor CALL_BLOCK = VOID_POINTER;
+
+  /** {@code void (^)(NSUInteger)}. */
+  public final FunctionDescriptor CALL_BLOCK_LONG = FunctionDescriptor.ofVoid(C_POINTER, C_LONG);
 }

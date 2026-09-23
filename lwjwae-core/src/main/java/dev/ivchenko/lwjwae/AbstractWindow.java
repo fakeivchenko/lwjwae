@@ -48,6 +48,7 @@ public abstract class AbstractWindow implements Window {
   private final EventListeners listeners = new EventListeners("lwjwae-events");
 
   private volatile boolean closed;
+  private volatile CloseAction closeAction = CloseAction.CLOSE;
 
   /**
    * Records the owner and the ID. The subclass creates the native window afterwards.
@@ -301,6 +302,27 @@ public abstract class AbstractWindow implements Window {
   @Override
   public final boolean isClosed() {
     return this.closed;
+  }
+
+  @Override
+  public final CloseAction closeAction() {
+    return this.closeAction;
+  }
+
+  @Override
+  public final void closeAction(CloseAction action) {
+    this.closeAction = Objects.requireNonNull(action, "action");
+  }
+
+  /**
+   * Whether a close that the user asked for, from the title bar or the desktop, should hide the
+   * window rather than close it. A backend asks from the handler of that request, on the UI thread,
+   * hides the window itself when the answer is {@code true}, and cancels the close. {@link
+   * CloseAction#HIDE} counts only while the application has a tray icon, the way back to the
+   * window.
+   */
+  protected final boolean hidesOnCloseRequest() {
+    return this.closeAction == CloseAction.HIDE && !this.closed && this.application.hasTrayIcon();
   }
 
   private void publish(String name, Function<String, String> handler, boolean typed) {
