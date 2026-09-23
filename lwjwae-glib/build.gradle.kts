@@ -1,21 +1,21 @@
 plugins {
     id("java-library")
+    id("java-test-fixtures")
     id("maven-publish")
     id("checkstyle")
     id("io.freefair.lombok")
     id("com.diffplug.spotless")
 }
 
-description = "GTK 3 + WebKitGTK 4.1 backend for lwjwae (Linux)."
+description = "GLib, GIO and D-Bus bindings shared by the GTK 3 and GTK 4 backends of lwjwae (Linux)."
 
 dependencies {
     // lwjwae
     api(project(":lwjwae-core"))
-    api(project(":lwjwae-glib"))
 
     // lwjwae test fixtures
+    testFixturesApi(testFixtures(project(":lwjwae-core")))
     testImplementation(testFixtures(project(":lwjwae-core")))
-    testImplementation(testFixtures(project(":lwjwae-glib")))
 
     // JUnit
     testImplementation(platform("org.junit:junit-bom:6.0.0"))

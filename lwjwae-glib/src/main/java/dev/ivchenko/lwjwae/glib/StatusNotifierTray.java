@@ -1,11 +1,11 @@
-package dev.ivchenko.lwjwae.gtk4;
+package dev.ivchenko.lwjwae.glib;
 
 import dev.ivchenko.lwjwae.foreign.CallbackRegistry;
 import dev.ivchenko.lwjwae.foreign.NativeLibraries;
-import dev.ivchenko.lwjwae.gtk4.binding.Dbus;
-import dev.ivchenko.lwjwae.gtk4.binding.Gdk;
-import dev.ivchenko.lwjwae.gtk4.binding.Pixmap;
-import dev.ivchenko.lwjwae.gtk4.binding.Signatures;
+import dev.ivchenko.lwjwae.glib.binding.Dbus;
+import dev.ivchenko.lwjwae.glib.binding.GdkPixbuf;
+import dev.ivchenko.lwjwae.glib.binding.Pixmap;
+import dev.ivchenko.lwjwae.glib.binding.Signatures;
 import dev.ivchenko.lwjwae.tray.Tray;
 import dev.ivchenko.lwjwae.tray.TrayIcon;
 import dev.ivchenko.lwjwae.tray.TrayMenuItem;
@@ -22,12 +22,13 @@ import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 /**
- * A tray icon on Linux under GTK 4: a StatusNotifierItem with a dbusmenu, served by the backend
- * itself over D-Bus.
+ * A tray icon on Linux: a StatusNotifierItem with a dbusmenu, served by the backend itself over
+ * D-Bus, with no toolkit involved.
  *
- * <p>GTK 4 has no tray of its own. {@code GtkStatusIcon} is gone, and libappindicator links GTK 3,
- * which can't share a process with GTK 4. What a panel talks to, though, is only D-Bus: KDE, GNOME
- * with its AppIndicator extension, and most other panels read an object with the {@code
+ * <p>GTK 4 has no tray of its own: {@code GtkStatusIcon} is gone, and libappindicator links GTK 3,
+ * which can't share a process with GTK 4. Under GTK 3, libappindicator may be missing, and {@code
+ * GtkStatusIcon} needs X11. What a panel talks to, though, is only D-Bus: KDE, GNOME with its
+ * AppIndicator extension, and most other panels read an object with the {@code
  * org.kde.StatusNotifierItem} interface for the icon and one with {@code com.canonical.dbusmenu}
  * for the menu. The tray exports both through GDBus, which ships with GLib, and registers the item
  * with the {@code org.kde.StatusNotifierWatcher} of the session.
@@ -42,14 +43,14 @@ import java.util.function.Supplier;
  * <p>The image goes to the panel as pixels, in {@code IconPixmap}, with an empty {@code IconName}.
  * A name would be looked up in the icon theme first, and a theme that has no icon of that name
  * falls back by cutting the name at its dashes: KDE drew {@code image-1} as the generic {@code
- * image} icon. GDK decodes the PNG, and {@link Gdk#argb32} turns the pixels into the ARGB32 in
- * network byte order that the specification asks for.
+ * image} icon. {@link GdkPixbuf#argb32} decodes the PNG into the ARGB32 in network byte order that
+ * the specification asks for.
  *
  * <p>A primary click reaches {@code Activate}, which runs {@link TrayIcon#onActivate()}. Without
  * that handler, the item says it is only a menu ({@code ItemIsMenu}), and the panel opens the menu
  * on any click. Menu entries have the IDs 1 and up in their order; the root of the layout is 0.
  */
-public class Gtk4Tray implements Tray {
+public class StatusNotifierTray implements Tray {
   private static final String ITEM_INTERFACE = "org.kde.StatusNotifierItem";
   private static final String MENU_INTERFACE = "com.canonical.dbusmenu";
   private static final String ITEM_PATH = "/StatusNotifierItem";
@@ -153,13 +154,13 @@ public class Gtk4Tray implements Tray {
       </node>
       """;
 
-  private static final CallbackRegistry<Gtk4Tray> TRAYS = new CallbackRegistry<>();
+  private static final CallbackRegistry<StatusNotifierTray> TRAYS = new CallbackRegistry<>();
   private static final AtomicInteger IDS = new AtomicInteger();
 
   private static final MemorySegment ON_METHOD_CALL =
       NativeLibraries.upcall(
           MethodHandles.lookup(),
-          Gtk4Tray.class,
+          StatusNotifierTray.class,
           "onMethodCall",
           MethodType.methodType(
               void.class,
@@ -175,7 +176,7 @@ public class Gtk4Tray implements Tray {
   private static final MemorySegment ON_GET_PROPERTY =
       NativeLibraries.upcall(
           MethodHandles.lookup(),
-          Gtk4Tray.class,
+          StatusNotifierTray.class,
           "onGetProperty",
           MethodType.methodType(
               MemorySegment.class,
@@ -212,16 +213,16 @@ public class Gtk4Tray implements Tray {
    *
    * @param closed Told once, when the icon goes away, so that the application stops counting it.
    * @throws UnsupportedOperationException If the session has no bus or no StatusNotifier host.
-   * @throws IllegalArgumentException If GDK can't read the image.
+   * @throws IllegalArgumentException If gdk-pixbuf can't read the image.
    */
-  Gtk4Tray(UiDispatcher dispatcher, TrayIcon icon, Consumer<Tray> closed) {
+  public StatusNotifierTray(UiDispatcher dispatcher, TrayIcon icon, Consumer<Tray> closed) {
     this.dispatcher = dispatcher;
     this.closedCallback = closed;
     this.name = "lwjwae-tray-" + ProcessHandle.current().pid() + "-" + IDS.incrementAndGet();
     this.onActivate = icon.onActivate();
     this.tooltip = icon.tooltip();
     this.menu = icon.menu();
-    this.pixmap = Gdk.argb32(icon.icon());
+    this.pixmap = GdkPixbuf.argb32(icon.icon());
     this.callbackId = TRAYS.register(this);
     try {
       this.dispatcher.run(this::export);
@@ -308,16 +309,16 @@ public class Gtk4Tray implements Tray {
   @Override
   public void icon(byte[] png) {
     this.checkOpen();
-    this.pixmap = Gdk.argb32(png);
-    this.emit(ITEM_PATH, ITEM_INTERFACE, "NewIcon", Gtk4Tray::noArguments);
+    this.pixmap = GdkPixbuf.argb32(png);
+    this.emit(ITEM_PATH, ITEM_INTERFACE, "NewIcon", StatusNotifierTray::noArguments);
   }
 
   @Override
   public void tooltip(String tooltip) {
     this.checkOpen();
     this.tooltip = tooltip;
-    this.emit(ITEM_PATH, ITEM_INTERFACE, "NewToolTip", Gtk4Tray::noArguments);
-    this.emit(ITEM_PATH, ITEM_INTERFACE, "NewTitle", Gtk4Tray::noArguments);
+    this.emit(ITEM_PATH, ITEM_INTERFACE, "NewToolTip", StatusNotifierTray::noArguments);
+    this.emit(ITEM_PATH, ITEM_INTERFACE, "NewTitle", StatusNotifierTray::noArguments);
   }
 
   @Override
@@ -349,12 +350,12 @@ public class Gtk4Tray implements Tray {
   }
 
   /** Clicks menu entry {@code index}, as the panel does. For tests: no test can click a panel. */
-  void simulateMenuClick(int index) {
+  public void simulateMenuClick(int index) {
     this.dispatcher.run(() -> this.menuEvent(index + 1, "clicked"));
   }
 
   /** Clicks the icon with the primary button, as the panel does. For tests. */
-  void simulateActivate() {
+  public void simulateActivate() {
     this.dispatcher.run(() -> HandlerUtil.runOffTheUiThread(this.onActivate));
   }
 
@@ -572,7 +573,7 @@ public class Gtk4Tray implements Tray {
       MemorySegment invocation,
       MemorySegment userData) {
     try {
-      Gtk4Tray tray = TRAYS.lookup(userData);
+      StatusNotifierTray tray = TRAYS.lookup(userData);
       String method = NativeLibraries.string(methodName);
       if (tray == null) {
         Dbus.returnValue(invocation, Dbus.tuple(List.of()));
@@ -603,7 +604,7 @@ public class Gtk4Tray implements Tray {
       MemorySegment error,
       MemorySegment userData) {
     try {
-      Gtk4Tray tray = TRAYS.lookup(userData);
+      StatusNotifierTray tray = TRAYS.lookup(userData);
       if (tray == null) {
         return MemorySegment.NULL;
       }

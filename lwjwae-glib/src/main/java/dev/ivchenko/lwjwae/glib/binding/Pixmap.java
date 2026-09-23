@@ -1,4 +1,4 @@
-package dev.ivchenko.lwjwae.gtk4.binding;
+package dev.ivchenko.lwjwae.glib.binding;
 
 /**
  * An image as rows of ARGB32 pixels in network byte order, the {@code (iiay)} of a

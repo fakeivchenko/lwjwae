@@ -9,6 +9,7 @@ import java.lang.foreign.FunctionDescriptor;
 import java.lang.foreign.MemoryLayout;
 import java.lang.foreign.StructLayout;
 import java.lang.foreign.ValueLayout;
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -38,16 +39,30 @@ public abstract class NativeImageMetadataContractTest {
   /** Returns every class whose static initializer binds native functions or callbacks. */
   protected abstract List<Class<?>> bindingClasses();
 
+  /**
+   * Returns the metadata of the modules that this one depends on, whose binding classes its own
+   * initialize in passing. {@code native-image} merges the metadata of every JAR file on the class
+   * path, so the stubs of the module are its own metadata and these together. None by default.
+   */
+  protected List<String> inheritedMetadataPaths() {
+    return List.of();
+  }
+
   @Test
   void metadataListsExactlyTheBoundStubs() throws Exception {
     String metadataPath = this.metadataPath();
     // Static initializers bind everything; no window, no toolkit initialization.
     this.bindingClasses().forEach(NativeImageMetadataContractTest::initialize);
 
-    JsonNode foreign = readMetadata(metadataPath).path("foreign");
+    List<JsonNode> sections = new ArrayList<>();
+    sections.add(readMetadata(metadataPath).path("foreign"));
+    for (String inherited : this.inheritedMetadataPaths()) {
+      sections.add(readMetadata(inherited).path("foreign"));
+    }
 
     Set<String> registeredDowncalls =
-        stream(foreign.path("downcalls"))
+        sections.stream()
+            .flatMap(foreign -> stream(foreign.path("downcalls")))
             .map(NativeImageMetadataContractTest::signature)
             .collect(Collectors.toCollection(LinkedHashSet::new));
     Set<String> boundDowncalls =
@@ -60,7 +75,8 @@ public abstract class NativeImageMetadataContractTest {
         "foreign.downcalls in " + metadataPath + " is out of sync with the bindings");
 
     Set<String> registeredUpcalls =
-        stream(foreign.path("directUpcalls"))
+        sections.stream()
+            .flatMap(foreign -> stream(foreign.path("directUpcalls")))
             .map(
                 node ->
                     node.path("class").asText()

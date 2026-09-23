@@ -1,6 +1,8 @@
 package dev.ivchenko.lwjwae.gtk4;
 
 import dev.ivchenko.lwjwae.Application;
+import dev.ivchenko.lwjwae.glib.FakeStatusNotifierWatcher;
+import dev.ivchenko.lwjwae.glib.StatusNotifierTray;
 import dev.ivchenko.lwjwae.testing.Icons;
 import dev.ivchenko.lwjwae.testing.contract.TrayContractTest;
 import dev.ivchenko.lwjwae.tray.Tray;
@@ -21,7 +23,7 @@ class Gtk4TrayTest extends TrayContractTest {
   static void startWatcherWhereThereIsNone() {
     if (PlatformUtil.isUnixDesktop()
         && (System.getenv("DISPLAY") != null || System.getenv("WAYLAND_DISPLAY") != null)) {
-      FakeStatusNotifierWatcher.ensureRunning();
+      FakeStatusNotifierWatcher.ensureRunning(Gtk4Dispatcher.instance());
     }
   }
 
@@ -46,7 +48,7 @@ class Gtk4TrayTest extends TrayContractTest {
                             new TrayMenuItem("Pick", picked::countDown)))
                     .onActivate(activated::countDown)
                     .build())) {
-      Gtk4Tray icon = (Gtk4Tray) tray;
+      StatusNotifierTray icon = (StatusNotifierTray) tray;
       icon.simulateMenuClick(0);
       icon.simulateMenuClick(1);
       icon.simulateMenuClick(2);

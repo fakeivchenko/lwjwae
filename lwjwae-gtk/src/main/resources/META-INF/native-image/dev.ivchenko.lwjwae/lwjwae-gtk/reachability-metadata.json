@@ -1,17 +1,6 @@
 {
   "reflection": [
     {
-      "type": "dev.ivchenko.lwjwae.gtk.GtkDispatcher",
-      "methods": [
-        {
-          "name": "drain",
-          "parameterTypes": [
-            "java.lang.foreign.MemorySegment"
-          ]
-        }
-      ]
-    },
-    {
       "type": "dev.ivchenko.lwjwae.gtk.GtkWindow",
       "methods": [
         {
@@ -107,23 +96,6 @@
           ]
         }
       ]
-    },
-    {
-      "type": "dev.ivchenko.lwjwae.gtk.GtkNotifier",
-      "methods": [
-        {
-          "name": "onSignal",
-          "parameterTypes": [
-            "java.lang.foreign.MemorySegment",
-            "java.lang.foreign.MemorySegment",
-            "java.lang.foreign.MemorySegment",
-            "java.lang.foreign.MemorySegment",
-            "java.lang.foreign.MemorySegment",
-            "java.lang.foreign.MemorySegment",
-            "java.lang.foreign.MemorySegment"
-          ]
-        }
-      ]
     }
   ],
   "resources": [
@@ -134,221 +106,45 @@
   "foreign": {
     "downcalls": [
       {
-        "returnType": "jint",
-        "parameterTypes": [
-          "void*",
-          "void*"
-        ]
-      },
-      {
-        "returnType": "void",
-        "parameterTypes": [
-          "void*",
-          "void*",
-          "jlong",
-          "void*"
-        ]
-      },
-      {
-        "returnType": "void",
-        "parameterTypes": [
-          "void*",
-          "void*",
-          "void*",
-          "void*",
-          "void*"
-        ]
-      },
-      {
-        "returnType": "void",
-        "parameterTypes": [
-          "void*",
-          "void*",
-          "void*"
-        ]
-      },
-      {
-        "returnType": "void",
-        "parameterTypes": [
-          "void*",
-          "jint",
-          "jint"
-        ]
-      },
-      {
-        "returnType": "void",
-        "parameterTypes": [
-          "void*",
-          "jint"
-        ]
-      },
-      {
         "returnType": "void*",
         "parameterTypes": []
-      },
-      {
-        "returnType": "jint",
-        "parameterTypes": [
-          "void*"
-        ]
-      },
-      {
-        "returnType": "void*",
-        "parameterTypes": [
-          "jint",
-          "jint",
-          "void*"
-        ]
-      },
-      {
-        "returnType": "void*",
-        "parameterTypes": [
-          "void*",
-          "jlong",
-          "void*"
-        ]
-      },
-      {
-        "returnType": "void*",
-        "parameterTypes": [
-          "jint"
-        ]
-      },
-      {
-        "returnType": "void*",
-        "parameterTypes": [
-          "jlong"
-        ]
-      },
-      {
-        "returnType": "void",
-        "parameterTypes": [
-          "void*"
-        ]
-      },
-      {
-        "returnType": "void*",
-        "parameterTypes": [
-          "void*",
-          "void*",
-          "void*"
-        ]
-      },
-      {
-        "returnType": "void",
-        "parameterTypes": []
-      },
-      {
-        "returnType": "void*",
-        "parameterTypes": [
-          "void*",
-          "jint",
-          "jint",
-          "void*",
-          "void*"
-        ]
-      },
-      {
-        "returnType": "void",
-        "parameterTypes": [
-          "void*",
-          "void*",
-          "jlong",
-          "void*",
-          "void*",
-          "void*",
-          "void*",
-          "void*"
-        ]
-      },
-      {
-        "returnType": "void",
-        "parameterTypes": [
-          "void*",
-          "void*"
-        ]
-      },
-      {
-        "returnType": "void*",
-        "parameterTypes": [
-          "void*"
-        ]
-      },
-      {
-        "returnType": "jlong",
-        "parameterTypes": [
-          "void*",
-          "void*",
-          "void*",
-          "void*",
-          "void*",
-          "jint"
-        ]
-      },
-      {
-        "returnType": "jint",
-        "parameterTypes": []
-      },
-      {
-        "returnType": "jint",
-        "parameterTypes": [
-          "void*",
-          "jlong"
-        ]
-      },
-      {
-        "returnType": "void*",
-        "parameterTypes": [
-          "void*",
-          "void*"
-        ]
       },
       {
         "returnType": "jlong",
         "parameterTypes": []
       },
       {
-        "returnType": "void*",
+        "returnType": "void",
+        "parameterTypes": []
+      },
+      {
+        "returnType": "void",
         "parameterTypes": [
           "void*",
-          "void*",
+          "jint",
           "jint"
         ]
       },
       {
-        "returnType": "void*",
-        "parameterTypes": [
-          "jint",
-          "void*",
-          "void*"
-        ]
-      },
-      {
-        "returnType": "void*",
+        "returnType": "void",
         "parameterTypes": [
           "void*",
-          "void*",
-          "void*",
-          "void*",
-          "void*",
-          "void*",
-          "void*",
-          "jint",
-          "jint",
           "void*",
           "void*"
         ]
       },
       {
         "returnType": "jint",
+        "parameterTypes": []
+      },
+      {
+        "returnType": "void",
         "parameterTypes": [
           "void*",
           "void*",
+          "jlong",
           "void*",
           "void*",
-          "void*",
-          "void*",
-          "jint",
           "void*",
           "void*",
           "void*"
@@ -358,7 +154,29 @@
         "returnType": "void*",
         "parameterTypes": [
           "void*",
-          "jlong"
+          "jint",
+          "jint",
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "void*",
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "jlong",
+          "void*"
         ]
       },
       {
@@ -366,7 +184,7 @@
         "parameterTypes": [
           "void*",
           "void*",
-          "jlong"
+          "jint"
         ]
       }
     ],
@@ -399,14 +217,6 @@
           "jint",
           "void*",
           "void*",
-          "void*"
-        ]
-      },
-      {
-        "class": "dev.ivchenko.lwjwae.gtk.GtkDispatcher",
-        "method": "drain",
-        "returnType": "jint",
-        "parameterTypes": [
           "void*"
         ]
       },
@@ -485,20 +295,6 @@
         "method": "onDeleteEvent",
         "returnType": "jint",
         "parameterTypes": [
-          "void*",
-          "void*",
-          "void*"
-        ]
-      },
-      {
-        "class": "dev.ivchenko.lwjwae.gtk.GtkNotifier",
-        "method": "onSignal",
-        "returnType": "void",
-        "parameterTypes": [
-          "void*",
-          "void*",
-          "void*",
-          "void*",
           "void*",
           "void*",
           "void*"

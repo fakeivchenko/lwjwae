@@ -1,8 +1,9 @@
-package dev.ivchenko.lwjwae.gtk4;
+package dev.ivchenko.lwjwae.glib;
 
 import dev.ivchenko.lwjwae.foreign.NativeLibraries;
-import dev.ivchenko.lwjwae.gtk4.binding.Dbus;
-import dev.ivchenko.lwjwae.gtk4.binding.Signatures;
+import dev.ivchenko.lwjwae.glib.binding.Dbus;
+import dev.ivchenko.lwjwae.glib.binding.Signatures;
+import dev.ivchenko.lwjwae.ui.UiDispatcher;
 import dev.ivchenko.lwjwae.util.ThrowableUtil;
 import java.lang.foreign.MemorySegment;
 import java.lang.invoke.MethodHandles;
@@ -15,10 +16,10 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * display tests: it accepts every item and lists them, and hosts nothing.
  *
  * <p>On a desktop with a panel, the real watcher owns the name already, and this one never starts,
- * so the tests talk to the panel. Without it, {@link Gtk4Tray} would find no watcher and refuse,
- * and the tray contract couldn't run where no panel is.
+ * so the tests talk to the panel. Without it, {@link StatusNotifierTray} would find no watcher and
+ * refuse, and the tray contract couldn't run where no panel is.
  */
-final class FakeStatusNotifierWatcher {
+public final class FakeStatusNotifierWatcher {
   private static final String NAME = "org.kde.StatusNotifierWatcher";
   private static final String PATH = "/StatusNotifierWatcher";
   private static final String XML =
@@ -72,38 +73,40 @@ final class FakeStatusNotifierWatcher {
 
   private FakeStatusNotifierWatcher() {}
 
-  /** Starts the watcher unless the session has one. Needs a display, for the GTK thread. */
-  static synchronized void ensureRunning() {
+  /**
+   * Starts the watcher unless the session has one. Its calls arrive on the thread of {@code
+   * dispatcher}, which must not be the one that registers the items.
+   */
+  public static synchronized void ensureRunning(UiDispatcher dispatcher) {
     if (started) {
       return;
     }
-    Gtk4Dispatcher.instance()
-        .run(
-            () -> {
-              MemorySegment bus = Dbus.privateSessionBus();
-              if (hasOwner(bus)) {
-                Dbus.close(bus);
-                return;
-              }
-              Dbus.registerObject(
+    dispatcher.run(
+        () -> {
+          MemorySegment bus = Dbus.privateSessionBus();
+          if (hasOwner(bus)) {
+            Dbus.close(bus);
+            return;
+          }
+          Dbus.registerObject(
+              bus,
+              PATH,
+              Dbus.interfaceInfo(XML, NAME),
+              Dbus.vtable(ON_METHOD_CALL, ON_GET_PROPERTY),
+              MemorySegment.NULL);
+          MemorySegment reply =
+              Dbus.call(
                   bus,
-                  PATH,
-                  Dbus.interfaceInfo(XML, NAME),
-                  Dbus.vtable(ON_METHOD_CALL, ON_GET_PROPERTY),
-                  MemorySegment.NULL);
-              MemorySegment reply =
-                  Dbus.call(
-                      bus,
-                      "org.freedesktop.DBus",
-                      "/org/freedesktop/DBus",
-                      "org.freedesktop.DBus",
-                      "RequestName",
-                      Dbus.tuple(List.of(Dbus.string(NAME), Dbus.uint32(0))),
-                      "(u)",
-                      5000);
-              Dbus.unref(reply);
-              // The connection stays open for the rest of the test JVM: that is the watcher.
-            });
+                  "org.freedesktop.DBus",
+                  "/org/freedesktop/DBus",
+                  "org.freedesktop.DBus",
+                  "RequestName",
+                  Dbus.tuple(List.of(Dbus.string(NAME), Dbus.uint32(0))),
+                  "(u)",
+                  5000);
+          Dbus.unref(reply);
+          // The connection stays open for the rest of the test JVM: that is the watcher.
+        });
     started = true;
   }
 

@@ -1,4 +1,4 @@
-package dev.ivchenko.lwjwae.gtk4.binding;
+package dev.ivchenko.lwjwae.glib.binding;
 
 import dev.ivchenko.lwjwae.foreign.NativeLibraries;
 import java.lang.foreign.Arena;

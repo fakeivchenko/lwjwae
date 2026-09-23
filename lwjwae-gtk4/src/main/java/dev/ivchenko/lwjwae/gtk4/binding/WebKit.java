@@ -2,6 +2,7 @@ package dev.ivchenko.lwjwae.gtk4.binding;
 
 import dev.ivchenko.lwjwae.exception.ScriptEvaluationFailedException;
 import dev.ivchenko.lwjwae.foreign.NativeLibraries;
+import dev.ivchenko.lwjwae.glib.binding.Glib;
 import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.SymbolLookup;

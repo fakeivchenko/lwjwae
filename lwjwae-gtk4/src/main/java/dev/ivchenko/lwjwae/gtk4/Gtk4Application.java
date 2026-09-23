@@ -6,7 +6,9 @@ import dev.ivchenko.lwjwae.ApplicationParameters;
 import dev.ivchenko.lwjwae.WindowParameters;
 import dev.ivchenko.lwjwae.exception.ResourceNotFoundException;
 import dev.ivchenko.lwjwae.foreign.NativeLibraries;
-import dev.ivchenko.lwjwae.gtk4.binding.Glib;
+import dev.ivchenko.lwjwae.glib.FreedesktopNotifier;
+import dev.ivchenko.lwjwae.glib.StatusNotifierTray;
+import dev.ivchenko.lwjwae.glib.binding.Glib;
 import dev.ivchenko.lwjwae.gtk4.binding.Signatures;
 import dev.ivchenko.lwjwae.gtk4.binding.WebKit;
 import dev.ivchenko.lwjwae.notification.Notification;
@@ -29,8 +31,8 @@ import java.util.function.Consumer;
  * Gtk4Dispatcher}, and the default web context, which serves {@code app://} for every web view.
  * Both outlive the application, because GTK can't be initialized twice and a web context can't be
  * unregistered, so creating the application only makes sure that they exist. Each window is a
- * {@link Gtk4Window} on that thread, each tray icon a {@link Gtk4Tray}, and each notification a
- * {@link Gtk4Notification}.
+ * {@link Gtk4Window} on that thread, each tray icon a {@link StatusNotifierTray}, and each
+ * notification a {@link dev.ivchenko.lwjwae.glib.FreedesktopNotification}.
  */
 public class Gtk4Application extends AbstractApplication {
   private static final String ERROR_DOMAIN = "lwjwae";
@@ -43,7 +45,7 @@ public class Gtk4Application extends AbstractApplication {
           MethodType.methodType(void.class, MemorySegment.class, MemorySegment.class),
           Signatures.URI_SCHEME_REQUEST_CALLBACK);
 
-  private Gtk4Notifier notifier;
+  private FreedesktopNotifier notifier;
 
   /** Creates an application with {@link ApplicationParameters#createDefault()}. */
   public Gtk4Application() {
@@ -78,7 +80,7 @@ public class Gtk4Application extends AbstractApplication {
 
   @Override
   protected Tray createTray(TrayIcon icon, Consumer<Tray> closed) {
-    return new Gtk4Tray(this.dispatcher(), icon, closed);
+    return new StatusNotifierTray(this.dispatcher(), icon, closed);
   }
 
   @Override
@@ -88,16 +90,16 @@ public class Gtk4Application extends AbstractApplication {
   }
 
   /** The notifier, connected to the bus on the first notification rather than at startup. */
-  private synchronized Gtk4Notifier notifier() {
+  private synchronized FreedesktopNotifier notifier() {
     if (this.notifier == null) {
-      this.notifier = new Gtk4Notifier(this.dispatcher(), this.parameters().name());
+      this.notifier = new FreedesktopNotifier(this.dispatcher(), this.parameters().name());
     }
     return this.notifier;
   }
 
   @Override
   protected void onClose() {
-    Gtk4Notifier current;
+    FreedesktopNotifier current;
     synchronized (this) {
       current = this.notifier;
       this.notifier = null;

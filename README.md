@@ -148,6 +148,7 @@ dependencies {
 | Module                             | Contents                                                                                                    |
 |------------------------------------|-------------------------------------------------------------------------------------------------------------|
 | [`lwjwae-core`](lwjwae-core)       | The API, the bridge, backend discovery, FFM helpers, and the contract tests that every backend runs.        |
+| [`lwjwae-glib`](lwjwae-glib)       | What the two Linux backends share: GLib, GIO and D-Bus bindings, the GLib UI thread, notifications, a tray. |
 | [`lwjwae-gtk`](lwjwae-gtk)         | The Linux backend.                                                                                          |
 | [`lwjwae-gtk4`](lwjwae-gtk4)       | The Linux backend on GTK 4 and WebKitGTK 6.0. Serves its tray over D-Bus itself; can't place windows.       |
 | [`lwjwae-windows`](lwjwae-windows) | The Windows backend. Finds the WebView2 runtime without `WebView2Loader.dll` and talks COM through vtables. |

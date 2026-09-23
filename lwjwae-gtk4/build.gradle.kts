@@ -11,9 +11,11 @@ description = "GTK 4 + WebKitGTK 6.0 backend for lwjwae (Linux)."
 dependencies {
     // lwjwae
     api(project(":lwjwae-core"))
+    api(project(":lwjwae-glib"))
 
     // lwjwae test fixtures
     testImplementation(testFixtures(project(":lwjwae-core")))
+    testImplementation(testFixtures(project(":lwjwae-glib")))
 
     // JUnit
     testImplementation(platform("org.junit:junit-bom:6.0.0"))
