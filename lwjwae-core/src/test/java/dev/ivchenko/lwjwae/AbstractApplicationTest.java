@@ -232,6 +232,21 @@ class AbstractApplicationTest {
   }
 
   @Test
+  void rebindingAnApplicationNameReplacesTheHandlerWithoutInjectingAgain() throws Exception {
+    try (FakeApplication application = new FakeApplication()) {
+      FakeWindow window = application.openFake();
+      application.bind("answer", _ -> "first");
+      application.bind("answer", _ -> "second");
+
+      String binding = BridgeProtocol.bindingScript("answer");
+      Assertions.assertEquals(1, window.injected.stream().filter(binding::equals).count());
+      Assertions.assertEquals(1, window.evaluated.stream().filter(binding::equals).count());
+      window.receive("1" + SEP + "answer" + SEP + "x");
+      window.awaitEvaluation(BridgeProtocol.resolveScript(1, "second"));
+    }
+  }
+
+  @Test
   void typedApplicationBindingsGoThroughTheCodec() throws Exception {
     ApplicationParameters parameters =
         ApplicationParameters.builder().codec(new PointCodec()).build();

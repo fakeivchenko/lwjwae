@@ -413,7 +413,11 @@ public abstract class AbstractApplication implements Application {
     BridgeProtocol.checkIdentifier(name);
     String script = BridgeProtocol.bindingScript(name, typed);
     this.bindings.put(name, handler);
-    this.bindingScripts.put(name, script);
+    // The page looks the handler up by name on every call, so a new handler of the same form takes
+    // over without a new script; injecting it again would stack a copy on every document.
+    if (script.equals(this.bindingScripts.put(name, script))) {
+      return;
+    }
     // Once for documents loaded from now on, once for the document already on screen.
     this.forEachWindow(
         window -> {
