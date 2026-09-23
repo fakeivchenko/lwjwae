@@ -1,21 +1,29 @@
 # syntax=docker/dockerfile:1
 #
-# The Linux CI environment, runnable locally; the build fails if any check fails:
-#
-#   docker buildx build -f Dockerfile.test .
+# The Linux CI environment as an image: Ubuntu 24.04, the JDK, GTK 3 and 4, WebKitGTK 4.1 and 6.0,
+# Xvfb, a session bus, and a notification server. No GPU: everything draws in software.
+# scripts/linux/test-in-docker.sh builds it and runs the tests in it against the working tree.
 
 FROM eclipse-temurin:25-jdk-noble
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libgtk-3-0t64 libwebkit2gtk-4.1-0 libxtst6 xvfb \
+    && apt-get install -y --no-install-recommends \
+        libgtk-3-0t64 libwebkit2gtk-4.1-0 libgtk-4-1 libwebkitgtk-6.0-4 \
+        libxtst6 xvfb dbus-daemon dunst rsync \
     && rm -rf /var/lib/apt/lists/*
 
-# No GPU in a container: keep WebKit on the software path.
+# The environment of the CI job: GTK on X11 for Xvfb, WebKit and GTK 4 on the software path.
 ENV GDK_BACKEND=x11 \
     WEBKIT_DISABLE_DMABUF_RENDERER=1 \
-    WEBKIT_DISABLE_COMPOSITING_MODE=1
+    WEBKIT_DISABLE_COMPOSITING_MODE=1 \
+    GSK_RENDERER=cairo \
+    LIBGL_ALWAYS_SOFTWARE=1 \
+    GRADLE_OPTS=--enable-native-access=ALL-UNNAMED
 
-WORKDIR /src
-COPY . .
-RUN --mount=type=cache,target=/root/.gradle \
-    ./gradlew --no-daemon --console=plain spotlessCheck checkstyleMain checkstyleTest checkstyleTestFixtures test \
-    && xvfb-run -a ./gradlew --no-daemon --console=plain displayTest -Dlwjwae.requireDisplay=true -Dlwjwae.screenshots=true
+# A user of its own, as on CI, with the uid of whoever builds the image, so that the reports that
+# the script copies out belong to them.
+ARG UID=1000
+RUN useradd --create-home --uid "$UID" --non-unique tester \
+    && mkdir -p /work /home/tester/.gradle \
+    && chown tester /work /home/tester/.gradle
+USER tester
+WORKDIR /work

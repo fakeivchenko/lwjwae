@@ -214,10 +214,10 @@ A Checkstyle warning names the file, the line, and the rule. A Spotless failure 
 When the two disagree, that is, the formatter produces something that Checkstyle rejects, the
 Checkstyle rule is wrong: file it rather than working around it.
 
-To reproduce the Linux CI job locally, style checks included:
+To run the style checks in the environment of the Linux CI job:
 
 ```bash
-docker buildx build -f Dockerfile.test .
+scripts/linux/test-in-docker.sh spotlessCheck checkstyleMain checkstyleTest checkstyleTestFixtures
 ```
 
 ## Changing a rule

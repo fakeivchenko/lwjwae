@@ -198,10 +198,15 @@ a Windows VM over SSH for the rest.
 The code follows Google Java Style with a few additions; [docs/CODE_STYLE.md](docs/CODE_STYLE.md)
 lists every rule, the tool that enforces it, and the workflow.
 
-`Dockerfile.test` reproduces the Linux CI job locally, style checks included:
+`scripts/linux/test-in-docker.sh` runs Gradle in the environment of the Linux CI job, from
+`Dockerfile.test`: Ubuntu 24.04 with GTK 3 and 4, a virtual X display, a private session bus with a
+notification server, and software rendering. Without arguments it runs every display test, with
+screenshots; the reports come back to `build/docker/`:
 
 ```bash
-docker buildx build -f Dockerfile.test .
+scripts/linux/test-in-docker.sh
+scripts/linux/test-in-docker.sh check
+scripts/linux/test-in-docker.sh :lwjwae-gtk4:displayTest --tests '*Bridge*'
 ```
 
 ## CI and releases
