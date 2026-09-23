@@ -55,8 +55,8 @@ public class Toasts {
   /** {@code ToastDismissalReason_UserCanceled}. */
   public final int DISMISSED_BY_USER = 0;
 
-  /** {@code ToastDismissalReason_ApplicationHidden}. */
-  public final int DISMISSED_BY_APPLICATION = 1;
+  /** {@code ToastDismissalReason_TimedOut}. */
+  public final int DISMISSED_BY_TIMEOUT = 2;
 
   // IToastNotificationManagerStatics
   private final int MANAGER_CREATE_NOTIFIER_WITH_ID = WinRt.FIRST_SLOT + 1;
@@ -119,8 +119,9 @@ public class Toasts {
     MemorySegment io = null;
     MemorySegment document = null;
     MemorySegment factory = null;
-    MemorySegment content = WinRt.create(xml);
+    MemorySegment content = MemorySegment.NULL;
     try (Arena arena = Arena.ofConfined()) {
+      content = WinRt.create(xml);
       io = WinRt.query(instance, IID_XML_DOCUMENT_IO);
       Com.check("LoadXml", Com.call(io, XML_LOAD_XML, content));
       document = WinRt.query(instance, IID_XML_DOCUMENT);

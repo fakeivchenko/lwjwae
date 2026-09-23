@@ -220,8 +220,9 @@ and [`binding.WinRt`](src/main/java/dev/ivchenko/lwjwae/windows/binding/WinRt.ja
 things COM lacks: `HSTRING`s and `RoGetActivationFactory`. The STA of the UI thread serves both.
 
 Windows files toasts under an AppUserModelID. A plain executable has none, so the notifier registers
-`lwjwae.<name>` under `HKCU\Software\Classes\AppUserModelId`, with the name of the application from
-`ApplicationParameters.name()`, or of the executable, as `DisplayName`. The key stays after the
+`lwjwae.<letters and digits of the name>.<hash of the name>` under `HKCU\Software\Classes\AppUserModelId`, with the name of the application from
+`ApplicationParameters.name()`, or of the main class or the executable, as `DisplayName`. The hash
+keeps apart names that differ only in characters that an ID can't hold, such as Cyrillic ones. The key stays after the
 application exits: Notification Center labels the toasts that are still there with it. Without a
 Start menu shortcut, Windows has no notification setting for the ID yet and `get_Setting` fails with
 `ERROR_NOT_FOUND`; the notifier shows the toast anyway, and a toast that Windows refuses reports its
@@ -231,9 +232,10 @@ The content is `ToastGeneric` XML: the title and the body as two text lines, the
 URI in the `appLogoOverride` placement, and each button as an action with the argument `action-N`.
 A click on the toast itself has the argument `default`. `Activated`, `Dismissed`, and `Failed` fire
 on a thread of the pool, not on the UI thread, so the handlers are agile COM objects: they answer to
-`IAgileObject`, and their reference count is atomic. A toast that times out moves to Notification
-Center, where it can still be clicked, so its handle stays open; a click, a dismissal by the user,
-or `close()` ends it.
+`IAgileObject`, and their reference count is atomic. A toast that times out would move to
+Notification Center and wait there for as long as the application runs, with its handle, its COM
+object, and its image, so the handle takes it back with `Hide` instead; a click, a dismissal by the
+user, a timeout, or `close()` ends it.
 
 ## Closing
 

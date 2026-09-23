@@ -72,6 +72,29 @@ class WindowsNotificationTest extends NotificationContractTest {
   }
 
   @Test
+  void toastThatTimesOutIsTakenBack() {
+    try (Application application = Application.create()) {
+      WindowsNotification notification =
+          (WindowsNotification)
+              application.showNotification(
+                  Notification.builder().title("lwjwae :: timeout").build());
+
+      notification.simulateTimeout();
+      Assertions.assertTrue(notification.isClosed(), "a timed-out toast must not pile up");
+    }
+  }
+
+  @Test
+  void applicationIdsKeepNamesApart() {
+    String notes = WindowsNotifier.idFor("Заметки");
+    String tracker = WindowsNotifier.idFor("Трекер");
+    Assertions.assertNotEquals(notes, tracker, "names in Cyrillic must not share an ID");
+    Assertions.assertTrue(notes.matches("lwjwae\\.[0-9a-f]{8}"), notes);
+    Assertions.assertTrue(
+        WindowsNotifier.idFor("lwjwae demo").matches("lwjwae\\.lwjwae\\.demo\\.[0-9a-f]{8}"));
+  }
+
+  @Test
   void toastXmlEscapesTheText() {
     String xml =
         WindowsNotifier.xml(

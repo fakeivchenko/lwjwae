@@ -262,8 +262,10 @@ public abstract class AbstractApplication implements Application {
     Objects.requireNonNull(notification, "notification");
     this.checkOpen();
     NotificationHandle handle = this.createNotification(notification, this.notifications::remove);
-    if (!handle.isClosed()) {
-      this.notifications.add(handle);
+    this.notifications.add(handle);
+    // Gone before it was added: its callback found nothing to remove, so drop it here.
+    if (handle.isClosed()) {
+      this.notifications.remove(handle);
     }
     // Shown while quit() was taking the others back: this one missed it, so take it back here.
     if (this.closed.get()) {
@@ -293,6 +295,11 @@ public abstract class AbstractApplication implements Application {
     if (!this.isRunnable()) {
       this.signalIdle();
     }
+  }
+
+  /** Whether a tray icon is up: the way back to a window that {@link CloseAction#HIDE} hid. */
+  final boolean hasTrayIcon() {
+    return !this.trays.isEmpty();
   }
 
   /** Called by a tray icon once it is gone. The last thing to go wakes {@link #run()}. */

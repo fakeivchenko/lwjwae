@@ -6,10 +6,14 @@ import dev.ivchenko.lwjwae.Window;
 import dev.ivchenko.lwjwae.WindowParameters;
 import dev.ivchenko.lwjwae.WindowPosition;
 import dev.ivchenko.lwjwae.event.LoadEvent;
+import dev.ivchenko.lwjwae.testing.Icons;
 import dev.ivchenko.lwjwae.testing.Loads;
 import dev.ivchenko.lwjwae.testing.LocalPages;
 import dev.ivchenko.lwjwae.testing.Screenshots;
 import dev.ivchenko.lwjwae.testing.Tags;
+import dev.ivchenko.lwjwae.tray.Tray;
+import dev.ivchenko.lwjwae.tray.TrayIcon;
+import java.awt.Color;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BooleanSupplier;
@@ -35,7 +39,9 @@ public abstract class WindowContractTest extends DisplayContractTest {
 
   @Test
   void hiddenWindowComesBackAndTheCloseActionDecidesTheUsersClose() throws Exception {
-    try (Application application = Application.create()) {
+    // HIDE hides only while a tray icon offers the way back.
+    try (Application application = Application.create();
+        Tray _ = application.tray(TrayIcon.builder().icon(Icons.circle(32, Color.GREEN)).build())) {
       Window window =
           application.open(
               WindowParameters.builder()

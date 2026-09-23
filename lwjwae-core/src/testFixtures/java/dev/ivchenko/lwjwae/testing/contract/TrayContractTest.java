@@ -68,18 +68,18 @@ public abstract class TrayContractTest extends DisplayContractTest {
 
   @Test
   void trayClosesWithItsApplication() {
-    Tray tray;
-    try (Application application = Application.create()) {
-      tray = application.tray(TrayIcon.builder().icon(GREEN).build());
+    try (Application application = Application.create();
+        Tray tray = application.tray(TrayIcon.builder().icon(GREEN).build())) {
       Assertions.assertFalse(tray.isClosed());
+      application.quit();
+      Assertions.assertTrue(tray.isClosed(), "The tray must go away with its application");
     }
-    Assertions.assertTrue(tray.isClosed(), "The tray must go away with its application");
   }
 
   @Test
   void trayKeepsTheApplicationRunningWithoutWindows() throws Exception {
-    try (Application application = Application.create()) {
-      Tray tray = application.tray(TrayIcon.builder().icon(GREEN).build());
+    try (Application application = Application.create();
+        Tray tray = application.tray(TrayIcon.builder().icon(GREEN).build())) {
       CompletableFuture<Void> running = CompletableFuture.runAsync(application::run);
       Thread.sleep(500);
       Assertions.assertFalse(running.isDone(), "a tray icon keeps run() going with no window open");

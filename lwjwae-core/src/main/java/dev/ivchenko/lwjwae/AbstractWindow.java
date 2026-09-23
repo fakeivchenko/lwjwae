@@ -317,10 +317,12 @@ public abstract class AbstractWindow implements Window {
   /**
    * Whether a close that the user asked for, from the title bar or the desktop, should hide the
    * window rather than close it. A backend asks from the handler of that request, on the UI thread,
-   * hides the window itself when the answer is {@code true}, and cancels the close.
+   * hides the window itself when the answer is {@code true}, and cancels the close. {@link
+   * CloseAction#HIDE} counts only while the application has a tray icon, the way back to the
+   * window.
    */
   protected final boolean hidesOnCloseRequest() {
-    return this.closeAction == CloseAction.HIDE && !this.closed;
+    return this.closeAction == CloseAction.HIDE && !this.closed && this.application.hasTrayIcon();
   }
 
   private void publish(String name, Function<String, String> handler, boolean typed) {

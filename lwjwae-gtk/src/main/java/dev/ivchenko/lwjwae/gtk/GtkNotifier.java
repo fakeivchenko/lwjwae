@@ -1,5 +1,6 @@
 package dev.ivchenko.lwjwae.gtk;
 
+import dev.ivchenko.lwjwae.AbstractNotification;
 import dev.ivchenko.lwjwae.foreign.CallbackRegistry;
 import dev.ivchenko.lwjwae.foreign.NativeLibraries;
 import dev.ivchenko.lwjwae.gtk.binding.Dbus;
@@ -9,19 +10,16 @@ import dev.ivchenko.lwjwae.notification.Notification;
 import dev.ivchenko.lwjwae.notification.NotificationAction;
 import dev.ivchenko.lwjwae.notification.NotificationHandle;
 import dev.ivchenko.lwjwae.ui.UiDispatcher;
+import dev.ivchenko.lwjwae.util.TemporaryImages;
 import dev.ivchenko.lwjwae.util.ThrowableUtil;
-import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.lang.foreign.MemorySegment;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 
 /**
@@ -48,11 +46,8 @@ final class GtkNotifier {
   private static final String OBJECT_PATH = "/org/freedesktop/Notifications";
   private static final int CALL_TIMEOUT_MILLIS = 5000;
   private static final int SERVER_DEFAULT_EXPIRY = -1;
-  private static final String DEFAULT_ACTION = "default";
-  private static final String BUTTON_ACTION_PREFIX = "action-";
 
   private static final CallbackRegistry<GtkNotifier> NOTIFIERS = new CallbackRegistry<>();
-  private static final AtomicLong IMAGE_IDS = new AtomicLong();
 
   private static final MemorySegment ON_SIGNAL =
       NativeLibraries.upcall(
@@ -77,7 +72,7 @@ final class GtkNotifier {
 
   private volatile MemorySegment connection;
   private volatile int subscription;
-  private volatile Path directory;
+  private final TemporaryImages images = new TemporaryImages("lwjwae-notifications");
 
   /**
    * Connects to the session bus and subscribes to the signals of the server.
@@ -116,7 +111,7 @@ final class GtkNotifier {
    * @throws UnsupportedOperationException If no server answers on the bus.
    */
   GtkNotification show(Notification notification, Consumer<NotificationHandle> closed) {
-    Path image = notification.icon() == null ? null : this.writeImage(notification.icon());
+    Path image = notification.icon() == null ? null : this.images.write(notification.icon());
     try {
       return this.dispatcher.call(
           () -> {
@@ -126,7 +121,7 @@ final class GtkNotifier {
             return handle;
           });
     } catch (RuntimeException e) {
-      deleteQuietly(image);
+      TemporaryImages.delete(image);
       throw e;
     }
   }
@@ -135,12 +130,12 @@ final class GtkNotifier {
   private int notify(Notification notification, Path image) {
     List<MemorySegment> actions = new ArrayList<>();
     if (notification.onActivate() != null) {
-      actions.add(Dbus.string(DEFAULT_ACTION));
+      actions.add(Dbus.string(AbstractNotification.DEFAULT_ACTION));
       actions.add(Dbus.string(""));
     }
     List<NotificationAction> buttons = notification.actions();
     for (int index = 0; index < buttons.size(); index++) {
-      actions.add(Dbus.string(BUTTON_ACTION_PREFIX + index));
+      actions.add(Dbus.string(AbstractNotification.buttonAction(index)));
       actions.add(Dbus.string(buttons.get(index).label()));
     }
     List<MemorySegment> hints = new ArrayList<>();
@@ -222,22 +217,14 @@ final class GtkNotifier {
             Glib.unref(bus);
           }
         });
-    Path current = this.directory;
-    if (current != null) {
-      deleteQuietly(current);
-    }
+    this.images.deleteAll();
   }
 
-  /** Runs what the server reported for button {@code key} of notification {@code id}. */
+  /** Runs what the server reported for the action {@code key} of notification {@code id}. */
   void actionInvoked(int id, String key) {
     GtkNotification notification = this.shown.get(id);
-    if (notification == null) {
-      return;
-    }
-    if (DEFAULT_ACTION.equals(key)) {
-      notification.activate();
-    } else if (key.startsWith(BUTTON_ACTION_PREFIX)) {
-      notification.pick(Integer.parseInt(key.substring(BUTTON_ACTION_PREFIX.length())));
+    if (notification != null) {
+      notification.invoked(key);
     }
   }
 
@@ -245,7 +232,7 @@ final class GtkNotifier {
   void notificationClosed(int id) {
     GtkNotification notification = this.shown.remove(id);
     if (notification != null) {
-      notification.markClosed();
+      notification.closedByServer();
     }
   }
 
@@ -255,31 +242,6 @@ final class GtkNotifier {
       throw new IllegalStateException("The notifier is closed");
     }
     return bus;
-  }
-
-  private synchronized Path writeImage(byte[] png) {
-    try {
-      if (this.directory == null) {
-        this.directory = Files.createTempDirectory("lwjwae-notifications");
-      }
-      Path file = this.directory.resolve("image-" + IMAGE_IDS.incrementAndGet() + ".png");
-      Files.write(file, png);
-      return file;
-    } catch (IOException e) {
-      throw new UncheckedIOException(e);
-    }
-  }
-
-  /** Deletes a file, or an empty directory. A failure leaves a file in the temporary directory. */
-  static void deleteQuietly(Path path) {
-    if (path == null) {
-      return;
-    }
-    try {
-      Files.deleteIfExists(path);
-    } catch (IOException e) {
-      ThrowableUtil.report(e);
-    }
   }
 
   // --- the signal callback, bound by name from the upcall stub above ---

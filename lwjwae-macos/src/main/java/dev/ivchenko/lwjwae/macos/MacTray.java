@@ -10,6 +10,7 @@ import dev.ivchenko.lwjwae.tray.Tray;
 import dev.ivchenko.lwjwae.tray.TrayIcon;
 import dev.ivchenko.lwjwae.tray.TrayMenuItem;
 import dev.ivchenko.lwjwae.ui.UiDispatcher;
+import dev.ivchenko.lwjwae.util.HandlerUtil;
 import dev.ivchenko.lwjwae.util.ThrowableUtil;
 import java.lang.foreign.MemorySegment;
 import java.lang.invoke.MethodHandles;
@@ -215,7 +216,7 @@ public class MacTray implements Tray {
       return;
     }
     if (!AppKit.isContextClick()) {
-      runOffTheMainThread(this.onActivate);
+      HandlerUtil.runOffTheUiThread(this.onActivate);
       return;
     }
     if (menu != null) {
@@ -232,21 +233,8 @@ public class MacTray implements Tray {
     }
     Runnable action = items.get((int) tag - 1).action();
     if (action != null) {
-      runOffTheMainThread(action);
+      HandlerUtil.runOffTheUiThread(action);
     }
-  }
-
-  /** Runs a handler of the user on a virtual thread, so it may block or call back into the tray. */
-  private static void runOffTheMainThread(Runnable action) {
-    Thread.ofVirtual()
-        .start(
-            () -> {
-              try {
-                action.run();
-              } catch (Throwable t) {
-                ThrowableUtil.report(t);
-              }
-            });
   }
 
   private static MemorySegment actionStub(String method) {

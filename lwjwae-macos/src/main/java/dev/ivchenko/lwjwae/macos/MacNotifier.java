@@ -1,5 +1,6 @@
 package dev.ivchenko.lwjwae.macos;
 
+import dev.ivchenko.lwjwae.AbstractNotification;
 import dev.ivchenko.lwjwae.foreign.CallbackRegistry;
 import dev.ivchenko.lwjwae.foreign.NativeLibraries;
 import dev.ivchenko.lwjwae.macos.binding.Foundation;
@@ -11,14 +12,12 @@ import dev.ivchenko.lwjwae.notification.Notification;
 import dev.ivchenko.lwjwae.notification.NotificationAction;
 import dev.ivchenko.lwjwae.notification.NotificationHandle;
 import dev.ivchenko.lwjwae.ui.UiDispatcher;
+import dev.ivchenko.lwjwae.util.TemporaryImages;
 import dev.ivchenko.lwjwae.util.ThrowableUtil;
-import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -45,20 +44,24 @@ import java.util.function.Consumer;
  * block, and {@link #show} waits for that too, so a refused notification is an exception rather
  * than silence.
  *
- * <p>Buttons come from a category, which the center keeps as one set for the whole application;
- * each notification gets a category of its own, and the notifier sets the whole set again whenever
- * one is added or removed. Each category asks for the dismissal to be reported, which is how a
- * handle learns that the user closed its notification. Clicks and dismissals reach a delegate, an
- * object of a class defined at runtime whose methods are upcall stubs. The delegate also answers
- * {@code willPresentNotification:}, because otherwise macOS doesn't show the notification of an
- * application that is in front, which is exactly when a desktop application sends most of them.
+ * <p>The center, its delegate, and its categories belong to the process, not to one {@link
+ * dev.ivchenko.lwjwae.Application}, so they live in static state that every notifier shares: one
+ * delegate, set once and never cleared, and one table from the identifier of each notification to
+ * its handle. That way two applications in one process don't take the delegate or the categories
+ * from each other. Buttons come from a category; each notification gets a category of its own, and
+ * the whole set is set again whenever one is added or removed. Each category asks for the dismissal
+ * to be reported, which is how a handle learns that the user closed its notification. The delegate
+ * is an object of a class defined at runtime whose methods are upcall stubs. The delegate also
+ * answers {@code willPresentNotification:}, because otherwise macOS doesn't show the notification
+ * of an application that is in front, which is exactly when a desktop application sends most of
+ * them.
  */
 final class MacNotifier {
-  private static final String BUTTON_ACTION_PREFIX = "action-";
   private static final long AUTHORIZATION_TIMEOUT_SECONDS = 120;
   private static final long REQUEST_TIMEOUT_SECONDS = 10;
 
-  private static final Map<Long, MacNotifier> DELEGATES = new ConcurrentHashMap<>();
+  private static final Map<String, MacNotification> SHOWN = new ConcurrentHashMap<>();
+  private static final Map<String, MemorySegment> CATEGORIES = new ConcurrentHashMap<>();
   private static final CallbackRegistry<PendingCompletion<Optional<String>>> PENDING_REQUESTS =
       new CallbackRegistry<>();
   private static final CallbackRegistry<PendingCompletion<Boolean>> PENDING_AUTHORIZATIONS =
@@ -93,17 +96,17 @@ final class MacNotifier {
               "userNotificationCenter:didReceiveNotificationResponse:withCompletionHandler:",
               new MethodStub(ON_DID_RECEIVE_RESPONSE, "v@:@@@?")));
 
+  /** The delegate of the center, created by the first notifier and kept for the process. */
+  private static MemorySegment delegate;
+
   private final UiDispatcher dispatcher;
-  private final Map<String, MacNotification> shown = new ConcurrentHashMap<>();
-  private final Map<String, MemorySegment> categories = new ConcurrentHashMap<>();
+  private final TemporaryImages images = new TemporaryImages("lwjwae-notifications");
 
   private volatile MemorySegment center;
-  private volatile MemorySegment delegate;
   private volatile boolean authorized;
-  private volatile Path directory;
 
   /**
-   * Takes the center of the application and becomes its delegate.
+   * Takes the center of the process and makes sure that it has the delegate.
    *
    * @throws UnsupportedOperationException If the process isn't an application bundle.
    */
@@ -116,13 +119,18 @@ final class MacNotifier {
                 "macOS shows notifications only for an application bundle (.app), and this process"
                     + " isn't one");
           }
-          MemorySegment newDelegate = ObjC.send(ObjC.send(DELEGATE_CLASS, "alloc"), "init");
-          DELEGATES.put(newDelegate.address(), this);
           MemorySegment newCenter = UserNotifications.center();
-          UserNotifications.setDelegate(newCenter, newDelegate);
-          this.delegate = newDelegate;
+          installDelegate(newCenter);
           this.center = newCenter;
         });
+  }
+
+  /** Makes the process-wide delegate the one of {@code center}, once. Runs on the main thread. */
+  private static synchronized void installDelegate(MemorySegment center) {
+    if (delegate == null) {
+      delegate = ObjC.send(ObjC.send(DELEGATE_CLASS, "alloc"), "init");
+      UserNotifications.setDelegate(center, delegate);
+    }
   }
 
   /**
@@ -134,10 +142,10 @@ final class MacNotifier {
   MacNotification show(Notification notification, Consumer<NotificationHandle> closed) {
     this.authorize();
     String identifier = "lwjwae-" + ProcessHandle.current().pid() + "-" + IDS.incrementAndGet();
-    Path image = notification.icon() == null ? null : this.writeImage(notification.icon());
+    Path image = notification.icon() == null ? null : this.images.write(notification.icon());
     MacNotification handle = new MacNotification(this, identifier, notification, image, closed);
     CompletableFuture<Optional<String>> added = new CompletableFuture<>();
-    this.shown.put(identifier, handle);
+    SHOWN.put(identifier, handle);
     try {
       this.dispatcher.run(() -> this.add(identifier, notification, image, added));
       Optional<String> error = added.get(REQUEST_TIMEOUT_SECONDS, TimeUnit.SECONDS);
@@ -147,13 +155,13 @@ final class MacNotifier {
       return handle;
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
-      this.forget(identifier);
+      this.discard(identifier, image);
       throw new IllegalStateException("Interrupted while macOS took the notification", e);
     } catch (ExecutionException | TimeoutException e) {
-      this.forget(identifier);
+      this.discard(identifier, image);
       throw new UnsupportedOperationException("macOS didn't take the notification", e);
     } catch (RuntimeException e) {
-      this.forget(identifier);
+      this.discard(identifier, image);
       throw e;
     }
   }
@@ -168,11 +176,11 @@ final class MacNotifier {
     List<NotificationAction> buttons = notification.actions();
     for (int index = 0; index < buttons.size(); index++) {
       actions.add(
-          UserNotifications.action(BUTTON_ACTION_PREFIX + index, buttons.get(index).label()));
+          UserNotifications.action(
+              AbstractNotification.buttonAction(index), buttons.get(index).label()));
     }
-    this.categories.put(
-        identifier, Foundation.retain(UserNotifications.category(identifier, actions)));
-    UserNotifications.setCategories(this.center(), List.copyOf(this.categories.values()));
+    CATEGORIES.put(identifier, Foundation.retain(UserNotifications.category(identifier, actions)));
+    UserNotifications.setCategories(this.center(), List.copyOf(CATEGORIES.values()));
     MemorySegment content =
         UserNotifications.content(
             notification.title(),
@@ -215,7 +223,7 @@ final class MacNotifier {
     }
   }
 
-  /** Takes {@code notification} off the screen and forgets it. */
+  /** Takes {@code notification} off the screen and out of Notification Center. */
   void withdraw(MacNotification notification) {
     this.dispatcher.run(
         () -> {
@@ -224,61 +232,52 @@ final class MacNotifier {
             UserNotifications.remove(current, notification.identifier());
           }
         });
-    this.forget(notification.identifier());
   }
 
   /** Drops the table entry and the category of {@code identifier}. */
   void forget(String identifier) {
-    this.shown.remove(identifier);
-    MemorySegment category = this.categories.remove(identifier);
+    SHOWN.remove(identifier);
+    MemorySegment category = CATEGORIES.remove(identifier);
     if (category != null) {
       this.dispatcher.run(
           () -> {
             MemorySegment current = this.center;
             if (current != null) {
-              UserNotifications.setCategories(current, List.copyOf(this.categories.values()));
+              UserNotifications.setCategories(current, List.copyOf(CATEGORIES.values()));
             }
             Foundation.release(category);
           });
     }
   }
 
-  /** Stops being the delegate. The notifications must be closed already. */
-  void close() {
-    this.dispatcher.run(
-        () -> {
-          MemorySegment current = this.center;
-          final MemorySegment oldDelegate = this.delegate;
-          this.center = null;
-          this.delegate = null;
-          if (current != null) {
-            UserNotifications.setDelegate(current, MemorySegment.NULL);
-          }
-          if (oldDelegate != null) {
-            DELEGATES.remove(oldDelegate.address());
-            Foundation.release(oldDelegate);
-          }
-        });
-    MacNotification.deleteQuietly(this.directory);
+  /** Undoes a {@link #show} that failed: no handle came out of it to end. */
+  private void discard(String identifier, Path image) {
+    this.forget(identifier);
+    TemporaryImages.delete(image);
   }
 
-  /** What the user did with notification {@code identifier}: {@code action} names the button. */
-  void responded(String identifier, String action) {
-    MacNotification notification = this.shown.get(identifier);
+  /**
+   * Lets go of the center. The notifications must be closed already. The delegate stays: it belongs
+   * to the process, and another application may still be showing notifications through it.
+   */
+  void close() {
+    this.center = null;
+    this.images.deleteAll();
+  }
+
+  /**
+   * What the user did with notification {@code identifier}: {@code action} is the action identifier
+   * of the center, which names the button, the click, or the dismissal.
+   */
+  static void responded(String identifier, String action) {
+    MacNotification notification = SHOWN.get(identifier);
     if (notification == null) {
       return;
     }
-    if (UserNotifications.DEFAULT_ACTION.equals(action)) {
-      notification.activate();
-    } else if (action.startsWith(BUTTON_ACTION_PREFIX)) {
-      try {
-        notification.pick(Integer.parseInt(action.substring(BUTTON_ACTION_PREFIX.length())));
-      } catch (NumberFormatException _) {
-        // Not one of ours: the button IDs are all numbered.
-      }
-    }
-    // Every response ends the notification: macOS takes it away after a click or a dismissal.
-    notification.markClosed();
+    notification.answered(
+        UserNotifications.DEFAULT_ACTION.equals(action)
+            ? AbstractNotification.DEFAULT_ACTION
+            : action);
   }
 
   private MemorySegment center() {
@@ -287,19 +286,6 @@ final class MacNotifier {
       throw new IllegalStateException("The notifier is closed");
     }
     return current;
-  }
-
-  private synchronized Path writeImage(byte[] png) {
-    try {
-      if (this.directory == null) {
-        this.directory = Files.createTempDirectory("lwjwae-notifications");
-      }
-      Path file = this.directory.resolve("image-" + IDS.incrementAndGet() + ".png");
-      Files.write(file, png);
-      return file;
-    } catch (IOException e) {
-      throw new UncheckedIOException(e);
-    }
   }
 
   private static MemorySegment delegateStub(String method) {
@@ -353,12 +339,9 @@ final class MacNotifier {
       MemorySegment response,
       MemorySegment completion) {
     try {
-      MacNotifier notifier = DELEGATES.get(self.address());
-      if (notifier != null) {
-        notifier.responded(
-            UserNotifications.responseNotification(response),
-            UserNotifications.responseAction(response));
-      }
+      responded(
+          UserNotifications.responseNotification(response),
+          UserNotifications.responseAction(response));
     } catch (Throwable t) {
       ThrowableUtil.report(t);
     } finally {

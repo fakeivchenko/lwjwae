@@ -10,6 +10,7 @@ import dev.ivchenko.lwjwae.tray.Tray;
 import dev.ivchenko.lwjwae.tray.TrayIcon;
 import dev.ivchenko.lwjwae.tray.TrayMenuItem;
 import dev.ivchenko.lwjwae.ui.UiDispatcher;
+import dev.ivchenko.lwjwae.util.HandlerUtil;
 import dev.ivchenko.lwjwae.util.ThrowableUtil;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -305,10 +306,7 @@ public class GtkTray implements Tray {
    */
   @SuppressWarnings("unused")
   private static void onMenuItem(MemorySegment item, MemorySegment userData) {
-    Runnable action = ACTIONS.lookup(userData);
-    if (action != null) {
-      Thread.ofVirtual().start(() -> run(action));
-    }
+    HandlerUtil.runOffTheUiThread(ACTIONS.lookup(userData));
   }
 
   /**
@@ -318,8 +316,8 @@ public class GtkTray implements Tray {
   @SuppressWarnings("unused")
   private static void onActivate(MemorySegment icon, MemorySegment userData) {
     GtkTray tray = TRAYS.lookup(userData);
-    if (tray != null && tray.onActivate != null) {
-      Thread.ofVirtual().start(() -> run(tray.onActivate));
+    if (tray != null) {
+      HandlerUtil.runOffTheUiThread(tray.onActivate);
     }
   }
 
@@ -334,14 +332,6 @@ public class GtkTray implements Tray {
     MemorySegment current = tray == null ? null : tray.menu;
     if (current != null) {
       Gtk.menuPopupAtPointer(current);
-    }
-  }
-
-  private static void run(Runnable action) {
-    try {
-      action.run();
-    } catch (Throwable t) {
-      ThrowableUtil.report(t);
     }
   }
 }

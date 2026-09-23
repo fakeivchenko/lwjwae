@@ -63,9 +63,9 @@ class AbstractApplicationTest {
 
   @Test
   void trayIconKeepsRunGoingAfterTheLastWindowAndQuitClosesIt() throws Exception {
-    try (FakeApplication application = new FakeApplication()) {
+    try (FakeApplication application = new FakeApplication();
+        Tray tray = application.tray(TrayIcon.builder().icon(new byte[] {1}).build())) {
       FakeWindow window = application.openFake();
-      final Tray tray = application.tray(TrayIcon.builder().icon(new byte[] {1}).build());
       CompletableFuture<Void> running = CompletableFuture.runAsync(application::run);
 
       window.close();
@@ -111,8 +111,8 @@ class AbstractApplicationTest {
 
   @Test
   void closingTheLastTrayIconWithNoWindowReleasesRun() throws Exception {
-    try (FakeApplication application = new FakeApplication()) {
-      Tray tray = application.tray(TrayIcon.builder().icon(new byte[] {1}).build());
+    try (FakeApplication application = new FakeApplication();
+        Tray tray = application.tray(TrayIcon.builder().icon(new byte[] {1}).build())) {
       CompletableFuture<Void> running = CompletableFuture.runAsync(application::run);
       Thread.sleep(200);
       Assertions.assertFalse(running.isDone());
@@ -125,7 +125,8 @@ class AbstractApplicationTest {
 
   @Test
   void windowThatHidesOnCloseKeepsRunGoingUntilItReallyCloses() throws Exception {
-    try (FakeApplication application = new FakeApplication()) {
+    try (FakeApplication application = new FakeApplication();
+        Tray _ = application.tray(TrayIcon.builder().icon(new byte[] {1}).build())) {
       FakeWindow window =
           application.openFake(WindowParameters.builder().closeAction(CloseAction.HIDE).build());
       window.show();
@@ -139,8 +140,21 @@ class AbstractApplicationTest {
 
       window.closeAction(CloseAction.CLOSE);
       window.requestClose();
-      running.get(5, TimeUnit.SECONDS);
       Assertions.assertTrue(window.isClosed());
+    }
+  }
+
+  @Test
+  void hideWithoutTrayIconClosesTheWindow() throws Exception {
+    try (FakeApplication application = new FakeApplication()) {
+      FakeWindow window =
+          application.openFake(WindowParameters.builder().closeAction(CloseAction.HIDE).build());
+      window.show();
+      CompletableFuture<Void> running = CompletableFuture.runAsync(application::run);
+
+      window.requestClose();
+      running.get(5, TimeUnit.SECONDS);
+      Assertions.assertTrue(window.isClosed(), "with no tray icon, nothing could bring it back");
     }
   }
 

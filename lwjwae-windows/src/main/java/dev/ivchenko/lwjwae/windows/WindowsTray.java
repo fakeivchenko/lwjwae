@@ -6,6 +6,7 @@ import dev.ivchenko.lwjwae.tray.Tray;
 import dev.ivchenko.lwjwae.tray.TrayIcon;
 import dev.ivchenko.lwjwae.tray.TrayMenuItem;
 import dev.ivchenko.lwjwae.ui.UiDispatcher;
+import dev.ivchenko.lwjwae.util.HandlerUtil;
 import dev.ivchenko.lwjwae.util.ThrowableUtil;
 import dev.ivchenko.lwjwae.windows.binding.Shell32;
 import dev.ivchenko.lwjwae.windows.binding.Signatures;
@@ -183,7 +184,7 @@ public class WindowsTray implements Tray {
   /** The primary button: {@link TrayIcon#onActivate()}, or the menu when there is none. */
   private void activate() {
     if (this.onActivate != null) {
-      runOffTheUiThread(this.onActivate);
+      HandlerUtil.runOffTheUiThread(this.onActivate);
     } else {
       this.showMenu();
     }
@@ -218,7 +219,7 @@ public class WindowsTray implements Tray {
       if (picked > 0) {
         Runnable action = items.get(picked - 1).action();
         if (action != null) {
-          runOffTheUiThread(action);
+          HandlerUtil.runOffTheUiThread(action);
         }
       }
     } finally {
@@ -233,19 +234,6 @@ public class WindowsTray implements Tray {
     User32.registerClass(WINDOW_CLASS, TRAY_PROC);
     taskbarCreated = User32.registerMessage("TaskbarCreated");
     windowClassRegistered = true;
-  }
-
-  /** Runs a handler of the user on a virtual thread, so it may block or call back into the tray. */
-  private static void runOffTheUiThread(Runnable action) {
-    Thread.ofVirtual()
-        .start(
-            () -> {
-              try {
-                action.run();
-              } catch (Throwable t) {
-                ThrowableUtil.report(t);
-              }
-            });
   }
 
   // --- the window procedure, bound by name from the upcall stub above; the signature is Win32's

@@ -15,6 +15,11 @@ public enum CloseAction {
    * Hides the window instead, the way an application that lives in the tray keeps its window
    * around. The window stays open, so it keeps {@link Application#run()} going, and {@link
    * Window#show()} brings it back as it was, page and state included.
+   *
+   * <p>The window hides only while the application has a tray icon up, the one way back to a window
+   * that the user can't see; with none, the close button closes the window as {@link #CLOSE} does.
+   * Otherwise the last window would turn into a process that runs on with nothing on screen and
+   * nothing to click.
    */
   HIDE
 }

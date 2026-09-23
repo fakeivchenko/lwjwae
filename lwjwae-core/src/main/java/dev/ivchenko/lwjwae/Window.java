@@ -16,7 +16,8 @@ import java.util.function.Function;
  * application-level counterparts reach every window.
  *
  * <p>A window that the user closes is closed, unless its {@link #closeAction()} is {@link
- * CloseAction#HIDE}: then it is hidden, stays open, and {@link #show()} brings it back.
+ * CloseAction#HIDE} and the application has a tray icon up: then it is hidden, stays open, and
+ * {@link #show()} brings it back.
  *
  * <p>Every method is safe to call from any thread. The backend forwards the call to the UI thread
  * of its toolkit, and a getter blocks until the UI thread has answered. Once the window is closed,
@@ -172,9 +173,10 @@ public interface Window extends AutoCloseable {
 
   /**
    * Asks the window to close the way the user does from its title bar: it closes, or hides when its
-   * {@link #closeAction()} is {@link CloseAction#HIDE}. Returns before the window has done either
-   * on some platforms; {@link #isVisible()} and {@link #isClosed()} tell when it has. Unlike {@link
-   * #close()}, which always closes, this is the one to call from a close button of the page.
+   * {@link #closeAction()} is {@link CloseAction#HIDE} and a tray icon is up. Returns before the
+   * window has done either on some platforms; {@link #isVisible()} and {@link #isClosed()} tell
+   * when it has. Unlike {@link #close()}, which always closes, this is the one to call from a close
+   * button of the page.
    */
   void requestClose();
 

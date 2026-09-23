@@ -127,8 +127,9 @@ dependencies {
   serialization dependency; a codec adds typed calls with records and objects.
 - **A tray icon, and windows that hide.** `Application.tray(TrayIcon)` puts an icon with a menu in
   the notification area on Windows, the menu bar on macOS, or the StatusNotifier or XEmbed tray on
-  Linux. With `CloseAction.HIDE`, the close button hides a window instead of closing it, and `run`
-  keeps going while a tray icon is up, so an application can live in the tray.
+  Linux. With `CloseAction.HIDE`, the close button hides a window instead of closing it while a tray
+  icon is up to bring it back, and `run` keeps going while a tray icon is up, so an application can
+  live in the tray.
 - **Notifications.** `Application.showNotification(Notification)` shows a desktop notification with
   a title, a body, an image, and buttons, and runs a handler on a click: a toast on Windows,
   `UNUserNotificationCenter` on macOS for an `.app` bundle, and the `org.freedesktop.Notifications`
