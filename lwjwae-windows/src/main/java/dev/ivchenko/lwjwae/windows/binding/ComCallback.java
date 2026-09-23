@@ -16,9 +16,15 @@ import java.lang.invoke.VarHandle;
  * <p>Every WebView2 handler has the same shape, {@code IUnknown} plus one {@code Invoke}, and
  * {@code Invoke} has two signatures: {@code (HRESULT, T*)} for completions and {@code (sender,
  * args)} for events. Therefore, the whole backend has exactly two vtables, which every instance
- * shares, and an instance is a 40-byte struct: the vtable pointer, an ID into {@link
- * CallbackRegistry}, a reference count, and the IID that the object answers to. The ID, not the
- * object address, is the key of the registry. The upcall reads the ID from {@code this}.
+ * shares, and an instance is a 48-byte struct: the vtable pointer, an ID into {@link
+ * CallbackRegistry}, a reference count, whether the object is agile, and the IID that it answers
+ * to. The ID, not the object address, is the key of the registry. The upcall reads the ID from
+ * {@code this}.
+ *
+ * <p>An agile object also answers to {@code IAgileObject}, which tells the Windows Runtime that it
+ * may be called from any thread as it is, with no proxy to marshal the call back to the thread that
+ * created it. The toast events need that: they fire on a thread of the pool, and a handler without
+ * a proxy/stub pair couldn't be marshaled back at all. The count is atomic for the same reason.
  *
  * <p>Reference counting is real. WebView2 holds a completion handler only until it fires, and an
  * event handler until the view is closed. When the count reaches zero, the entry is dropped, and
@@ -30,14 +36,20 @@ public class ComCallback {
           Signatures.C_POINTER.withName("vtable"),
           Signatures.C_LONG_PTR.withName("id"),
           Signatures.C_LONG_PTR.withName("references"),
+          Signatures.C_LONG_PTR.withName("agile"),
           Signatures.GUID.withName("iid"));
   private static final VarHandle VTABLE =
       OBJECT.varHandle(MemoryLayout.PathElement.groupElement("vtable"));
   private static final VarHandle ID = OBJECT.varHandle(MemoryLayout.PathElement.groupElement("id"));
   private static final VarHandle REFERENCES =
       OBJECT.varHandle(MemoryLayout.PathElement.groupElement("references"));
+  private static final VarHandle AGILE =
+      OBJECT.varHandle(MemoryLayout.PathElement.groupElement("agile"));
   private static final long IID_OFFSET =
       OBJECT.byteOffset(MemoryLayout.PathElement.groupElement("iid"));
+
+  private static final MemorySegment IID_IAGILE_OBJECT =
+      Com.guid("94ea2b94-e9cc-49e0-c0ff-ee64ca8f5b90");
 
   private static final CallbackRegistry<ComCallback> OBJECTS = new CallbackRegistry<>();
 
@@ -87,13 +99,18 @@ public class ComCallback {
   private final ComEvent event;
 
   private ComCallback(
-      MemorySegment vtable, MemorySegment iid, ComCompletion completion, ComEvent event) {
+      MemorySegment vtable,
+      MemorySegment iid,
+      boolean agile,
+      ComCompletion completion,
+      ComEvent event) {
     this.completion = completion;
     this.event = event;
     this.object = Arena.ofAuto().allocate(OBJECT);
     VTABLE.set(this.object, 0L, vtable);
     ID.set(this.object, 0L, OBJECTS.register(this));
     REFERENCES.set(this.object, 0L, 1L);
+    AGILE.set(this.object, 0L, agile ? 1L : 0L);
     MemorySegment.copy(iid, 0L, this.object, IID_OFFSET, Signatures.GUID.byteSize());
   }
 
@@ -103,7 +120,7 @@ public class ComCallback {
    * WebView2.
    */
   public static MemorySegment completion(MemorySegment iid, ComCompletion handler) {
-    return new ComCallback(COMPLETION_VTABLE, iid, handler, null).object;
+    return new ComCallback(COMPLETION_VTABLE, iid, false, handler, null).object;
   }
 
   /**
@@ -111,7 +128,16 @@ public class ComCallback {
    * ownership rule as for {@link #completion} applies.
    */
   public static MemorySegment event(MemorySegment iid, ComEvent handler) {
-    return new ComCallback(EVENT_VTABLE, iid, null, handler).object;
+    return new ComCallback(EVENT_VTABLE, iid, false, null, handler).object;
+  }
+
+  /**
+   * Creates an event handler that is also agile: the Windows Runtime calls it on whatever thread
+   * the event fires, rather than on the thread that subscribed. The same ownership rule as for
+   * {@link #completion} applies.
+   */
+  public static MemorySegment agileEvent(MemorySegment iid, ComEvent handler) {
+    return new ComCallback(EVENT_VTABLE, iid, true, null, handler).object;
   }
 
   private static MemorySegment vtable(MemorySegment invoke) {
@@ -143,7 +169,10 @@ public class ComCallback {
       MemorySegment object = self.reinterpret(OBJECT.byteSize());
       MemorySegment iid = object.asSlice(IID_OFFSET, Signatures.GUID.byteSize());
       MemorySegment result = out.reinterpret(Signatures.C_POINTER.byteSize());
-      if (Com.sameGuid(riid, Com.IID_IUNKNOWN) || Com.sameGuid(riid, iid)) {
+      boolean agile = (long) AGILE.get(object, 0L) != 0;
+      if (Com.sameGuid(riid, Com.IID_IUNKNOWN)
+          || Com.sameGuid(riid, iid)
+          || (agile && Com.sameGuid(riid, IID_IAGILE_OBJECT))) {
         result.set(Signatures.C_POINTER, 0, self);
         addRef(self);
         return Com.S_OK;
@@ -163,9 +192,7 @@ public class ComCallback {
   @SuppressWarnings("UnusedReturnValue")
   private static int addRef(MemorySegment self) {
     MemorySegment object = self.reinterpret(OBJECT.byteSize());
-    long references = (long) REFERENCES.get(object, 0L) + 1;
-    REFERENCES.set(object, 0L, references);
-    return (int) references;
+    return (int) ((long) REFERENCES.getAndAdd(object, 0L, 1L) + 1);
   }
 
   /**
@@ -176,8 +203,7 @@ public class ComCallback {
   @SuppressWarnings("unused")
   private static int release(MemorySegment self) {
     MemorySegment object = self.reinterpret(OBJECT.byteSize());
-    long references = (long) REFERENCES.get(object, 0L) - 1;
-    REFERENCES.set(object, 0L, references);
+    long references = (long) REFERENCES.getAndAdd(object, 0L, -1L) - 1;
     if (references == 0) {
       OBJECTS.unregister((long) ID.get(object, 0L));
     }

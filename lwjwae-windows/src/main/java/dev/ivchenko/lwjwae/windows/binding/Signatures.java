@@ -208,6 +208,10 @@ public class Signatures {
       FunctionDescriptor.of(
           C_INT, C_POINTER, C_POINTER, C_POINTER, C_INT, C_POINTER, C_POINTER, C_POINTER);
 
+  /** {@code LSTATUS RegSetKeyValueW(HKEY, LPCWSTR, LPCWSTR, DWORD, LPCVOID, DWORD)}. */
+  public final FunctionDescriptor INT_POINTER_X3_INT_POINTER_INT =
+      FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_POINTER, C_INT, C_POINTER, C_INT);
+
   /** {@code int f(T*, U*, int, V*, W*, X*)}: {@code CreateWebResourceResponse}. */
   public final FunctionDescriptor INT_POINTER_POINTER_INT_POINTER_X3 =
       FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_INT, C_POINTER, C_POINTER, C_POINTER);

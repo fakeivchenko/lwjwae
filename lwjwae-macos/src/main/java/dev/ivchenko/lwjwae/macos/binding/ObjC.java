@@ -88,6 +88,18 @@ public class ObjC {
       NativeLibraries.downcall(OBJC, "objc_msgSend", Signatures.MSG_ID_ID_LONG_BOOL);
   private final MethodHandle MSG_ID_ID_LONG_ID =
       NativeLibraries.downcall(OBJC, "objc_msgSend", Signatures.MSG_ID_ID_LONG_ID);
+  private final MethodHandle MSG_ID_ID_ID_LONG =
+      NativeLibraries.downcall(OBJC, "objc_msgSend", Signatures.MSG_ID_ID_ID_LONG);
+  private final MethodHandle MSG_ID_ID_ID_ID =
+      NativeLibraries.downcall(OBJC, "objc_msgSend", Signatures.MSG_ID_ID_ID_ID);
+  private final MethodHandle MSG_ID_ID_ID_ID_LONG =
+      NativeLibraries.downcall(OBJC, "objc_msgSend", Signatures.MSG_ID_ID_ID_ID_LONG);
+  private final MethodHandle MSG_ID_ID_ID_ID_POINTER =
+      NativeLibraries.downcall(OBJC, "objc_msgSend", Signatures.MSG_ID_ID_ID_ID_POINTER);
+  private final MethodHandle MSG_VOID_LONG_ID =
+      NativeLibraries.downcall(OBJC, "objc_msgSend", Signatures.MSG_VOID_LONG_ID);
+  private final MethodHandle CALL_BLOCK = NativeLibraries.downcall(Signatures.CALL_BLOCK);
+  private final MethodHandle CALL_BLOCK_LONG = NativeLibraries.downcall(Signatures.CALL_BLOCK_LONG);
   private final MethodHandle MSG_ID_ID_ID_LONG_ID =
       NativeLibraries.downcall(OBJC, "objc_msgSend", Signatures.MSG_ID_ID_ID_LONG_ID);
   private final MethodHandle MSG_ID_RECT_LONG_LONG_BOOL =
@@ -195,6 +207,23 @@ public class ObjC {
     return block;
   }
 
+  /** Calls a block of type {@code void (^)(void)} that the runtime passed in. */
+  @SneakyThrows
+  public void callBlock(MemorySegment block) {
+    CALL_BLOCK.invokeExact(blockInvoke(block), block);
+  }
+
+  /** Calls a block of type {@code void (^)(NSUInteger)} that the runtime passed in. */
+  @SneakyThrows
+  public void callBlock(MemorySegment block, long argument) {
+    CALL_BLOCK_LONG.invokeExact(blockInvoke(block), block, argument);
+  }
+
+  /** The invoke function of any block literal: the pointer after {@code isa} and the flags. */
+  private MemorySegment blockInvoke(MemorySegment block) {
+    return block.reinterpret(Signatures.BLOCK.byteSize()).get(Signatures.C_POINTER, 16);
+  }
+
   /**
    * The context that a block created by {@link #block} carries. {@code block} is the pointer that
    * the runtime passed.
@@ -244,6 +273,48 @@ public class ObjC {
   }
 
   /**
+   * Sends {@code selector} to {@code receiver}: {@code id -[receiver selector:id:id:NSUInteger]}.
+   */
+  @SneakyThrows
+  public MemorySegment send(
+      MemorySegment receiver,
+      String selector,
+      MemorySegment first,
+      MemorySegment second,
+      long third) {
+    return (MemorySegment)
+        MSG_ID_ID_ID_LONG.invokeExact(receiver, sel(selector), first, second, third);
+  }
+
+  /** Sends {@code selector} to {@code receiver}: {@code id -[receiver selector:id:id:id]}. */
+  @SneakyThrows
+  public MemorySegment send(
+      MemorySegment receiver,
+      String selector,
+      MemorySegment first,
+      MemorySegment second,
+      MemorySegment third) {
+    return (MemorySegment)
+        MSG_ID_ID_ID_ID.invokeExact(receiver, sel(selector), first, second, third);
+  }
+
+  /**
+   * Sends {@code selector} to {@code receiver}: {@code id -[receiver
+   * selector:id:id:id:NSUInteger]}.
+   */
+  @SneakyThrows
+  public MemorySegment send(
+      MemorySegment receiver,
+      String selector,
+      MemorySegment first,
+      MemorySegment second,
+      MemorySegment third,
+      long fourth) {
+    return (MemorySegment)
+        MSG_ID_ID_ID_ID_LONG.invokeExact(receiver, sel(selector), first, second, third, fourth);
+  }
+
+  /**
    * Sends {@code selector} to {@code receiver}: {@code id -[receiver selector:id:NSInteger:BOOL]}.
    */
   @SneakyThrows
@@ -280,6 +351,23 @@ public class ObjC {
       MemorySegment fourth) {
     return (MemorySegment)
         MSG_ID_ID_ID_LONG_ID.invokeExact(receiver, sel(selector), first, second, third, fourth);
+  }
+
+  /**
+   * Sends {@code selector} to {@code receiver}: {@code id -[receiver selector:id:id:id
+   * error:NSError**]}, with {@code NULL} for the error, which the caller learns from the {@code
+   * nil} result.
+   */
+  @SneakyThrows
+  public MemorySegment sendIgnoringError(
+      MemorySegment receiver,
+      String selector,
+      MemorySegment first,
+      MemorySegment second,
+      MemorySegment third) {
+    return (MemorySegment)
+        MSG_ID_ID_ID_ID_POINTER.invokeExact(
+            receiver, sel(selector), first, second, third, MemorySegment.NULL);
   }
 
   /**
@@ -342,6 +430,14 @@ public class ObjC {
   @SneakyThrows
   public void sendVoid(MemorySegment receiver, String selector, long argument) {
     MSG_VOID_LONG.invokeExact(receiver, sel(selector), argument);
+  }
+
+  /**
+   * Sends {@code selector} to {@code receiver}: {@code void -[receiver selector:NSUInteger:id]}.
+   */
+  @SneakyThrows
+  public void sendVoid(MemorySegment receiver, String selector, long first, MemorySegment second) {
+    MSG_VOID_LONG_ID.invokeExact(receiver, sel(selector), first, second);
   }
 
   /** Sends {@code selector} to {@code receiver}: {@code void -[receiver selector:BOOL]}. */

@@ -26,8 +26,17 @@ import org.junit.jupiter.api.Timeout;
 public abstract class NotificationContractTest extends DisplayContractTest {
   private static final byte[] GREEN = Icons.circle(64, new Color(0x34, 0xd3, 0x99));
 
+  /**
+   * Skips a test of the contract where the platform can't show notifications to this process at
+   * all, for a reason that no code of the backend can change, such as macOS for a process outside
+   * an application bundle. Every test of the contract calls it first, and a backend test that needs
+   * a notification calls it too; a test of the refusal itself doesn't. The default assumes nothing.
+   */
+  protected void assumeNotificationsAllowed() {}
+
   @Test
   void desktopTakesEveryPartAndTheHandleTakesItBack() throws Exception {
+    this.assumeNotificationsAllowed();
     try (Application application = Application.create()) {
       NotificationHandle notification =
           application.showNotification(
@@ -52,6 +61,7 @@ public abstract class NotificationContractTest extends DisplayContractTest {
 
   @Test
   void titleAloneIsEnough() {
+    this.assumeNotificationsAllowed();
     try (Application application = Application.create()) {
       NotificationHandle notification =
           application.showNotification(Notification.builder().title("lwjwae :: title").build());
@@ -62,6 +72,7 @@ public abstract class NotificationContractTest extends DisplayContractTest {
 
   @Test
   void notificationGoesWithItsApplication() {
+    this.assumeNotificationsAllowed();
     NotificationHandle notification;
     try (Application application = Application.create()) {
       notification =

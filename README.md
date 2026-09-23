@@ -130,8 +130,9 @@ dependencies {
   Linux. With `CloseAction.HIDE`, the close button hides a window instead of closing it, and `run`
   keeps going while a tray icon is up, so an application can live in the tray.
 - **Notifications.** `Application.showNotification(Notification)` shows a desktop notification with
-  a title, a body, an image, and buttons, and runs a handler on a click. Linux so far, through the
-  `org.freedesktop.Notifications` service that every Linux desktop provides.
+  a title, a body, an image, and buttons, and runs a handler on a click: a toast on Windows,
+  `UNUserNotificationCenter` on macOS for an `.app` bundle, and the `org.freedesktop.Notifications`
+  service on Linux.
 - **Pages from the classpath.** `loadResource("app/index.html")` serves the files of the
   application under a custom scheme, so relative links, stylesheets, scripts, and `fetch` resolve
   as on a web server. During development, `LWJWAE_DEV_SERVER_URL` points every window at a Vite

@@ -5,6 +5,7 @@ import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.SymbolLookup;
 import java.lang.foreign.ValueLayout;
+import java.util.List;
 import lombok.experimental.UtilityClass;
 
 /** Foundation: strings, URLs, data, and errors, converted to and from their Java shapes. */
@@ -64,6 +65,17 @@ public class Foundation {
         string("dev.ivchenko.lwjwae"),
         code,
         userInfo);
+  }
+
+  /** An autoreleased {@code NSArray} of {@code objects}, in order. */
+  public MemorySegment array(List<MemorySegment> objects) {
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment buffer = arena.allocate(Signatures.C_POINTER, Math.max(1, objects.size()));
+      for (int index = 0; index < objects.size(); index++) {
+        buffer.setAtIndex(Signatures.C_POINTER, index, objects.get(index));
+      }
+      return ObjC.send(ObjC.cls("NSArray"), "arrayWithObjects:count:", buffer, objects.size());
+    }
   }
 
   /** {@code -[NSError localizedDescription]}. */
