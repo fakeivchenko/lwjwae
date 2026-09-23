@@ -1,9 +1,13 @@
 package dev.ivchenko.lwjwae.gtk;
 
+import dev.ivchenko.lwjwae.glib.FreedesktopNotifier;
+import dev.ivchenko.lwjwae.glib.GlibDispatcher;
+import dev.ivchenko.lwjwae.glib.StatusNotifierTray;
+import dev.ivchenko.lwjwae.glib.binding.Dbus;
+import dev.ivchenko.lwjwae.glib.binding.GdkPixbuf;
+import dev.ivchenko.lwjwae.glib.binding.Glib;
 import dev.ivchenko.lwjwae.gtk.binding.AppIndicator;
-import dev.ivchenko.lwjwae.gtk.binding.Dbus;
 import dev.ivchenko.lwjwae.gtk.binding.Gdk;
-import dev.ivchenko.lwjwae.gtk.binding.Glib;
 import dev.ivchenko.lwjwae.gtk.binding.Gtk;
 import dev.ivchenko.lwjwae.gtk.binding.WebKit;
 import dev.ivchenko.lwjwae.testing.contract.NativeImageMetadataContractTest;
@@ -24,9 +28,21 @@ class GtkNativeImageMetadataTest extends NativeImageMetadataContractTest {
   }
 
   @Override
+  protected List<String> inheritedMetadataPaths() {
+    return List.of(
+        "META-INF/native-image/dev.ivchenko.lwjwae/lwjwae-glib/reachability-metadata.json");
+  }
+
+  @Override
   protected List<Class<?>> bindingClasses() {
     return List.of(
+        // The GLib module, whose metadata this one inherits.
         Glib.class,
+        Dbus.class,
+        GdkPixbuf.class,
+        GlibDispatcher.class,
+        FreedesktopNotifier.class,
+        StatusNotifierTray.class,
         Gdk.class,
         Gtk.class,
         WebKit.class,
@@ -34,8 +50,6 @@ class GtkNativeImageMetadataTest extends NativeImageMetadataContractTest {
         GtkDispatcher.class,
         GtkWindow.class,
         GtkApplication.class,
-        GtkTray.class,
-        Dbus.class,
-        GtkNotifier.class);
+        GtkTray.class);
   }
 }

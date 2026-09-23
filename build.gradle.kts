@@ -156,8 +156,15 @@ subprojects {
     }
 }
 
+abstract class DisplayService : BuildService<BuildServiceParameters.None>
+
+val display = gradle.sharedServices.registerIfAbsent("display", DisplayService::class) {
+    maxParallelUsages.set(1)
+}
+
 fun Test.configureWindowTest() {
     group = "verification"
+    usesService(display)
     val test = project.extensions.getByType<SourceSetContainer>().named("test").get()
     testClassesDirs = test.output.classesDirs
     classpath = test.runtimeClasspath

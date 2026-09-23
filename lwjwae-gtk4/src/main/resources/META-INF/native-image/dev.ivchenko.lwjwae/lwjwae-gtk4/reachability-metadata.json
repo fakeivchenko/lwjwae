@@ -1,0 +1,235 @@
+{
+  "reflection": [
+    {
+      "type": "dev.ivchenko.lwjwae.gtk4.Gtk4Window",
+      "methods": [
+        {
+          "name": "onDestroy",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
+        },
+        {
+          "name": "onCloseRequest",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
+        },
+        {
+          "name": "onLoadChanged",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "int",
+            "java.lang.foreign.MemorySegment"
+          ]
+        },
+        {
+          "name": "onLoadFailed",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "int",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
+        },
+        {
+          "name": "onContextMenu",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
+        },
+        {
+          "name": "onEvaluationReady",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
+        },
+        {
+          "name": "onBridgeMessage",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "dev.ivchenko.lwjwae.gtk4.Gtk4Application",
+      "methods": [
+        {
+          "name": "onResourceRequest",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
+        }
+      ]
+    }
+  ],
+  "resources": [
+    {
+      "glob": "META-INF/services/dev.ivchenko.lwjwae.BackendProvider"
+    }
+  ],
+  "foreign": {
+    "downcalls": [
+      {
+        "returnType": "jint",
+        "parameterTypes": []
+      },
+      {
+        "returnType": "void*",
+        "parameterTypes": []
+      },
+      {
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "jint",
+          "jint"
+        ]
+      },
+      {
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "jlong",
+          "void*",
+          "void*",
+          "void*",
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "returnType": "void*",
+        "parameterTypes": [
+          "void*",
+          "jint",
+          "jint",
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "void*",
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "jlong",
+          "void*"
+        ]
+      }
+    ],
+    "directUpcalls": [
+      {
+        "class": "dev.ivchenko.lwjwae.gtk4.Gtk4Window",
+        "method": "onDestroy",
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.gtk4.Gtk4Window",
+        "method": "onCloseRequest",
+        "returnType": "jint",
+        "parameterTypes": [
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.gtk4.Gtk4Window",
+        "method": "onLoadChanged",
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "jint",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.gtk4.Gtk4Window",
+        "method": "onLoadFailed",
+        "returnType": "jint",
+        "parameterTypes": [
+          "void*",
+          "jint",
+          "void*",
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.gtk4.Gtk4Window",
+        "method": "onContextMenu",
+        "returnType": "jint",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.gtk4.Gtk4Window",
+        "method": "onEvaluationReady",
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.gtk4.Gtk4Window",
+        "method": "onBridgeMessage",
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.gtk4.Gtk4Application",
+        "method": "onResourceRequest",
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "void*"
+        ]
+      }
+    ]
+  }
+}

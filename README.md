@@ -21,6 +21,7 @@ are the ones that the operating system already has.
 | Platform | Window | Engine        | Module                             | JAR                 | Native Image        |
 |----------|--------|---------------|------------------------------------|---------------------|---------------------|
 | Linux    | GTK 3  | WebKitGTK 4.1 | [`lwjwae-gtk`](lwjwae-gtk)         | <center>✅</center> | <center>✅</center> |
+| Linux    | GTK 4  | WebKitGTK 6.0 | [`lwjwae-gtk4`](lwjwae-gtk4)       | <center>✅</center> | <center>✅</center> |
 | Windows  | Win32  | WebView2      | [`lwjwae-windows`](lwjwae-windows) | <center>✅</center> | <center>✅</center> |
 | macOS    | Cocoa  | WKWebView     | [`lwjwae-macos`](lwjwae-macos)     | <center>✅</center> | <center>✅</center> |
 
@@ -71,7 +72,7 @@ that shows every feature on one page.
 
 | Platform | Needs                                                                                                                                                            |
 |----------|------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Linux    | GTK 3 and WebKitGTK 2.40 or newer with the 4.1 API (`libwebkit2gtk-4.1.so.0`). See [`lwjwae-gtk`](lwjwae-gtk#requirements) for the package of each distribution. |
+| Linux    | GTK 3 and WebKitGTK 2.40 or newer with the 4.1 API (`libwebkit2gtk-4.1.so.0`). See [`lwjwae-gtk`](lwjwae-gtk#requirements) for the package of each distribution. Or GTK 4 and the 6.0 API (`libwebkitgtk-6.0.so.4`) with [`lwjwae-gtk4`](lwjwae-gtk4#requirements), which can't place windows. |
 | Windows  | Windows 10 or 11, x64, with the WebView2 Evergreen runtime. Windows 11 ships it; Edge installs it on Windows 10.                                                 |
 | macOS    | macOS on arm64 or x86_64. AppKit and WebKit are part of the system.                                                                                              |
 
@@ -91,6 +92,7 @@ repositories {
 dependencies {
     implementation("dev.ivchenko.lwjwae:lwjwae-core:VERSION")
     runtimeOnly("dev.ivchenko.lwjwae:lwjwae-gtk:VERSION")
+    runtimeOnly("dev.ivchenko.lwjwae:lwjwae-gtk4:VERSION") // optional: Linux without WebKitGTK 4.1
     runtimeOnly("dev.ivchenko.lwjwae:lwjwae-windows:VERSION")
     runtimeOnly("dev.ivchenko.lwjwae:lwjwae-macos:VERSION")
 }
@@ -146,7 +148,9 @@ dependencies {
 | Module                             | Contents                                                                                                    |
 |------------------------------------|-------------------------------------------------------------------------------------------------------------|
 | [`lwjwae-core`](lwjwae-core)       | The API, the bridge, backend discovery, FFM helpers, and the contract tests that every backend runs.        |
+| [`lwjwae-glib`](lwjwae-glib)       | What the two Linux backends share: GLib, GIO and D-Bus bindings, the GLib UI thread, notifications, a tray. |
 | [`lwjwae-gtk`](lwjwae-gtk)         | The Linux backend.                                                                                          |
+| [`lwjwae-gtk4`](lwjwae-gtk4)       | The Linux backend on GTK 4 and WebKitGTK 6.0. Serves its tray over D-Bus itself; can't place windows.       |
 | [`lwjwae-windows`](lwjwae-windows) | The Windows backend. Finds the WebView2 runtime without `WebView2Loader.dll` and talks COM through vtables. |
 | [`lwjwae-macos`](lwjwae-macos)     | The macOS backend. Drives Cocoa through the Objective-C runtime.                                            |
 
@@ -194,10 +198,15 @@ a Windows VM over SSH for the rest.
 The code follows Google Java Style with a few additions; [docs/CODE_STYLE.md](docs/CODE_STYLE.md)
 lists every rule, the tool that enforces it, and the workflow.
 
-`Dockerfile.test` reproduces the Linux CI job locally, style checks included:
+`scripts/linux/test-in-docker.sh` runs Gradle in the environment of the Linux CI job, from
+`Dockerfile.test`: Ubuntu 24.04 with GTK 3 and 4, a virtual X display, a private session bus with a
+notification server, and software rendering. Without arguments it runs every display test, with
+screenshots; the reports come back to `build/docker/`:
 
 ```bash
-docker buildx build -f Dockerfile.test .
+scripts/linux/test-in-docker.sh
+scripts/linux/test-in-docker.sh check
+scripts/linux/test-in-docker.sh :lwjwae-gtk4:displayTest --tests '*Bridge*'
 ```
 
 ## CI and releases

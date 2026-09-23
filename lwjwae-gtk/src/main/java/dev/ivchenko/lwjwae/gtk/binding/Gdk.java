@@ -1,6 +1,7 @@
 package dev.ivchenko.lwjwae.gtk.binding;
 
 import dev.ivchenko.lwjwae.foreign.NativeLibraries;
+import dev.ivchenko.lwjwae.glib.binding.Glib;
 import java.lang.foreign.Arena;
 import java.lang.foreign.MemoryLayout;
 import java.lang.foreign.MemorySegment;

@@ -23,6 +23,11 @@ import lombok.experimental.UtilityClass;
  * that WebKitGTK already depends on, plus {@code libXtst}. On macOS, the {@code screencapture} tool
  * of the system is used instead, because AWT would bring a second {@code NSApplication} into a
  * process that already runs one.
+ *
+ * <p>On X11, {@code Robot} captures through GTK when it can, and the GTK it loads is GTK 3. In a
+ * process that runs GTK 4, the two register the same GDK types, GLib warns {@code cannot register
+ * existing type 'GdkDisplayManager'}, and the process hangs soon after. {@code awt.robot.gtk=false}
+ * makes {@code Robot} read the screen through Xlib instead, which works under either toolkit.
  */
 @UtilityClass
 public class Screenshots {
@@ -30,6 +35,13 @@ public class Screenshots {
   private final Path DIRECTORY =
       Path.of(System.getProperty("lwjwae.screenshotsDir", "build/screenshots"));
   private final long PAINT_DELAY_MILLIS = 500;
+
+  static {
+    // Read once, when Robot's X11 peer loads: keep it from loading GTK 3 into a GTK 4 process.
+    if (System.getProperty("awt.robot.gtk") == null) {
+      System.setProperty("awt.robot.gtk", "false");
+    }
+  }
 
   /**
    * Saves {@code NAME.png} into the screenshot directory. This method does nothing when screenshots

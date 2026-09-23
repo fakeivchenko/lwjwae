@@ -6,7 +6,10 @@ import dev.ivchenko.lwjwae.ApplicationParameters;
 import dev.ivchenko.lwjwae.WindowParameters;
 import dev.ivchenko.lwjwae.exception.ResourceNotFoundException;
 import dev.ivchenko.lwjwae.foreign.NativeLibraries;
-import dev.ivchenko.lwjwae.gtk.binding.Glib;
+import dev.ivchenko.lwjwae.glib.FreedesktopNotifier;
+import dev.ivchenko.lwjwae.glib.StatusNotifierTray;
+import dev.ivchenko.lwjwae.glib.binding.Glib;
+import dev.ivchenko.lwjwae.gtk.binding.AppIndicator;
 import dev.ivchenko.lwjwae.gtk.binding.Signatures;
 import dev.ivchenko.lwjwae.gtk.binding.WebKit;
 import dev.ivchenko.lwjwae.notification.Notification;
@@ -29,7 +32,8 @@ import java.util.function.Consumer;
  * GtkDispatcher}, and the default web context, which serves {@code app://} for every web view. Both
  * outlive the application, because GTK can't be initialized twice and a web context can't be
  * unregistered, so creating the application only makes sure that they exist. Each window is a
- * {@link GtkWindow} on that thread, and each notification a {@link GtkNotification}.
+ * {@link GtkWindow} on that thread, and each notification a {@link
+ * dev.ivchenko.lwjwae.glib.FreedesktopNotification}.
  */
 public class GtkApplication extends AbstractApplication {
   private static final String ERROR_DOMAIN = "lwjwae";
@@ -42,7 +46,7 @@ public class GtkApplication extends AbstractApplication {
           MethodType.methodType(void.class, MemorySegment.class, MemorySegment.class),
           Signatures.URI_SCHEME_REQUEST_CALLBACK);
 
-  private GtkNotifier notifier;
+  private FreedesktopNotifier notifier;
 
   /** Creates an application with {@link ApplicationParameters#createDefault()}. */
   public GtkApplication() {
@@ -75,8 +79,23 @@ public class GtkApplication extends AbstractApplication {
     return new GtkWindow(this, id, parameters);
   }
 
+  /**
+   * {@inheritDoc}
+   *
+   * <p>The tray takes the first of three ways that works: libappindicator, when it is installed;
+   * otherwise a StatusNotifierItem that the backend serves itself over D-Bus, when the session has
+   * a StatusNotifier host; otherwise {@code GtkStatusIcon}, which needs X11 and a legacy tray. The
+   * first two reach the same panels, KDE and GNOME with its AppIndicator extension among them.
+   */
   @Override
   protected Tray createTray(TrayIcon icon, Consumer<Tray> closed) {
+    if (!AppIndicator.isAvailable()) {
+      try {
+        return new StatusNotifierTray(this.dispatcher(), icon, closed);
+      } catch (UnsupportedOperationException _) {
+        // No StatusNotifier host on the bus: the legacy tray is the one left.
+      }
+    }
     return new GtkTray(this.dispatcher(), icon, closed);
   }
 
@@ -87,16 +106,16 @@ public class GtkApplication extends AbstractApplication {
   }
 
   /** The notifier, connected to the bus on the first notification rather than at startup. */
-  private synchronized GtkNotifier notifier() {
+  private synchronized FreedesktopNotifier notifier() {
     if (this.notifier == null) {
-      this.notifier = new GtkNotifier(this.dispatcher(), this.parameters().name());
+      this.notifier = new FreedesktopNotifier(this.dispatcher(), this.parameters().name());
     }
     return this.notifier;
   }
 
   @Override
   protected void onClose() {
-    GtkNotifier current;
+    FreedesktopNotifier current;
     synchronized (this) {
       current = this.notifier;
       this.notifier = null;

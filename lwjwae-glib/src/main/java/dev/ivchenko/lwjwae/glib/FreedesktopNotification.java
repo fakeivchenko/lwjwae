@@ -1,4 +1,4 @@
-package dev.ivchenko.lwjwae.gtk;
+package dev.ivchenko.lwjwae.glib;
 
 import dev.ivchenko.lwjwae.AbstractNotification;
 import dev.ivchenko.lwjwae.notification.Notification;
@@ -10,12 +10,12 @@ import java.util.function.Consumer;
  * One notification that the server took, by the ID that it returned. The server reports its end
  * with {@code NotificationClosed}, apart from a click, which arrives as {@code ActionInvoked}.
  */
-public class GtkNotification extends AbstractNotification {
-  private final GtkNotifier notifier;
+public class FreedesktopNotification extends AbstractNotification {
+  private final FreedesktopNotifier notifier;
   private final int id;
 
-  GtkNotification(
-      GtkNotifier notifier,
+  FreedesktopNotification(
+      FreedesktopNotifier notifier,
       int id,
       Notification notification,
       Path image,
@@ -50,12 +50,12 @@ public class GtkNotification extends AbstractNotification {
    * the notification itself, {@code action-N} for button N. For tests: no test can click a
    * notification.
    */
-  void simulateAction(String key) {
+  public void simulateAction(String key) {
     this.notifier.actionInvoked(this.id, key);
   }
 
   /** Delivers what the server sends when the user dismisses the notification. For tests. */
-  void simulateDismiss() {
+  public void simulateDismiss() {
     this.notifier.notificationClosed(this.id);
   }
 }

@@ -21,6 +21,8 @@ env:
   GDK_BACKEND: x11
   WEBKIT_DISABLE_DMABUF_RENDERER: "1"
   WEBKIT_DISABLE_COMPOSITING_MODE: "1"
+  # GTK 4 draws with OpenGL or Vulkan by default; Xvfb has neither.
+  GSK_RENDERER: cairo
 
 jobs:
   # Formatting fails fast, before any machine opens a window. Checkstyle only warns, as Google's
@@ -67,13 +69,18 @@ jobs:
 
       # dunst is the notification server: the bus starts it on the first notification, through the
       # activation file that the package installs.
-      - name: Install GTK, WebKitGTK, Xvfb, and a notification server
+      - name: Install GTK 3 and 4, WebKitGTK, Xvfb, and a notification server
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libgtk-3-0t64 libwebkit2gtk-4.1-0 libxtst6 xvfb dbus-daemon dunst
+          sudo apt-get install -y --no-install-recommends libgtk-3-0t64 libwebkit2gtk-4.1-0 libgtk-4-1 libwebkitgtk-6.0-4 libxtst6 xvfb dbus-daemon dunst
 
       - name: Headless tests
         run: ./gradlew test
+
+      # WebKitGTK 6.0 always runs its web processes in a bubblewrap sandbox, which needs unprivileged
+      # user namespaces; Ubuntu 24.04 restricts them through AppArmor, and WebKit aborts without them.
+      - name: Allow the WebKitGTK 6.0 sandbox
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
 
       # A display test that silently skips on CI is a false pass. The runner has no session bus, so
       # dbus-run-session gives the tests one, for the notifications.

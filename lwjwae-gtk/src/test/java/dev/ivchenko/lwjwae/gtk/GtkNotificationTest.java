@@ -1,6 +1,7 @@
 package dev.ivchenko.lwjwae.gtk;
 
 import dev.ivchenko.lwjwae.Application;
+import dev.ivchenko.lwjwae.glib.FreedesktopNotification;
 import dev.ivchenko.lwjwae.notification.Notification;
 import dev.ivchenko.lwjwae.notification.NotificationAction;
 import dev.ivchenko.lwjwae.testing.contract.NotificationContractTest;
@@ -22,8 +23,8 @@ class GtkNotificationTest extends NotificationContractTest {
     try (Application application = Application.create()) {
       CountDownLatch activated = new CountDownLatch(1);
       CountDownLatch second = new CountDownLatch(1);
-      GtkNotification notification =
-          (GtkNotification)
+      FreedesktopNotification notification =
+          (FreedesktopNotification)
               application.showNotification(
                   Notification.builder()
                       .title("lwjwae :: actions")
@@ -45,8 +46,8 @@ class GtkNotificationTest extends NotificationContractTest {
   @Test
   void dismissOnTheDesktopClosesTheHandle() {
     try (Application application = Application.create()) {
-      GtkNotification notification =
-          (GtkNotification)
+      FreedesktopNotification notification =
+          (FreedesktopNotification)
               application.showNotification(
                   Notification.builder().title("lwjwae :: dismiss").build());
 

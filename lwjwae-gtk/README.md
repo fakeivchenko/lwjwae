@@ -35,12 +35,9 @@ checks the operating system first and the libraries second, because probing a li
 | [`GtkWindow`](src/main/java/dev/ivchenko/lwjwae/gtk/GtkWindow.java)                                                                                      | The window. Forwards every call to the GTK thread.                                          |
 | [`GtkDispatcher`](src/main/java/dev/ivchenko/lwjwae/gtk/GtkDispatcher.java)                                                                              | The one GTK thread of the process.                                                          |
 | [`GtkTray`](src/main/java/dev/ivchenko/lwjwae/gtk/GtkTray.java)                                                                                          | A tray icon, through libappindicator or `GtkStatusIcon`.                                    |
-| [`GtkNotifier`](src/main/java/dev/ivchenko/lwjwae/gtk/GtkNotifier.java), [`GtkNotification`](src/main/java/dev/ivchenko/lwjwae/gtk/GtkNotification.java) | Notifications, through `org.freedesktop.Notifications` on the session bus.                  |
 | [`binding.Gtk`](src/main/java/dev/ivchenko/lwjwae/gtk/binding/Gtk.java)                                                                                  | `gtk_*` functions: the window and the main loop.                                            |
 | [`binding.WebKit`](src/main/java/dev/ivchenko/lwjwae/gtk/binding/WebKit.java)                                                                            | `webkit_*` functions: the view, user scripts, message handlers, the URI scheme, evaluation. |
-| [`binding.Glib`](src/main/java/dev/ivchenko/lwjwae/gtk/binding/Glib.java)                                                                                | `g_*` functions: signals, idle sources, memory streams, errors.                             |
 | [`binding.AppIndicator`](src/main/java/dev/ivchenko/lwjwae/gtk/binding/AppIndicator.java)                                                                | `app_indicator_*` functions, from an optional library.                                      |
-| [`binding.Dbus`](src/main/java/dev/ivchenko/lwjwae/gtk/binding/Dbus.java)                                                                                | GDBus calls and signals, and the `GVariant` values they carry.                              |
 | [`binding.Signatures`](src/main/java/dev/ivchenko/lwjwae/gtk/binding/Signatures.java)                                                                    | Every `FunctionDescriptor` the module binds, named by shape.                                |
 
 The binding classes are Lombok `@UtilityClass`es with `static final` method handles. `invokeExact`
@@ -141,19 +138,24 @@ stops suppressing. `isDevToolsEnabled()` reads the same setting back.
 
 ## Tray
 
-`Application.tray(TrayIcon)` creates a [`GtkTray`](src/main/java/dev/ivchenko/lwjwae/gtk/GtkTray.java). Linux
-has two tray protocols, and the class speaks both:
+`Application.tray(TrayIcon)` takes the first of three ways that works:
 
 1. **StatusNotifierItem** over D-Bus, through libappindicator (`libayatana-appindicator3.so.1` or
-   `libappindicator3.so.1`), when the library loads. This is what KDE, GNOME with its AppIndicator
-   extension, and most other panels take, and the only tray that works on Wayland. The indicator
-   shows the menu on any click; there is no primary-click event, so `onActivate` never runs on
-   this path.
-2. **XEmbed**, through `GtkStatusIcon`, otherwise. Deprecated in GTK 3.14 but still in the
-   library; needs X11 and a panel with a legacy tray. The `activate` signal runs `onActivate`, and
-   `popup-menu` opens the menu at the pointer.
+   `libappindicator3.so.1`), when the library loads, in a
+   [`GtkTray`](src/main/java/dev/ivchenko/lwjwae/gtk/GtkTray.java). This is what KDE, GNOME with
+   its AppIndicator extension, and most other panels take, and the only tray that works on Wayland.
+   The indicator shows the menu on any click; there is no primary-click event, so `onActivate`
+   never runs on this path.
+2. **StatusNotifierItem** served by the backend itself, when libappindicator is missing and the
+   session has a StatusNotifier host: the
+   [`StatusNotifierTray`](../lwjwae-glib/src/main/java/dev/ivchenko/lwjwae/glib/StatusNotifierTray.java)
+   of [`lwjwae-glib`](../lwjwae-glib#tray), which the GTK 4 backend uses too. It reaches the same
+   panels, and `Activate` runs `onActivate`.
+3. **XEmbed**, through `GtkStatusIcon`, in a `GtkTray`, otherwise. Deprecated in GTK 3.14 but still
+   in the library; needs X11 and a panel with a legacy tray. The `activate` signal runs
+   `onActivate`, and `popup-menu` opens the menu at the pointer.
 
-Both hosts read the image from a file, and a StatusNotifier host caches it by name, so every image
+With `GtkTray`, both hosts read the image from a file, and a StatusNotifier host caches it by name, so every image
 becomes a fresh PNG file under a name that no previous image had, in a temporary directory that the
 tray deletes when it closes. The menu is a `GtkMenu` with one `activate` handler per labeled entry;
 each entry has its own ID in a `CallbackRegistry`, so one upcall stub serves every entry of every
@@ -168,31 +170,10 @@ keeps `Application.run()` going, so an application can live in the tray with no 
 
 ## Notifications
 
-`Application.showNotification(Notification)` goes through a
-[`GtkNotifier`](src/main/java/dev/ivchenko/lwjwae/gtk/GtkNotifier.java), one per application, created
-on the first notification. It calls `org.freedesktop.Notifications`, the interface that GNOME Shell,
-Plasma, dunst, mako, and every other Linux notification server implement, over GDBus. GDBus is part
-of GIO, which GTK already loads, so notifications need no library beyond GTK's; libnotify would add
-one for nothing the interface lacks.
-
-The arguments of `Notify` are `GVariant` values, built one constructor at a time in
-[`binding.Dbus`](src/main/java/dev/ivchenko/lwjwae/gtk/binding/Dbus.java). `g_variant_new` with a
-format string would be shorter, but it's variadic, and a variadic downcall needs a descriptor per
-combination of arguments. The image goes as a PNG file in a temporary directory, named in the
-`image-path` hint; the file is deleted when its notification is gone, and the directory with the
-application.
-
-Buttons are the actions `action-0`, `action-1`, and so on; `onActivate` is the `default` action,
-which servers run on a click of the notification itself. The server reports a click with the
-`ActionInvoked` signal and the end of a notification with `NotificationClosed`. The notifier
-subscribes to both on the GTK thread and calls `Notify` there too, so the ID of a notification is in
-its table before the loop can deliver a signal about it. Handlers run on a virtual thread, off the
-GTK thread.
-
-Without a session bus, or with nothing that owns `org.freedesktop.Notifications` on it,
-`showNotification` throws `UnsupportedOperationException`. `Application.quit()` takes back every
-notification still on screen with `CloseNotification`, because their handlers go with the
-application.
+`Application.showNotification(Notification)` goes through the
+[`FreedesktopNotifier`](../lwjwae-glib/src/main/java/dev/ivchenko/lwjwae/glib/FreedesktopNotifier.java)
+of [`lwjwae-glib`](../lwjwae-glib#notifications): `org.freedesktop.Notifications` over GDBus, the
+same under GTK 3 and GTK 4.
 
 ## Closing
 

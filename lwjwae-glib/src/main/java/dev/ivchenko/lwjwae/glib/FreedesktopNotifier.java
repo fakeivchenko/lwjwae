@@ -1,11 +1,11 @@
-package dev.ivchenko.lwjwae.gtk;
+package dev.ivchenko.lwjwae.glib;
 
 import dev.ivchenko.lwjwae.AbstractNotification;
 import dev.ivchenko.lwjwae.foreign.CallbackRegistry;
 import dev.ivchenko.lwjwae.foreign.NativeLibraries;
-import dev.ivchenko.lwjwae.gtk.binding.Dbus;
-import dev.ivchenko.lwjwae.gtk.binding.Glib;
-import dev.ivchenko.lwjwae.gtk.binding.Signatures;
+import dev.ivchenko.lwjwae.glib.binding.Dbus;
+import dev.ivchenko.lwjwae.glib.binding.Glib;
+import dev.ivchenko.lwjwae.glib.binding.Signatures;
 import dev.ivchenko.lwjwae.notification.Notification;
 import dev.ivchenko.lwjwae.notification.NotificationAction;
 import dev.ivchenko.lwjwae.notification.NotificationHandle;
@@ -41,18 +41,18 @@ import java.util.function.Consumer;
  * alternative, raw pixels in {@code image-data}, would need the PNG decoded first. The file lives
  * in a temporary directory until its notification is gone, and the directory until the notifier is.
  */
-final class GtkNotifier {
+public final class FreedesktopNotifier {
   private static final String SERVICE = "org.freedesktop.Notifications";
   private static final String OBJECT_PATH = "/org/freedesktop/Notifications";
   private static final int CALL_TIMEOUT_MILLIS = 5000;
   private static final int SERVER_DEFAULT_EXPIRY = -1;
 
-  private static final CallbackRegistry<GtkNotifier> NOTIFIERS = new CallbackRegistry<>();
+  private static final CallbackRegistry<FreedesktopNotifier> NOTIFIERS = new CallbackRegistry<>();
 
   private static final MemorySegment ON_SIGNAL =
       NativeLibraries.upcall(
           MethodHandles.lookup(),
-          GtkNotifier.class,
+          FreedesktopNotifier.class,
           "onSignal",
           MethodType.methodType(
               void.class,
@@ -68,7 +68,7 @@ final class GtkNotifier {
   private final UiDispatcher dispatcher;
   private final String applicationName;
   private final long callbackId;
-  private final Map<Integer, GtkNotification> shown = new ConcurrentHashMap<>();
+  private final Map<Integer, FreedesktopNotification> shown = new ConcurrentHashMap<>();
 
   private volatile MemorySegment connection;
   private volatile int subscription;
@@ -80,7 +80,7 @@ final class GtkNotifier {
    * @param applicationName What the desktop shows as the sender, or {@code null} for nothing.
    * @throws UnsupportedOperationException If there is no session bus.
    */
-  GtkNotifier(UiDispatcher dispatcher, String applicationName) {
+  public FreedesktopNotifier(UiDispatcher dispatcher, String applicationName) {
     this.dispatcher = dispatcher;
     this.applicationName = applicationName == null ? "" : applicationName;
     this.callbackId = NOTIFIERS.register(this);
@@ -110,13 +110,15 @@ final class GtkNotifier {
    *
    * @throws UnsupportedOperationException If no server answers on the bus.
    */
-  GtkNotification show(Notification notification, Consumer<NotificationHandle> closed) {
+  public FreedesktopNotification show(
+      Notification notification, Consumer<NotificationHandle> closed) {
     Path image = notification.icon() == null ? null : this.images.write(notification.icon());
     try {
       return this.dispatcher.call(
           () -> {
             int id = this.notify(notification, image);
-            GtkNotification handle = new GtkNotification(this, id, notification, image, closed);
+            FreedesktopNotification handle =
+                new FreedesktopNotification(this, id, notification, image, closed);
             this.shown.put(id, handle);
             return handle;
           });
@@ -177,7 +179,7 @@ final class GtkNotifier {
   }
 
   /** Takes {@code notification} back: forgets it, and asks the server to close it. */
-  void withdraw(GtkNotification notification) {
+  void withdraw(FreedesktopNotification notification) {
     if (this.shown.remove(notification.id(), notification)) {
       this.dispatcher.run(
           () -> {
@@ -206,7 +208,7 @@ final class GtkNotifier {
   }
 
   /** Unsubscribes and disconnects. The notifications must be closed already. */
-  void close() {
+  public void close() {
     NOTIFIERS.unregister(this.callbackId);
     this.dispatcher.run(
         () -> {
@@ -222,7 +224,7 @@ final class GtkNotifier {
 
   /** Runs what the server reported for the action {@code key} of notification {@code id}. */
   void actionInvoked(int id, String key) {
-    GtkNotification notification = this.shown.get(id);
+    FreedesktopNotification notification = this.shown.get(id);
     if (notification != null) {
       notification.invoked(key);
     }
@@ -230,7 +232,7 @@ final class GtkNotifier {
 
   /** Forgets notification {@code id}, which the server reported gone. */
   void notificationClosed(int id) {
-    GtkNotification notification = this.shown.remove(id);
+    FreedesktopNotification notification = this.shown.remove(id);
     if (notification != null) {
       notification.closedByServer();
     }
@@ -260,7 +262,7 @@ final class GtkNotifier {
       MemorySegment parameters,
       MemorySegment userData) {
     try {
-      GtkNotifier notifier = NOTIFIERS.lookup(userData);
+      FreedesktopNotifier notifier = NOTIFIERS.lookup(userData);
       if (notifier == null) {
         return;
       }

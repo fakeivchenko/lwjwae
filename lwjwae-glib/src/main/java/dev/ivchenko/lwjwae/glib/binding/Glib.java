@@ -1,4 +1,4 @@
-package dev.ivchenko.lwjwae.gtk.binding;
+package dev.ivchenko.lwjwae.glib.binding;
 
 import dev.ivchenko.lwjwae.foreign.NativeLibraries;
 import java.lang.foreign.Arena;
@@ -11,7 +11,7 @@ import lombok.SneakyThrows;
 import lombok.experimental.UtilityClass;
 
 /**
- * Bindings to the subset of Glib, GObject, and GIO that the backend needs.
+ * Bindings to the subset of Glib, GObject, and GIO that the GTK backends need.
  *
  * <p>The handles are {@code static final} on purpose. {@code invokeExact} only compiles to a direct
  * call when the JIT compiler can treat the handle as a constant, and these functions are on the hot
@@ -37,6 +37,10 @@ public class Glib {
   private final VarHandle ERROR_MESSAGE =
       ERROR_LAYOUT.varHandle(MemoryLayout.PathElement.groupElement("message"));
 
+  private final MethodHandle MAIN_LOOP_NEW =
+      NativeLibraries.downcall(GLIB, "g_main_loop_new", Signatures.POINTER_POINTER_INT);
+  private final MethodHandle MAIN_LOOP_RUN =
+      NativeLibraries.downcall(GLIB, "g_main_loop_run", Signatures.VOID_POINTER);
   private final MethodHandle IDLE_ADD =
       NativeLibraries.downcall(GLIB, "g_idle_add", Signatures.INT_POINTER_POINTER);
   private final MethodHandle FREE =
@@ -67,6 +71,16 @@ public class Glib {
    */
   public final MemorySegment FREE_FUNCTION =
       GLIB.find("g_free").orElseThrow(() -> new UnsatisfiedLinkError("Symbol not found: g_free"));
+
+  /**
+   * Runs the default main context on the calling thread and doesn't return: what {@code gtk_main()}
+   * did in GTK 3, which GTK 4 no longer has.
+   */
+  @SneakyThrows
+  public void runMainLoop() {
+    MemorySegment loop = (MemorySegment) MAIN_LOOP_NEW.invokeExact(MemorySegment.NULL, 0);
+    MAIN_LOOP_RUN.invokeExact(loop);
+  }
 
   /**
    * Schedules {@code callback} on the default main context. This method is safe to call from any
