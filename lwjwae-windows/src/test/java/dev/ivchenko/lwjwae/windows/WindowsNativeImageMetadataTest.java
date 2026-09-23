@@ -37,6 +37,7 @@ class WindowsNativeImageMetadataTest extends NativeImageMetadataContractTest {
         ComCallback.class,
         WebView2.class,
         WindowsDispatcher.class,
-        WindowsApplicationBackend.class);
+        WindowsWindow.class,
+        WindowsApplication.class);
   }
 }

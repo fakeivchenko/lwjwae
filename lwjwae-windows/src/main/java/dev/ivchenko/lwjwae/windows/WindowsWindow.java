@@ -1,7 +1,7 @@
 package dev.ivchenko.lwjwae.windows;
 
-import dev.ivchenko.lwjwae.AbstractApplicationBackend;
-import dev.ivchenko.lwjwae.ApplicationParameters;
+import dev.ivchenko.lwjwae.AbstractWindow;
+import dev.ivchenko.lwjwae.WindowParameters;
 import dev.ivchenko.lwjwae.WindowPosition;
 import dev.ivchenko.lwjwae.event.LoadEvent;
 import dev.ivchenko.lwjwae.event.LoadState;
@@ -24,21 +24,15 @@ import dev.ivchenko.lwjwae.windows.binding.WebView2EventRegistration;
 import dev.ivchenko.lwjwae.windows.binding.Wide;
 import dev.ivchenko.lwjwae.windows.exception.ComCallFailedException;
 import dev.ivchenko.lwjwae.windows.util.JsonStringUtil;
-import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.lang.foreign.MemorySegment;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
-import java.nio.file.Files;
-import java.nio.file.Path;
+import java.time.Duration;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
 
 /**
- * A window backed by a Win32 window and WebView2, bound entirely through the Foreign Function and
- * Memory API, without JNI, without {@code WebView2Loader.dll}, and without native artifacts of its
- * own.
+ * A window backed by a Win32 window and WebView2, opened by a {@link WindowsApplication}.
  *
  * <p>Instances are safe to use from any thread. Every call is forwarded to the shared UI thread,
  * which is also the COM apartment that every WebView2 callback arrives on. The window procedure is
@@ -49,57 +43,53 @@ import java.util.concurrent.TimeUnit;
  * http://app.localhost/}. Requests to that host are intercepted before they reach the network and
  * answered from the JAR file, and {@code .localhost} is a secure context in Chromium.
  */
-public class WindowsApplicationBackend extends AbstractApplicationBackend {
+public class WindowsWindow extends AbstractWindow {
   private static final String WINDOW_CLASS = "lwjwae";
   private static final String RESOURCE_ORIGIN = "http://app.localhost/";
-  private static final long CREATION_TIMEOUT_SECONDS = 60;
+  private static final Duration CREATION_TIMEOUT = Duration.ofMinutes(1);
 
-  private static final CallbackRegistry<WindowsApplicationBackend> WINDOWS =
-      new CallbackRegistry<>();
+  private static final CallbackRegistry<WindowsWindow> WINDOWS = new CallbackRegistry<>();
 
   private static final MemorySegment WINDOW_PROC =
       NativeLibraries.upcall(
           MethodHandles.lookup(),
-          WindowsApplicationBackend.class,
+          WindowsWindow.class,
           "windowProc",
           MethodType.methodType(long.class, MemorySegment.class, int.class, long.class, long.class),
           Signatures.LONG_POINTER_INT_LONG_LONG);
 
   private static volatile boolean windowClassRegistered;
 
-  private final long id;
+  private final WindowsApplication application;
+  private final long callbackId;
   private final CompletableFuture<Void> ready = new CompletableFuture<>();
 
   private volatile MemorySegment hwnd;
-  private volatile MemorySegment environment;
   private volatile MemorySegment controller;
   private volatile MemorySegment webView;
 
-  /** Creates a window with {@link ApplicationParameters#createDefault()}. */
-  public WindowsApplicationBackend() {
-    this(ApplicationParameters.createDefault());
-  }
-
   /**
    * Creates the Win32 window and the WebView2 controller inside it, and returns when both exist.
-   * The window is hidden until {@link #show()}.
+   * The window is hidden until {@link #show()}. On the UI thread, messages keep flowing while the
+   * controller is created; see {@link WindowsDispatcher#await}.
    *
-   * @throws IllegalStateException If called from the UI thread, or if WebView2 doesn't answer
-   *     within a minute.
-   * @throws ComCallFailedException If WebView2 refuses to create the environment or the controller.
+   * <p>Suppressed warnings: {@code resource}: on the failure path, {@code unregister} hands back
+   * this window, which looks like an unclosed resource. It is not: {@code destroyQuietly} tears
+   * down what was built, and the exception tells the caller that nothing was opened.
+   *
+   * @throws IllegalStateException If WebView2 doesn't answer within a minute.
+   * @throws ComCallFailedException If WebView2 refuses to create the controller.
    */
-  public WindowsApplicationBackend(ApplicationParameters parameters) {
-    super(WindowsDispatcher.instance(), parameters);
-    if (this.dispatcher().isDispatchThread()) {
-      throw new IllegalStateException(
-          "Cannot create a window from the UI thread: creation pumps messages");
-    }
-    this.id = WINDOWS.register(this);
+  @SuppressWarnings("resource")
+  WindowsWindow(WindowsApplication application, long id, WindowParameters parameters) {
+    super(application, id);
+    this.application = application;
+    this.callbackId = WINDOWS.register(this);
     try {
       this.dispatcher().run(() -> this.createWindow(parameters));
-      this.ready.get(CREATION_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+      ((WindowsDispatcher) this.dispatcher()).await(this.ready, CREATION_TIMEOUT);
     } catch (Exception e) {
-      WINDOWS.unregister(this.id);
+      WINDOWS.unregister(this.callbackId);
       this.dispatcher().run(this::destroyQuietly);
       throw e instanceof RuntimeException runtime
           ? runtime
@@ -108,7 +98,7 @@ public class WindowsApplicationBackend extends AbstractApplicationBackend {
   }
 
   /** Creates the Win32 window and starts the asynchronous WebView2 setup. Runs on the UI thread. */
-  private void createWindow(ApplicationParameters parameters) {
+  private void createWindow(WindowParameters parameters) {
     registerWindowClass();
     boolean placed = parameters.hasPosition() && !parameters.centered();
     MemorySegment window =
@@ -119,7 +109,7 @@ public class WindowsApplicationBackend extends AbstractApplicationBackend {
             placed ? parameters.y() : User32.CW_USEDEFAULT,
             parameters.width(),
             parameters.height());
-    User32.userData(window, this.id);
+    User32.userData(window, this.callbackId);
     this.hwnd = window;
     User32.resizeClient(window, parameters.width(), parameters.height());
     if (parameters.centered()) {
@@ -127,15 +117,9 @@ public class WindowsApplicationBackend extends AbstractApplicationBackend {
     }
 
     MemorySegment handler =
-        ComCallback.completion(WebView2.IID_ENVIRONMENT_COMPLETED, this::onEnvironmentCreated);
-    WebView2.createEnvironment(userDataFolder().toString(), handler);
+        ComCallback.completion(WebView2.IID_CONTROLLER_COMPLETED, this::onControllerCreated);
+    WebView2.createController(this.application.environment(), window, handler);
     Com.release(handler);
-  }
-
-  @Override
-  public String engine() {
-    return this.dispatcher()
-        .call(() -> "WebView2 " + WebView2.browserVersion(this.alive(this.environment)));
   }
 
   @Override
@@ -324,22 +308,22 @@ public class WindowsApplicationBackend extends AbstractApplicationBackend {
             });
   }
 
-  private void onEnvironmentCreated(int hresult, MemorySegment createdEnvironment) {
-    if (hresult < 0) {
-      this.ready.completeExceptionally(
-          new ComCallFailedException("WebView2 environment creation", hresult));
-      return;
-    }
-    Com.addRef(createdEnvironment);
-    this.environment = createdEnvironment;
-    try {
-      MemorySegment handler =
-          ComCallback.completion(WebView2.IID_CONTROLLER_COMPLETED, this::onControllerCreated);
-      WebView2.createController(createdEnvironment, this.hwnd, handler);
-      Com.release(handler);
-    } catch (RuntimeException e) {
-      this.ready.completeExceptionally(e);
-    }
+  /**
+   * Runs the load listeners once the WebView2 handler that saw the event has returned.
+   *
+   * <p>WebView2 raises no event and no completion while one of its handlers is on the stack, even
+   * when that handler pumps messages. A listener that opens a window waits for a completion in a
+   * nested loop, so it can't run inside the handler: it would wait out the whole creation timeout.
+   * Posted, it runs from the task queue on the same thread, in the same order.
+   */
+  private void reportLoad(LoadEvent event) {
+    this.dispatcher()
+        .post(
+            () -> {
+              if (!this.isClosed()) {
+                this.emitLoad(event);
+              }
+            });
   }
 
   private void onControllerCreated(int hresult, MemorySegment createdController) {
@@ -359,18 +343,19 @@ public class WindowsApplicationBackend extends AbstractApplicationBackend {
           WebView2::onNavigationStarting,
           WebView2.IID_NAVIGATION_STARTING,
           (_, arguments) ->
-              this.emitLoad(
+              this.reportLoad(
                   LoadEvent.of(LoadState.STARTED, WebView2.navigationStartingUri(arguments))));
       this.subscribe(
           WebView2::onContentLoading,
           WebView2.IID_CONTENT_LOADING,
-          (sender, _) -> this.emitLoad(LoadEvent.of(LoadState.COMMITTED, WebView2.source(sender))));
+          (sender, _) ->
+              this.reportLoad(LoadEvent.of(LoadState.COMMITTED, WebView2.source(sender))));
       this.subscribe(
           WebView2::onNavigationCompleted,
           WebView2.IID_NAVIGATION_COMPLETED,
           (sender, arguments) -> {
             String uri = WebView2.source(sender);
-            this.emitLoad(
+            this.reportLoad(
                 WebView2.isNavigationSuccessful(arguments)
                     ? LoadEvent.of(LoadState.FINISHED, uri)
                     : LoadEvent.failed(uri, WebView2.navigationErrorStatus(arguments)));
@@ -420,15 +405,20 @@ public class WindowsApplicationBackend extends AbstractApplicationBackend {
       try {
         response =
             WebView2.createResponse(
-                this.environment, stream, 200, "OK", "Content-Type: " + MimeTypeUtil.of(path));
+                this.application.environment(),
+                stream,
+                200,
+                "OK",
+                "Content-Type: " + MimeTypeUtil.of(path));
       } finally {
         Com.release(stream);
       }
     } catch (ResourceNotFoundException e) {
       response =
-          WebView2.createResponse(this.environment, MemorySegment.NULL, 404, "Not Found", "");
+          WebView2.createResponse(
+              this.application.environment(), MemorySegment.NULL, 404, "Not Found", "");
       if (WebView2.isDocumentRequest(arguments)) {
-        this.emitLoad(LoadEvent.failed(uri, e.getMessage()));
+        this.reportLoad(LoadEvent.failed(uri, e.getMessage()));
       }
     }
     try {
@@ -474,7 +464,6 @@ public class WindowsApplicationBackend extends AbstractApplicationBackend {
     this.hwnd = null;
     this.webView = null;
     this.controller = null;
-    this.markClosed();
     if (closingController != null) {
       try {
         WebView2.close(closingController);
@@ -484,6 +473,8 @@ public class WindowsApplicationBackend extends AbstractApplicationBackend {
       Com.release(closingController);
     }
     Com.release(closingView);
+    // Last: the application can stop waiting in run() only once the native window is gone.
+    this.markClosed();
   }
 
   private void destroyQuietly() {
@@ -491,18 +482,6 @@ public class WindowsApplicationBackend extends AbstractApplicationBackend {
     if (current != null && !this.isClosed()) {
       User32.destroy(current);
     }
-  }
-
-  private static Path userDataFolder() {
-    String local = System.getenv("LOCALAPPDATA");
-    Path folder =
-        Path.of(local != null ? local : System.getProperty("java.io.tmpdir"), "lwjwae", "WebView2");
-    try {
-      Files.createDirectories(folder);
-    } catch (IOException e) {
-      throw new UncheckedIOException("Cannot create the WebView2 user data folder " + folder, e);
-    }
-    return folder;
   }
 
   private static synchronized void registerWindowClass() {
@@ -519,21 +498,21 @@ public class WindowsApplicationBackend extends AbstractApplicationBackend {
    *
    * <p>Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
    * binds it by name, so no Java code calls it and the compiler sees a dead private method. {@code
-   * resource}: the backend is {@code AutoCloseable}, and a lookup that returns it looks like an
-   * unclosed resource. It is not: the window owns the backend and closes it, this method only
+   * resource}: the window is {@code AutoCloseable}, and a lookup that returns it looks like an
+   * unclosed resource. It is not: the application owns the window and closes it, this method only
    * borrows it.
    */
   @SuppressWarnings({"unused", "resource"})
   private static long windowProc(
       MemorySegment hwnd, int message, long wordParameter, long longParameter) {
     try {
-      WindowsApplicationBackend backend = WINDOWS.lookup(User32.userData(hwnd));
-      if (backend != null) {
-        if (message == User32.WM_SIZE && backend.controller != null) {
-          backend.fitWebView();
+      WindowsWindow window = WINDOWS.lookup(User32.userData(hwnd));
+      if (window != null) {
+        if (message == User32.WM_SIZE && window.controller != null) {
+          window.fitWebView();
         } else if (message == User32.WM_DESTROY) {
-          WINDOWS.unregister(backend.id);
-          backend.handleDestroyed();
+          WINDOWS.unregister(window.callbackId);
+          window.handleDestroyed();
         }
       }
     } catch (Throwable t) {

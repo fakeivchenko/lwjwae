@@ -11,46 +11,68 @@ the window; a codec module supplies JSON when you use the typed bridge methods.
 
 | Type                                                                                                                                                     | Role                                                                                                                                                                                                                                                                                                                                               |
 |----------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| [`Application`](src/main/java/dev/ivchenko/lwjwae/Application.java)                                                                                      | Entry point. Picks a backend and creates a window.                                                                                                                                                                                                                                                                                                 |
-| [`ApplicationBackend`](src/main/java/dev/ivchenko/lwjwae/ApplicationBackend.java)                                                                        | One window with a web view inside. Every backend implements it.                                                                                                                                                                                                                                                                                    |
-| [`ApplicationParameters`](src/main/java/dev/ivchenko/lwjwae/ApplicationParameters.java)                                                                  | What the window starts with: title, size, position, URL, development server, codec.                                                                                                                                                                                                                                                                          |
-| [`ApplicationBackendProvider`](src/main/java/dev/ivchenko/lwjwae/ApplicationBackendProvider.java)                                                        | The service that a backend module registers so that [`Application`](src/main/java/dev/ivchenko/lwjwae/Application.java) can find it.                                                                                                                                                                                                               |
+| [`Application`](src/main/java/dev/ivchenko/lwjwae/Application.java)                                                                                      | Entry point and the process-wide half: `create` picks a backend; `open` adds a window; `run`, `quit`; the bridge across every window.                                                                                                                                                                                                             |
+| [`Window`](src/main/java/dev/ivchenko/lwjwae/Window.java)                                                                                                | One native window with a web view inside: title, size, position, navigation, `eval`, the bridge of that window.                                                                                                                                                                                                                                    |
+| [`ApplicationParameters`](src/main/java/dev/ivchenko/lwjwae/ApplicationParameters.java)                                                                  | What the application starts with: development server, codec.                                                                                                                                                                                                                                                                                      |
+| [`WindowParameters`](src/main/java/dev/ivchenko/lwjwae/WindowParameters.java)                                                                            | What a window starts with: title, size, position, URL or resource.                                                                                                                                                                                                                                                                                 |
+| [`BackendProvider`](src/main/java/dev/ivchenko/lwjwae/BackendProvider.java)                                                                              | The service that a backend module registers so that [`Application`](src/main/java/dev/ivchenko/lwjwae/Application.java) can find it.                                                                                                                                                                                                               |
 | [`bridge.codec.BridgeCodec`](src/main/java/dev/ivchenko/lwjwae/bridge/codec/BridgeCodec.java)                                                            | JSON in and out, for `bind(name, Class, handler)` and `emit(name, Object)`.                                                                                                                                                                                                                                                                        |
+| [`event.Event`](src/main/java/dev/ivchenko/lwjwae/event/Event.java)                                                                                      | What a Java listener receives: name, payload, and the window that the event came through.                                                                                                                                                                                                                                                          |
 | [`event.LoadEvent`](src/main/java/dev/ivchenko/lwjwae/event/LoadEvent.java), [`event.LoadState`](src/main/java/dev/ivchenko/lwjwae/event/LoadState.java) | Page load lifecycle notifications.                                                                                                                                                                                                                                                                                                                 |
 | `exception.*`                                                                                                                                            | [`BackendNotAvailableException`](src/main/java/dev/ivchenko/lwjwae/exception/BackendNotAvailableException.java), [`ResourceNotFoundException`](src/main/java/dev/ivchenko/lwjwae/exception/ResourceNotFoundException.java), [`ScriptEvaluationFailedException`](src/main/java/dev/ivchenko/lwjwae/exception/ScriptEvaluationFailedException.java). |
 
 A minimal application:
 
 ```java
-try (ApplicationBackend application = Application.create(ApplicationParameters.builder()
-    .title("Docs")
-    .width(1280)
-    .height(800)
-    .build())) {
-  application.bind("reverse", text -> new StringBuilder(text).reverse().toString());
-  application.loadResource("app/index.html");
+try (Application application = Application.create()) {
+  Window window = application.open(WindowParameters.builder()
+      .title("Docs")
+      .width(1280)
+      .height(800)
+      .build());
+  window.bind("reverse", text -> new StringBuilder(text).reverse().toString());
+  window.loadResource("app/index.html");
+  window.show();
   application.run();
 }
 ```
 
+### Application and windows
+
+An `Application` is the process-wide half: the UI thread of the toolkit, the codec, the
+development server setting, and the list of open windows. A `Window` is one native window with a
+web view inside. `open` creates a window, hidden, so a page can load before anything appears on
+screen; `show` puts it up. `windows()` lists the open ones, oldest first, and `window(id)` finds
+one by the number that `Window.id()` reports.
+
+`run()` blocks the calling thread while any window is open, and returns at once when none is. A
+window opened in the meantime, from another thread or from a page, keeps it blocked. Closing the
+last window ends `run()` but not the application: `open` still works afterwards, so a program that
+wants to stay alive without a window loops. `quit()`, which `close()` also calls, closes every
+window, releases every thread blocked in `run()`, and refuses every `open` from then on.
+
+A page opens and closes windows too. `window.lwjwae.open(options)` takes the same options as
+`WindowParameters` (`title`, `width`, `height`, `x`, `y`, `centered`, `url`, `resource`), shows
+the window, and resolves to its ID. `window.lwjwae.close()` closes the window of the page.
+
 ### Placing the window
 
-`ApplicationParameters.x`/`y` open the window at a screen position, `centered` in the middle of
-the screen; `position(x, y)`, `center()`, and `position()` on the backend do the same later. The
+`WindowParameters.x`/`y` open the window at a screen position, `centered` in the middle of
+the screen; `position(x, y)`, `center()`, and `position()` on the window do the same later. The
 coordinates are those of the window frame, from the top left of the screen, in the units of the
 platform. Wayland is the exception: the protocol keeps window placement with the compositor, so
 there `position(x, y)` does nothing, `position()` returns `0, 0`, and `center()` is a request that
 the compositor may ignore. X11, Windows, and macOS place windows as asked.
 
-Every method of `ApplicationBackend` is safe to call from any thread. The backend forwards the
-call to its UI thread, and a getter blocks until the UI thread has answered.
+Every method of `Application` and `Window` is safe to call from any thread. The backend forwards
+the call to its UI thread, and a getter blocks until the UI thread has answered.
 
 ## Backend discovery
 
 [`Application.create`](src/main/java/dev/ivchenko/lwjwae/Application.java) finds a backend in three steps:
 
-1. Loads every [`ApplicationBackendProvider`](src/main/java/dev/ivchenko/lwjwae/ApplicationBackendProvider.java) on the classpath through `ServiceLoader`. A backend
-   module registers its provider in `META-INF/services/dev.ivchenko.lwjwae.ApplicationBackendProvider`.
+1. Loads every [`BackendProvider`](src/main/java/dev/ivchenko/lwjwae/BackendProvider.java) on the classpath through `ServiceLoader`. A backend
+   module registers its provider in `META-INF/services/dev.ivchenko.lwjwae.BackendProvider`.
 2. Drops the providers whose `isSupported()` returns `false`. A provider checks the operating
    system first, then whether its native libraries load. It doesn't initialize a toolkit, because
    every candidate is asked, including the ones that lose.
@@ -76,10 +98,10 @@ dependency in the core, and only its transport differs between engines.
 
 ### Installation
 
-A backend calls `installBridge()` after its native view exists and before the first page loads.
+A window calls `installBridge()` after its native view exists and before the first page loads.
 This injects `bootstrap.js`, the page-side runtime, into every document before the scripts of the
 document run. The runtime defines `window.__lwjwaeBridge` (promise bookkeeping, listeners, framing)
-and `window.lwjwae` (`on` and `off`, the page-facing event API).
+and `window.lwjwae` (`listen`, `once`, `emit`, `open`, `close`, the page-facing API).
 
 The runtime needs one thing from the backend: `bridgeTransportScript()`, a JavaScript expression
 that evaluates to a function of one string and delivers that string to the host. WebKit backends
@@ -90,16 +112,19 @@ return `window.webkit.messageHandlers.NAME.postMessage`; WebView2 returns
 
 1. Java calls `bind("reverse", handler)`. The name must be a JavaScript identifier. The handler goes
    into a map, and `bindingScript("reverse")` is both injected for future documents and evaluated
-   in the current one, so binding after the page loaded works too.
+   in the current one, so binding after the page loaded works too. `bind` on the application does
+   the same in every open window, keeps the script for the windows opened later, and hands the
+   handler the window that called.
 2. The page calls `window.reverse("abc")`. The runtime takes the next ID, stores a promise under it,
    and posts `ID␟reverse␟abc` through the transport. `␟` is U+001F, the ASCII unit separator: it
    can't appear in an identifier, and unlike NUL, it doesn't truncate a C string.
-3. The engine delivers the string to the backend on the UI thread, and the backend calls
+3. The engine delivers the string to the window on the UI thread, and the window calls
    `handleBridgeMessage`. [`BridgeProtocol.parse`](src/main/java/dev/ivchenko/lwjwae/bridge/BridgeProtocol.java) splits the text into at most three fields, so a
    payload can contain the separator. A message that doesn't parse is reported through
    [`ThrowableUtil`](src/main/java/dev/ivchenko/lwjwae/util/ThrowableUtil.java), not thrown: the caller is a native callback.
-4. The handler runs on a virtual thread. A handler can block, on I/O or on the UI thread itself
-   through `eval`, without freezing the window.
+4. The window looks the name up in its own bindings, then in the application's, then among the
+   reserved calls of `window.lwjwae`. The handler runs on a virtual thread. A handler can block, on
+   I/O or on the UI thread itself through `eval`, without freezing the window.
 5. The result goes back with `eval(resolveScript(id, result))`. A handler that throws sends
    `rejectScript(id, message)` with the message of the root cause instead. Nothing is sent to a
    window that closed in the meantime.
@@ -124,11 +149,14 @@ unlisten();
 In Java:
 
 ```java
-EventSubscription subscription = application.listen("note", event -> log(event.payload()));
-application.listen("note", Point.class, point -> ...);
-application.once("ready", event -> ...);
-application.emit("tick", new Tick(...));
+EventSubscription subscription = window.listen("note", event -> log(event.payload()));
+window.listen("note", Point.class, point -> ...);
+window.once("ready", event -> ...);
+window.emit("tick", new Tick(...));
 subscription.unlisten();
+
+application.listen("note", event -> log(event.window().id() + ": " + event.payload()));
+application.emit("tick", new Tick(...));
 ```
 
 An event reaches every listener of its name on both sides. `emit` from Java evaluates
@@ -137,13 +165,24 @@ the page runs the page listeners, then posts one message under the reserved name
 `BridgeProtocol.EVENT_CALL` (`lwjwae:emit`, which no binding can take because a bound name can't
 contain a colon) with `typed␟name␟payload` as its payload; the promise that `emit` returns resolves
 once Java took the event. A listener on the page gets `{ event, id, payload }`; one in Java gets an
-[`Event`](src/main/java/dev/ivchenko/lwjwae/event/Event.java) with the payload as text and a `typed`
-flag that says whether the text came from the codec. Typed Java listeners decode it; `String.class`
-takes an untyped payload as it is.
+[`Event`](src/main/java/dev/ivchenko/lwjwae/event/Event.java) with the payload as text, a `typed`
+flag that says whether the text came from the codec, and the window that the event came through.
+Typed Java listeners decode it; `String.class` takes an untyped payload as it is.
 
-Java listeners run on one virtual thread per window, in the order the events were emitted, so a
-listener never sees the second event of a name before the first. A listener that throws is reported
-and the others still run.
+The two levels differ in reach. A listener on a window hears the page of that window and that
+window's own `emit`. A listener on the application hears every window, and `Application.emit`
+delivers to every page, to the listeners of every window, and once to the listeners of the
+application, with no window. Java listeners run on one virtual thread per window, and one for the
+application, in the order the events were emitted, so a listener never sees the second event of a
+name before the first. A listener that throws is reported and the others still run.
+
+### Windows from the page
+
+`window.lwjwae.open(options)` and `window.lwjwae.close()` go through the same path as a call, under
+the reserved names `lwjwae:open` and `lwjwae:close`. The options travel as the components of
+`WindowParameters` in declaration order, separated by the unit separator, an empty field for one the
+page left out, so no codec is needed. The window opens through `Application.open`, is shown, and
+its ID resolves the promise. `close` closes the window of the page, so its promise never settles.
 
 ### Typed calls
 
@@ -180,7 +219,7 @@ the filename, because a wrong type on the main document makes the engine show ma
 
 When [`ApplicationParameters.devServerUrl()`](src/main/java/dev/ivchenko/lwjwae/ApplicationParameters.java) is set, `loadResource` opens that URL instead. Set it
 through the builder, the `lwjwae.devServerUrl` system property, or the `LWJWAE_DEV_SERVER_URL`
-environment variable, and a Vite or webpack development server with hot reload drives the window
+environment variable, and a Vite or webpack development server with hot reload drives every window
 while the Java side stays as it ships.
 
 ## Threading
@@ -228,21 +267,29 @@ declares the width that its own headers use.
 
 ## Writing a backend
 
-A backend extends [`AbstractApplicationBackend`](src/main/java/dev/ivchenko/lwjwae/AbstractApplicationBackend.java), which owns the listener bookkeeping, the closed
-signal, the blocking `run()` loop, and the whole bridge except its transport. The subclass
-provides:
+A backend is two classes. The application extends [`AbstractApplication`](src/main/java/dev/ivchenko/lwjwae/AbstractApplication.java), which owns the
+window list, `run()` and `quit()`, and the application-level bridge. It provides:
 
-1. A [`UiDispatcher`](src/main/java/dev/ivchenko/lwjwae/ui/UiDispatcher.java), passed to the constructor.
-2. The window methods of [`ApplicationBackend`](src/main/java/dev/ivchenko/lwjwae/ApplicationBackend.java): title, size, resizing, developer tools, navigation,
-   `html`, `eval`, `show`, `close`. Each forwards to the dispatcher.
-3. `injectOnDocumentStart(script)`, the engine facility that runs a script in every document before
+1. A [`UiDispatcher`](src/main/java/dev/ivchenko/lwjwae/ui/UiDispatcher.java), passed to the constructor, and whatever the toolkit keeps per process:
+   the GTK web context, the WebView2 environment.
+2. `createWindow(id, parameters)`, which returns the window below, and `engine()`.
+3. Optionally `onIdle()`, called once every window closed or `quit()` was called, for a backend
+   whose `run()` drives the loop of the toolkit itself.
+
+The window extends [`AbstractWindow`](src/main/java/dev/ivchenko/lwjwae/AbstractWindow.java), which owns the listener bookkeeping, the closed
+state, and the whole bridge except its transport. It provides:
+
+1. The window methods of [`Window`](src/main/java/dev/ivchenko/lwjwae/Window.java): title, size, position, resizing, developer tools,
+   navigation, `html`, `eval`, `show`, `close`. Each forwards to the dispatcher.
+2. `injectOnDocumentStart(script)`, the engine facility that runs a script in every document before
    the scripts of the document.
-4. `bridgeTransportScript()`, described earlier.
-5. A call to `installBridge()` once the native view exists.
-6. A call to `handleBridgeMessage(text)` from the callback that the engine delivers messages on, and
+3. `bridgeTransportScript()`, described earlier.
+4. A call to `installBridge()` once the native view exists.
+5. A call to `handleBridgeMessage(text)` from the callback that the engine delivers messages on, and
    calls to `emitLoad(event)` from the load callbacks.
-7. A call to `markClosed()` when the native window is gone, which releases every thread blocked in
-   `run()`.
+6. A call to `markClosed()` when the native window is gone, last, after the native objects are
+   released: it drops the window from the application, and the last window to go wakes every
+   thread blocked in `run()` and calls `onIdle()`.
 
 Every native callback catches `Throwable` and passes it to [`ThrowableUtil.report`](src/main/java/dev/ivchenko/lwjwae/util/ThrowableUtil.java). Letting a Java
 throwable unwind into C is undefined behavior.
@@ -257,7 +304,7 @@ throwable unwind into C is undefined behavior.
 | [`NativeImageMetadataContractTest`](src/testFixtures/java/dev/ivchenko/lwjwae/testing/contract/NativeImageMetadataContractTest.java) | The native libraries       | The reachability metadata matches the bound stubs exactly.                |
 | [`WindowContractTest`](src/testFixtures/java/dev/ivchenko/lwjwae/testing/contract/WindowContractTest.java)                           | A display                  | A window opens, renders a local HTTP page, and its properties round-trip. |
 | [`BridgeContractTest`](src/testFixtures/java/dev/ivchenko/lwjwae/testing/contract/BridgeContractTest.java)                           | A display                  | Classpath resources, both directions of the bridge, typed calls, events.  |
-| [`LifecycleContractTest`](src/testFixtures/java/dev/ivchenko/lwjwae/testing/contract/LifecycleContractTest.java)                     | A display                  | Failed loads, throwing scripts, closed windows, two windows at once.      |
+| [`LifecycleContractTest`](src/testFixtures/java/dev/ivchenko/lwjwae/testing/contract/LifecycleContractTest.java)                     | A display                  | Failed loads, throwing scripts, closed windows, `run` and `quit`, the bridge across windows, windows opened and closed from a page. |
 | [`NetworkContractTest`](src/testFixtures/java/dev/ivchenko/lwjwae/testing/contract/NetworkContractTest.java)                         | A display and the internet | A real site renders. Never part of a default run.                         |
 | [`BridgeCodecContractTest`](src/testFixtures/java/dev/ivchenko/lwjwae/testing/contract/BridgeCodecContractTest.java) | Nothing | A codec is discovered, round-trips records with nesting and escapes, rejects bad text, and ships a page half. |
 | [`JsonBridgeCodecContractTest`](src/testFixtures/java/dev/ivchenko/lwjwae/testing/contract/JsonBridgeCodecContractTest.java) | Nothing | A JSON codec on top: canonical text, `null`, `JSON.stringify` and `JSON.parse` on the page. |

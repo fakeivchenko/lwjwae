@@ -24,8 +24,7 @@ import java.util.function.Supplier;
  * performSelectorOnMainThread:}, a run loop source, so it keeps firing after the first batch has
  * started {@code -[NSApplication run]} and that nested loop owns the thread for the rest of the
  * process. In a native image, the {@code main} method of the application is the main thread. Calls
- * made from it run inline, and {@link dev.ivchenko.lwjwae.ApplicationBackend#run()} starts the
- * application loop.
+ * made from it run inline, and {@link MacApplication#run()} starts the application loop.
  */
 public class MacDispatcher extends UiDispatcher {
   private static final MacDispatcher INSTANCE = new MacDispatcher();

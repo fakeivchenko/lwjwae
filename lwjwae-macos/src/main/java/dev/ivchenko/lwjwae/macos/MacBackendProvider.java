@@ -1,8 +1,8 @@
 package dev.ivchenko.lwjwae.macos;
 
-import dev.ivchenko.lwjwae.ApplicationBackend;
-import dev.ivchenko.lwjwae.ApplicationBackendProvider;
+import dev.ivchenko.lwjwae.Application;
 import dev.ivchenko.lwjwae.ApplicationParameters;
+import dev.ivchenko.lwjwae.BackendProvider;
 import dev.ivchenko.lwjwae.util.PlatformUtil;
 
 /**
@@ -11,7 +11,7 @@ import dev.ivchenko.lwjwae.util.PlatformUtil;
  * <p>Every Mac has AppKit and WebKit, so the platform check is the whole test. No library can be
  * missing.
  */
-public class MacApplicationBackendProvider implements ApplicationBackendProvider {
+public class MacBackendProvider implements BackendProvider {
   @Override
   public String name() {
     return "cocoa-wkwebview";
@@ -28,7 +28,7 @@ public class MacApplicationBackendProvider implements ApplicationBackendProvider
   }
 
   @Override
-  public ApplicationBackend create(ApplicationParameters parameters) {
-    return new MacApplicationBackend(parameters);
+  public Application create(ApplicationParameters parameters) {
+    return new MacApplication(parameters);
   }
 }

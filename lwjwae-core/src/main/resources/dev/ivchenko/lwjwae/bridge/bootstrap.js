@@ -60,5 +60,17 @@
             deliver(name, typed ? codec.decode(payload) : payload);
         }
     };
-    window.${pageApi} = { listen, once, emit };
+    // Windows. open resolves to the id of the new window; close ends this document, so it never
+    // resolves. Options mirror WindowParameters: title, width, height, x, y, centered, url, resource.
+    const field = (value) => value === undefined || value === null ? "" : String(value);
+    // Java reads whole numbers; a size such as innerWidth / 2 is rounded rather than rejected.
+    const number = (value) => value === undefined || value === null ? "" : String(Math.round(value));
+    const open = (options = {}) =>
+        call("${openCall}", [
+            field(options.title), number(options.width), number(options.height),
+            number(options.x), number(options.y), options.centered ? "1" : "",
+            field(options.url), field(options.resource)
+        ].join("${separator}"), false).then(Number);
+    const close = () => call("${closeCall}", "", false).then(() => undefined);
+    window.${pageApi} = { listen, once, emit, open, close };
 })();

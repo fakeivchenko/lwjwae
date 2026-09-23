@@ -35,13 +35,15 @@ GraalVM to one executable and captured on Windows 11.
 ## A first window
 
 ```java
-try (ApplicationBackend application = Application.create(ApplicationParameters.builder()
-    .title("Docs")
-    .width(1280)
-    .height(800)
-    .build())) {
-  application.bind("reverse", text -> new StringBuilder(text).reverse().toString());
-  application.loadResource("app/index.html");
+try (Application application = Application.create()) {
+  Window window = application.open(WindowParameters.builder()
+      .title("Docs")
+      .width(1280)
+      .height(800)
+      .build());
+  window.bind("reverse", text -> new StringBuilder(text).reverse().toString());
+  window.loadResource("app/index.html");
+  window.show();
   application.run();
 }
 ```
@@ -114,14 +116,19 @@ dependencies {
 - **One API for three engines.** Title, size, resizing, navigation, inline HTML, script evaluation,
   load events, the developer tools. Every method works from any thread; the backend forwards it to
   the UI thread of the toolkit.
-- **A bridge in both directions.** `bind` exposes a Java function to the page as
-  `window.NAME(payload)`, which returns a promise. `emit` delivers an event to the page. Handlers
-  run on virtual threads, so a slow one doesn't freeze the window. The protocol is a string, so the
-  core has no serialization dependency; a codec adds typed calls with records and objects.
+- **As many windows as you need.** An `Application` owns the UI thread, the codec, and the list of
+  windows; `open` adds a `Window`, `run` blocks while any is open, `quit` closes them all. A page
+  opens and closes windows too, through `window.lwjwae.open(options)` and `window.lwjwae.close()`.
+- **A bridge in both directions, at two levels.** `bind` exposes a Java function to the page as
+  `window.NAME(payload)`, which returns a promise. `emit` delivers an event to the page. On a window,
+  they belong to that window; on the application, a binding reaches every window and learns which
+  one called, a listener hears every window, and `emit` reaches every page. Handlers run on virtual
+  threads, so a slow one doesn't freeze the window. The protocol is a string, so the core has no
+  serialization dependency; a codec adds typed calls with records and objects.
 - **Pages from the classpath.** `loadResource("app/index.html")` serves the files of the
   application under a custom scheme, so relative links, stylesheets, scripts, and `fetch` resolve
-  as on a web server. During development, `LWJWAE_DEV_SERVER_URL` points the window at a Vite or
-  webpack server with hot reload instead.
+  as on a web server. During development, `LWJWAE_DEV_SERVER_URL` points every window at a Vite
+  or webpack server with hot reload instead.
 - **Native image ready.** Every FFM stub is recorded, and each backend ships the reachability
   metadata that `native-image` needs. A test keeps the metadata in step with the bindings.
 
@@ -146,7 +153,10 @@ Two sibling repositories complete the picture:
 
 - **One UI thread per process.** A `UiDispatcher` owns the thread that the toolkit accepts and
   forwards work to it. GTK and Win32 get a thread of their own; Cocoa gets the main thread, which
-  the library doesn't own and therefore only borrows.
+  the library doesn't own and therefore only borrows. Applications and windows share it.
+- **An application is the process, a window is a window.** `Application` holds what exists once:
+  the dispatcher, the codec, the WebView2 environment, the window list. `Window` holds one native
+  window and its web view. Closing the last window ends `run()`; it doesn't end the application.
 - **Static callbacks, keyed by ID.** A C callback carries no closure, only a `void*`. Objects are
   registered under generated IDs that travel as that pointer, so one upcall stub serves every
   window and the set of stubs stays fixed for `native-image`.

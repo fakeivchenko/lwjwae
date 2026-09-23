@@ -1,13 +1,13 @@
 package dev.ivchenko.lwjwae.testing;
 
-import dev.ivchenko.lwjwae.ApplicationBackend;
-import dev.ivchenko.lwjwae.ApplicationBackendProvider;
+import dev.ivchenko.lwjwae.Application;
 import dev.ivchenko.lwjwae.ApplicationParameters;
+import dev.ivchenko.lwjwae.BackendProvider;
 
 /**
  * The provider that discovery must pick: supported, and ranked above {@link FakeFallbackProvider}.
  */
-public class FakePreferredProvider implements ApplicationBackendProvider {
+public class FakePreferredProvider implements BackendProvider {
   @Override
   public String name() {
     return "fake-preferred";
@@ -24,7 +24,7 @@ public class FakePreferredProvider implements ApplicationBackendProvider {
   }
 
   @Override
-  public ApplicationBackend create(ApplicationParameters parameters) {
-    return new FakeApplicationBackend(parameters);
+  public Application create(ApplicationParameters parameters) {
+    return new FakeApplication(parameters);
   }
 }

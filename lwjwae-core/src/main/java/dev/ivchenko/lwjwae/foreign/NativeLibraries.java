@@ -37,18 +37,6 @@ public class NativeLibraries {
   public final Arena ARENA = Arena.global();
 
   /**
-   * Opens the first library in {@code sonames} that the platform loader accepts, or returns {@code
-   * null} when none does. For a library that a backend can do without.
-   */
-  public SymbolLookup loadIfPresent(String... sonames) {
-    try {
-      return load(sonames);
-    } catch (UnsatisfiedLinkError _) {
-      return null;
-    }
-  }
-
-  /**
    * Opens the first library in {@code sonames} that the platform loader accepts.
    *
    * @throws UnsatisfiedLinkError If none of the names loads. The failure of every attempt is

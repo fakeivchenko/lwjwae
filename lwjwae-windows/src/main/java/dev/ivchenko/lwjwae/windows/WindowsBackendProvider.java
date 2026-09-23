@@ -1,8 +1,8 @@
 package dev.ivchenko.lwjwae.windows;
 
-import dev.ivchenko.lwjwae.ApplicationBackend;
-import dev.ivchenko.lwjwae.ApplicationBackendProvider;
+import dev.ivchenko.lwjwae.Application;
 import dev.ivchenko.lwjwae.ApplicationParameters;
+import dev.ivchenko.lwjwae.BackendProvider;
 import dev.ivchenko.lwjwae.util.PlatformUtil;
 import dev.ivchenko.lwjwae.windows.binding.WebView2Runtime;
 
@@ -13,7 +13,7 @@ import dev.ivchenko.lwjwae.windows.binding.WebView2Runtime;
  * it steps aside before it loads a Windows library, so the JAR file is harmless on a Linux or macOS
  * classpath.
  */
-public class WindowsApplicationBackendProvider implements ApplicationBackendProvider {
+public class WindowsBackendProvider implements BackendProvider {
   @Override
   public String name() {
     return "win32-webview2";
@@ -37,7 +37,7 @@ public class WindowsApplicationBackendProvider implements ApplicationBackendProv
   }
 
   @Override
-  public ApplicationBackend create(ApplicationParameters parameters) {
-    return new WindowsApplicationBackend(parameters);
+  public Application create(ApplicationParameters parameters) {
+    return new WindowsApplication(parameters);
   }
 }

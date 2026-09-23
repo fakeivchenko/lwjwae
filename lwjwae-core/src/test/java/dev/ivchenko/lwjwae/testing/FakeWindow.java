@@ -1,19 +1,23 @@
 package dev.ivchenko.lwjwae.testing;
 
-import dev.ivchenko.lwjwae.AbstractApplicationBackend;
-import dev.ivchenko.lwjwae.ApplicationParameters;
+import dev.ivchenko.lwjwae.AbstractApplication;
+import dev.ivchenko.lwjwae.AbstractWindow;
+import dev.ivchenko.lwjwae.WindowParameters;
 import dev.ivchenko.lwjwae.WindowPosition;
 import dev.ivchenko.lwjwae.event.LoadEvent;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.ReentrantLock;
+import lombok.Getter;
 
 /**
- * An {@link AbstractApplicationBackend} that records what the base class asks of it. Every script
- * that the base class evaluates or injects, and every URL that it navigates to, is kept for
- * assertions.
+ * An {@link AbstractWindow} that records what the base class asks of it. Every script that the base
+ * class evaluates or injects, and every URL that it navigates to, is kept for assertions.
  */
-public class FakeApplicationBackend extends AbstractApplicationBackend {
+public class FakeWindow extends AbstractWindow {
   public final List<String> injected = new CopyOnWriteArrayList<>();
   public final List<String> evaluated = new CopyOnWriteArrayList<>();
   public final List<String> navigated = new CopyOnWriteArrayList<>();
@@ -26,12 +30,14 @@ public class FakeApplicationBackend extends AbstractApplicationBackend {
   private boolean resizable = true;
   private boolean devToolsEnabled;
 
-  public FakeApplicationBackend() {
-    this(ApplicationParameters.createDefault());
-  }
+  /** Whether {@link #show()} was called. */
+  @Getter private boolean shown;
 
-  public FakeApplicationBackend(ApplicationParameters parameters) {
-    super(new FakeUiDispatcher(), parameters);
+  private final ReentrantLock evaluations = new ReentrantLock();
+  private final Condition evaluatedScript = this.evaluations.newCondition();
+
+  FakeWindow(AbstractApplication application, long id, WindowParameters parameters) {
+    super(application, id);
     this.title = parameters.title();
     this.width = parameters.width();
     this.height = parameters.height();
@@ -48,6 +54,28 @@ public class FakeApplicationBackend extends AbstractApplicationBackend {
     this.emitLoad(event);
   }
 
+  /**
+   * Waits up to five seconds for {@code script} to be evaluated. A bound handler replies from its
+   * own thread, so the reply arrives some time after the call that caused it.
+   *
+   * @throws AssertionError If the script isn't evaluated in time.
+   */
+  public void awaitEvaluation(String script) throws InterruptedException {
+    long remaining = TimeUnit.SECONDS.toNanos(5);
+    this.evaluations.lock();
+    try {
+      while (!this.evaluated.contains(script)) {
+        if (remaining <= 0) {
+          throw new AssertionError(
+              "Expected evaluation of " + script + " but saw " + this.evaluated);
+        }
+        remaining = this.evaluatedScript.awaitNanos(remaining);
+      }
+    } finally {
+      this.evaluations.unlock();
+    }
+  }
+
   @Override
   protected void injectOnDocumentStart(String script) {
     this.injected.add(script);
@@ -60,7 +88,13 @@ public class FakeApplicationBackend extends AbstractApplicationBackend {
 
   @Override
   public CompletableFuture<String> eval(String script) {
-    this.evaluated.add(script);
+    this.evaluations.lock();
+    try {
+      this.evaluated.add(script);
+      this.evaluatedScript.signalAll();
+    } finally {
+      this.evaluations.unlock();
+    }
     return CompletableFuture.completedFuture("undefined");
   }
 
@@ -77,11 +111,6 @@ public class FakeApplicationBackend extends AbstractApplicationBackend {
   @Override
   public void html(String html) {
     this.navigated.add("about:blank");
-  }
-
-  @Override
-  public String engine() {
-    return "fake 0";
   }
 
   @Override
@@ -148,10 +177,14 @@ public class FakeApplicationBackend extends AbstractApplicationBackend {
   }
 
   @Override
-  public void show() {}
+  public void show() {
+    this.shown = true;
+  }
 
   @Override
   public void close() {
-    this.markClosed();
+    if (!this.isClosed()) {
+      this.markClosed();
+    }
   }
 }

@@ -10,13 +10,14 @@ display tests haven't been run on a Mac since the port.
 - macOS, arm64 or x86_64. AppKit and WebKit are part of the system, so the platform check is the
   whole test.
 
-The provider [`MacApplicationBackendProvider`](src/main/java/dev/ivchenko/lwjwae/macos/MacApplicationBackendProvider.java) registers under the name `cocoa-wkwebview`.
+The provider [`MacBackendProvider`](src/main/java/dev/ivchenko/lwjwae/macos/MacBackendProvider.java) registers under the name `cocoa-wkwebview`.
 
 ## Layout
 
 | Class                                                                                         | Role                                                                          |
 |-----------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------|
-| [`MacApplicationBackend`](src/main/java/dev/ivchenko/lwjwae/macos/MacApplicationBackend.java) | The window. Forwards every call to the main thread.                           |
+| [`MacApplication`](src/main/java/dev/ivchenko/lwjwae/macos/MacApplication.java)               | The application. Runs the loop from the main thread of a native image.        |
+| [`MacWindow`](src/main/java/dev/ivchenko/lwjwae/macos/MacWindow.java)                         | The window. Forwards every call to the main thread.                           |
 | [`MacDispatcher`](src/main/java/dev/ivchenko/lwjwae/macos/MacDispatcher.java)                 | The main thread of the process, and how work reaches it.                      |
 | [`PendingEvaluation`](src/main/java/dev/ivchenko/lwjwae/macos/PendingEvaluation.java)         | A future and the arena of its completion block.                               |
 | [`binding.ObjC`](src/main/java/dev/ivchenko/lwjwae/macos/binding/ObjC.java)                   | The runtime: classes, selectors, `objc_msgSend`, blocks, autorelease pools.   |
@@ -56,7 +57,7 @@ situations, and [`MacDispatcher`](src/main/java/dev/ivchenko/lwjwae/macos/MacDis
   batch has started `-[NSApplication run]` and that nested loop owns the thread for the rest of the
   process.
 - In a native image, the `main` method of the application *is* the main thread. Calls made from it
-  run inline, and [`ApplicationBackend.run()`](../lwjwae-core/src/main/java/dev/ivchenko/lwjwae/ApplicationBackend.java) starts the application loop itself.
+  run inline, and [`MacApplication.run()`](src/main/java/dev/ivchenko/lwjwae/macos/MacApplication.java) starts the application loop itself.
 
 On first use, [`MacDispatcher.instance()`](src/main/java/dev/ivchenko/lwjwae/macos/MacDispatcher.java) creates the shared `NSApplication` with the regular
 activation policy (a Dock icon and a menu bar). When it's already on the main thread, it calls
@@ -67,13 +68,14 @@ Every task runs inside an autorelease pool: `execute` pushes one before and pops
 
 ## Creating a window
 
-`new MacApplicationBackend(parameters)` runs the following on the main thread and returns when it's
+`new MacApplication(parameters)` only makes sure that the dispatcher, and with it `NSApplication`,
+exists. `application.open(parameters)` runs the following on the main thread and returns when it's
 done:
 
 1. Allocates an instance of `LwjwaeDelegate`, the class defined once per process with the window
    delegate, navigation delegate, script message handler, and URL scheme handler methods. Records
-   the backend under the address of the delegate; that address is the key from every callback back
-   to the backend.
+   the window under the address of the delegate; that address is the key from every callback back
+   to the window.
 2. Creates a `WKWebViewConfiguration`, sets the delegate as the handler for the `app` URL scheme,
    retains the `WKUserContentController` of the configuration, and adds the delegate as the
    script message handler named `__lwjwaeBridge`.
@@ -96,7 +98,7 @@ application.
 
 ## Callbacks
 
-Every delegate method looks the backend up by `self`, does the work, catches `Throwable` and
+Every delegate method looks the window up by `self`, does the work, catches `Throwable` and
 reports it. Nothing unwinds into Cocoa.
 
 | Selector                                                                                  | Handler                           | What it does                                                                                                       |
@@ -108,7 +110,7 @@ reports it. Nothing unwinds into Cocoa.
 | `userContentController:didReceiveScriptMessage:`                                          | `onDidReceiveScriptMessage`       | Reads the body of the `WKScriptMessage` and calls `handleBridgeMessage`.                                           |
 | `webView:startURLSchemeTask:`                                                             | `onStartUrlSchemeTask`            | Serves the resource, described next.                                                                               |
 | `webView:stopURLSchemeTask:`                                                              | `onStopUrlSchemeTask`             | Nothing: a resource is answered in one step, so there's nothing to stop.                                           |
-| `windowWillClose:`                                                                        | `onWindowWillClose`               | Detaches the delegates, releases every object, calls `markClosed()`, and stops the run loop if `run()` started it. |
+| `windowWillClose:`                                                                        | `onWindowWillClose`               | Detaches the delegates, releases every object, and calls `markClosed()`, which stops the run loop if `run()` started it and this was the last window. |
 
 ## Serving resources
 
@@ -148,20 +150,23 @@ every later one, which lets the menu through. `isDevToolsEnabled()` reads the pr
 
 ## Running the application loop
 
-`run()` has two behaviors, chosen by where it's called from:
+`MacApplication.run()` has two behaviors, chosen by where it's called from:
 
 - From any thread other than the main thread, or when the application loop is already running:
-  shows the window and blocks until it closes, like the other backends.
+  blocks while any window is open, like the other backends.
 - From the main thread before the loop started, which is the `main` method of a native image:
-  shows the window and calls `-[NSApplication run]` itself. When the window closes, the backend
-  calls `stop:` and posts an application-defined event, because `stop:` takes effect only after the
-  loop processes an event. `run` returns, and so does `run()`.
+  calls `-[NSApplication run]` itself, unless no window is open, in which case it returns at once.
+  When the last window closes, or on `quit()`, `onIdle()` calls `stop:` and posts an
+  application-defined event, because `stop:` takes effect only after the loop processes an event.
+  `run` returns, and so does `run()`.
 
 ## Closing
 
 `close()` calls `-[NSWindow close]` on the main thread. The delegate receives `windowWillClose:`
-synchronously, so the cleanup runs before `close()` returns. Closing the window with the red button
-takes the same path. `close()` is idempotent.
+synchronously, so the cleanup runs before `close()` returns, and the last window to close releases
+every thread blocked in `Application.run()`. Closing the window with the red button takes the same
+path. `close()` is idempotent. `Application.quit()` closes every window this way; `NSApplication`
+stays, and another application can be created on it.
 
 ## Tests
 

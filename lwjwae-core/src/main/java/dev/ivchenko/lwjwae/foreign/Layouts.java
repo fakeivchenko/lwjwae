@@ -28,9 +28,6 @@ public class Layouts {
   /** {@code long long}, {@code int64_t}, and {@code size_t}/{@code ssize_t} on 64-bit targets. */
   public final ValueLayout.OfLong C_LONG_LONG = ValueLayout.JAVA_LONG;
 
-  /** {@code float}. */
-  public final ValueLayout.OfFloat C_FLOAT = ValueLayout.JAVA_FLOAT;
-
   /** {@code double}. */
   public final ValueLayout.OfDouble C_DOUBLE = ValueLayout.JAVA_DOUBLE;
 

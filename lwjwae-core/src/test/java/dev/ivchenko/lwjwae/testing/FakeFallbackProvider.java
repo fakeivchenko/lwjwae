@@ -1,11 +1,11 @@
 package dev.ivchenko.lwjwae.testing;
 
-import dev.ivchenko.lwjwae.ApplicationBackend;
-import dev.ivchenko.lwjwae.ApplicationBackendProvider;
+import dev.ivchenko.lwjwae.Application;
 import dev.ivchenko.lwjwae.ApplicationParameters;
+import dev.ivchenko.lwjwae.BackendProvider;
 
 /** A supported provider of the default priority, so it loses to {@link FakePreferredProvider}. */
-public class FakeFallbackProvider implements ApplicationBackendProvider {
+public class FakeFallbackProvider implements BackendProvider {
   @Override
   public String name() {
     return "fake-fallback";
@@ -17,7 +17,7 @@ public class FakeFallbackProvider implements ApplicationBackendProvider {
   }
 
   @Override
-  public ApplicationBackend create(ApplicationParameters parameters) {
+  public Application create(ApplicationParameters parameters) {
     throw new AssertionError("The lower-priority provider must not be chosen");
   }
 }

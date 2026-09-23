@@ -62,7 +62,7 @@ public class PlatformUtil {
       String key = line.substring(0, equals).strip();
       String value = line.substring(equals + 1).strip().replace("\"", "");
       if (key.equals("ID")) {
-        ids.add(0, value);
+        ids.addFirst(value);
       } else if (key.equals("ID_LIKE")) {
         ids.addAll(List.of(value.split("\\s+")));
       }

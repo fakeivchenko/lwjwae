@@ -1,5 +1,6 @@
 package dev.ivchenko.lwjwae;
 
+import dev.ivchenko.lwjwae.testing.PointCodec;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -13,21 +14,8 @@ class ApplicationParametersTest {
   @Test
   void defaultsFillEveryComponent() {
     ApplicationParameters parameters = ApplicationParameters.createDefault();
-    Assertions.assertEquals("Application", parameters.title());
-    Assertions.assertEquals(1024, parameters.width());
-    Assertions.assertEquals(768, parameters.height());
-    Assertions.assertNull(parameters.url());
     Assertions.assertFalse(parameters.isDevelopment());
     Assertions.assertNull(parameters.codec(), "no codec module on this classpath");
-  }
-
-  @Test
-  void nonPositiveSizesAndBlankTitleFallBackToDefaults() {
-    ApplicationParameters parameters =
-        ApplicationParameters.builder().title("  ").width(0).height(-5).build();
-    Assertions.assertEquals("Application", parameters.title());
-    Assertions.assertEquals(1024, parameters.width());
-    Assertions.assertEquals(768, parameters.height());
   }
 
   @Test
@@ -53,10 +41,10 @@ class ApplicationParametersTest {
 
   @Test
   void toBuilderKeepsUnchangedComponents() {
-    ApplicationParameters base = ApplicationParameters.builder().title("Docs").width(640).build();
-    ApplicationParameters changed = base.toBuilder().height(480).build();
-    Assertions.assertEquals("Docs", changed.title());
-    Assertions.assertEquals(640, changed.width());
-    Assertions.assertEquals(480, changed.height());
+    ApplicationParameters base =
+        ApplicationParameters.builder().devServerUrl("http://localhost:5173").build();
+    ApplicationParameters changed = base.toBuilder().codec(new PointCodec()).build();
+    Assertions.assertEquals("http://localhost:5173", changed.devServerUrl());
+    Assertions.assertNotNull(changed.codec());
   }
 }

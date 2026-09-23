@@ -1,13 +1,13 @@
 package dev.ivchenko.lwjwae.testing;
 
-import dev.ivchenko.lwjwae.ApplicationBackend;
-import dev.ivchenko.lwjwae.ApplicationBackendProvider;
+import dev.ivchenko.lwjwae.Application;
 import dev.ivchenko.lwjwae.ApplicationParameters;
+import dev.ivchenko.lwjwae.BackendProvider;
 
 /**
  * The highest-ranked provider of all, but never supported: it must step aside despite its priority.
  */
-public class FakeOtherPlatformProvider implements ApplicationBackendProvider {
+public class FakeOtherPlatformProvider implements BackendProvider {
   @Override
   public String name() {
     return "fake-other-platform";
@@ -24,7 +24,7 @@ public class FakeOtherPlatformProvider implements ApplicationBackendProvider {
   }
 
   @Override
-  public ApplicationBackend create(ApplicationParameters parameters) {
+  public Application create(ApplicationParameters parameters) {
     throw new AssertionError("An unsupported provider must not be chosen");
   }
 }

@@ -31,7 +31,7 @@ public class Signatures {
   public final ValueLayout.OfShort C_SHORT = Layouts.C_SHORT;
 
   /** {@code CGFloat}. */
-  public final ValueLayout.OfDouble C_DOUBLE = ValueLayout.JAVA_DOUBLE;
+  public final ValueLayout.OfDouble C_DOUBLE = Layouts.C_DOUBLE;
 
   /** {@code BOOL}: one byte on both architectures. */
   public final ValueLayout.OfBoolean C_BOOL = Layouts.C_BOOL;
