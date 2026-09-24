@@ -7,6 +7,7 @@ import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.SymbolLookup;
 import java.lang.invoke.MethodHandle;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import lombok.SneakyThrows;
 import lombok.experimental.UtilityClass;
@@ -106,6 +107,46 @@ public class WebKit {
   private final MethodHandle URI_SCHEME_REQUEST_FINISH_ERROR =
       NativeLibraries.downcall(
           WEBKIT, "webkit_uri_scheme_request_finish_error", Signatures.VOID_POINTER_POINTER);
+  private final SymbolLookup SOUP = NativeLibraries.load("libsoup-3.0.so.0", "libsoup-3.0.so");
+
+  // --- RPC: requests with a method and a body, responses with a status, headers, and a stream ---
+  private final MethodHandle URI_SCHEME_REQUEST_GET_URI =
+      NativeLibraries.downcall(
+          WEBKIT, "webkit_uri_scheme_request_get_uri", Signatures.POINTER_POINTER);
+  private final MethodHandle URI_SCHEME_REQUEST_GET_HTTP_METHOD =
+      NativeLibraries.downcall(
+          WEBKIT, "webkit_uri_scheme_request_get_http_method", Signatures.POINTER_POINTER);
+  private final MethodHandle URI_SCHEME_REQUEST_GET_HTTP_BODY =
+      NativeLibraries.downcall(
+          WEBKIT, "webkit_uri_scheme_request_get_http_body", Signatures.POINTER_POINTER);
+  private final MethodHandle URI_SCHEME_REQUEST_GET_HTTP_HEADERS =
+      NativeLibraries.downcall(
+          WEBKIT, "webkit_uri_scheme_request_get_http_headers", Signatures.POINTER_POINTER);
+  private final MethodHandle URI_SCHEME_REQUEST_GET_WEB_VIEW =
+      NativeLibraries.downcall(
+          WEBKIT, "webkit_uri_scheme_request_get_web_view", Signatures.POINTER_POINTER);
+  private final MethodHandle SOUP_MESSAGE_HEADERS_GET_ONE =
+      NativeLibraries.downcall(
+          SOUP, "soup_message_headers_get_one", Signatures.POINTER_POINTER_POINTER);
+  private final MethodHandle URI_SCHEME_RESPONSE_NEW =
+      NativeLibraries.downcall(
+          WEBKIT, "webkit_uri_scheme_response_new", Signatures.POINTER_POINTER_LONG);
+  private final MethodHandle URI_SCHEME_RESPONSE_SET_STATUS =
+      NativeLibraries.downcall(
+          WEBKIT, "webkit_uri_scheme_response_set_status", Signatures.VOID_POINTER_INT_POINTER);
+  private final MethodHandle URI_SCHEME_RESPONSE_SET_HTTP_HEADERS =
+      NativeLibraries.downcall(
+          WEBKIT, "webkit_uri_scheme_response_set_http_headers", Signatures.VOID_POINTER_POINTER);
+  private final MethodHandle URI_SCHEME_REQUEST_FINISH_WITH_RESPONSE =
+      NativeLibraries.downcall(
+          WEBKIT,
+          "webkit_uri_scheme_request_finish_with_response",
+          Signatures.VOID_POINTER_POINTER);
+  private final MethodHandle SOUP_MESSAGE_HEADERS_NEW =
+      NativeLibraries.downcall(SOUP, "soup_message_headers_new", Signatures.POINTER_INT);
+  private final MethodHandle SOUP_MESSAGE_HEADERS_APPEND =
+      NativeLibraries.downcall(
+          SOUP, "soup_message_headers_append", Signatures.VOID_POINTER_POINTER_POINTER);
   private final MethodHandle VALUE_TO_STRING =
       NativeLibraries.downcall(JSC, "jsc_value_to_string", Signatures.POINTER_POINTER);
 
@@ -335,6 +376,72 @@ public class WebKit {
       } finally {
         Glib.unref(value);
       }
+    }
+  }
+
+  /** A header of a custom-scheme request, or {@code null}. */
+  @SneakyThrows
+  public String uriSchemeRequestHeader(MemorySegment request, String name) {
+    MemorySegment headers =
+        (MemorySegment) URI_SCHEME_REQUEST_GET_HTTP_HEADERS.invokeExact(request);
+    if (headers.equals(MemorySegment.NULL)) {
+      return null;
+    }
+    try (Arena arena = Arena.ofConfined()) {
+      return NativeLibraries.string(
+          (MemorySegment)
+              SOUP_MESSAGE_HEADERS_GET_ONE.invokeExact(headers, arena.allocateFrom(name)));
+    }
+  }
+
+  /** {@code webkit_uri_scheme_request_get_web_view}: the view whose page made the request. */
+  @SneakyThrows
+  public MemorySegment uriSchemeRequestWebView(MemorySegment request) {
+    return (MemorySegment) URI_SCHEME_REQUEST_GET_WEB_VIEW.invokeExact(request);
+  }
+
+  /** {@code webkit_uri_scheme_request_get_uri}: the whole URI, query included. */
+  @SneakyThrows
+  public String uriSchemeRequestUri(MemorySegment request) {
+    return NativeLibraries.string((MemorySegment) URI_SCHEME_REQUEST_GET_URI.invokeExact(request));
+  }
+
+  /** {@code webkit_uri_scheme_request_get_http_method}. */
+  @SneakyThrows
+  public String uriSchemeRequestMethod(MemorySegment request) {
+    return NativeLibraries.string(
+        (MemorySegment) URI_SCHEME_REQUEST_GET_HTTP_METHOD.invokeExact(request));
+  }
+
+  /**
+   * {@code webkit_uri_scheme_request_get_http_body}: a {@code GInputStream} that the caller owns,
+   * or {@code NULL} for a request without a body.
+   */
+  @SneakyThrows
+  public MemorySegment uriSchemeRequestBody(MemorySegment request) {
+    return (MemorySegment) URI_SCHEME_REQUEST_GET_HTTP_BODY.invokeExact(request);
+  }
+
+  /**
+   * Answers a custom-scheme request with {@code status}, {@code headers}, and a body that WebKit
+   * reads from {@code stream} as it arrives, to its end.
+   */
+  @SneakyThrows
+  public void uriSchemeRequestFinishWithStream(
+      MemorySegment request, MemorySegment stream, int status, Map<String, String> headers) {
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment response = (MemorySegment) URI_SCHEME_RESPONSE_NEW.invokeExact(stream, -1L);
+      URI_SCHEME_RESPONSE_SET_STATUS.invokeExact(response, status, MemorySegment.NULL);
+      MemorySegment soupHeaders = (MemorySegment) SOUP_MESSAGE_HEADERS_NEW.invokeExact(1);
+      for (Map.Entry<String, String> header : headers.entrySet()) {
+        SOUP_MESSAGE_HEADERS_APPEND.invokeExact(
+            soupHeaders,
+            arena.allocateFrom(header.getKey()),
+            arena.allocateFrom(header.getValue()));
+      }
+      URI_SCHEME_RESPONSE_SET_HTTP_HEADERS.invokeExact(response, soupHeaders);
+      URI_SCHEME_REQUEST_FINISH_WITH_RESPONSE.invokeExact(request, response);
+      Glib.unref(response);
     }
   }
 }

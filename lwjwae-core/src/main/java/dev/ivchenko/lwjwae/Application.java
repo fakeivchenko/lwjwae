@@ -6,6 +6,7 @@ import dev.ivchenko.lwjwae.event.EventSubscription;
 import dev.ivchenko.lwjwae.exception.BackendNotAvailableException;
 import dev.ivchenko.lwjwae.notification.Notification;
 import dev.ivchenko.lwjwae.notification.NotificationHandle;
+import dev.ivchenko.lwjwae.rpc.RpcHandler;
 import dev.ivchenko.lwjwae.tray.Tray;
 import dev.ivchenko.lwjwae.tray.TrayIcon;
 import dev.ivchenko.lwjwae.util.PlatformUtil;
@@ -186,6 +187,20 @@ public interface Application extends AutoCloseable {
    * window called.
    */
   <T, R> void bind(String name, Class<T> argumentType, BiFunction<Window, T, R> handler);
+
+  /**
+   * Answers the calls that the page makes with {@code lwjwae.call(name, body)}, in every window of
+   * the application.
+   *
+   * <p>Unlike {@link #bind}, a call carries bytes both ways, can be answered as a stream that the
+   * page reads while it's produced, and can be abandoned by the page with an {@code AbortSignal}.
+   * On the page, the call resolves to a {@code Response}, as {@code fetch} does. See {@link
+   * RpcHandler}.
+   *
+   * @param name Letters, digits, and {@code . _ -}.
+   * @throws IllegalArgumentException If {@code name} has any other character.
+   */
+  void handle(String name, RpcHandler handler);
 
   /**
    * Delivers an event to every open window and to the listeners of this application. The Java

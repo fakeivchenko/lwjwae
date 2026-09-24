@@ -9,6 +9,7 @@ import dev.ivchenko.lwjwae.testing.FakeApplication;
 import dev.ivchenko.lwjwae.testing.FakeWindow;
 import dev.ivchenko.lwjwae.testing.Point;
 import dev.ivchenko.lwjwae.testing.PointCodec;
+import dev.ivchenko.lwjwae.testing.RpcReply;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
@@ -25,6 +26,7 @@ import org.junit.jupiter.api.Timeout;
 @Timeout(10)
 class AbstractWindowTest {
   private static final String SEP = BridgeProtocol.SEPARATOR;
+  private static final String VALUE_TYPE = "application/x-lwjwae-value; charset=utf-8";
 
   @Test
   void installsTheBridgeRuntimeBeforeAnyPage() {
@@ -45,8 +47,8 @@ class AbstractWindowTest {
       String binding = BridgeProtocol.bindingScript("answer");
       Assertions.assertEquals(1, window.injected.stream().filter(binding::equals).count());
       Assertions.assertEquals(1, window.evaluated.stream().filter(binding::equals).count());
-      window.receive("1" + SEP + "answer" + SEP + "x");
-      window.awaitEvaluation(BridgeProtocol.resolveScript(1, "second"));
+      window.call(1, "answer", "x");
+      Assertions.assertEquals("second", window.awaitReply(1).body());
     }
   }
 
@@ -63,7 +65,7 @@ class AbstractWindowTest {
   }
 
   @Test
-  void typedBindingsAndObjectEventsNeedCodec() {
+  void typedBindingsAndObjectEventsNeedCodec() throws Exception {
     try (FakeApplication application = new FakeApplication()) {
       FakeWindow window = application.openFake();
       Assertions.assertThrows(
@@ -72,8 +74,8 @@ class AbstractWindowTest {
       Assertions.assertThrows(
           IllegalStateException.class, () -> window.emit("tick", new Point(1, 2)));
       Assertions.assertDoesNotThrow(() -> window.emit("tick", "text"));
-      Assertions.assertTrue(
-          window.evaluated.contains(BridgeProtocol.emitScript("tick", "text", false)));
+      window.call(1, BridgeProtocol.EVENTS_CALL, "");
+      Assertions.assertEquals(List.of("0" + SEP + "tick" + SEP + "text"), window.awaitEvents(1, 1));
     }
   }
 
@@ -87,14 +89,16 @@ class AbstractWindowTest {
       window.bind("origin", Void.class, _ -> new Point(0, 0));
       Assertions.assertTrue(window.injected.contains(BridgeProtocol.bindingScript("mirror", true)));
 
-      window.receive("1" + SEP + "mirror" + SEP + "1,2");
-      window.awaitEvaluation(BridgeProtocol.resolveScript(1, "2,1"));
-      window.receive("2" + SEP + "origin" + SEP + "null");
-      window.awaitEvaluation(BridgeProtocol.resolveScript(2, "0,0"));
+      window.call(1, "mirror", VALUE_TYPE, "1,2");
+      RpcReply mirrored = window.awaitReply(1);
+      Assertions.assertEquals("2,1", mirrored.body());
+      Assertions.assertTrue(mirrored.contentType().startsWith("application/x-lwjwae-value"));
+      window.call(2, "origin", VALUE_TYPE, "null");
+      Assertions.assertEquals("0,0", window.awaitReply(2).body());
 
       window.emit("moved", new Point(3, 4));
-      Assertions.assertTrue(
-          window.evaluated.contains(BridgeProtocol.emitScript("moved", "3,4", true)));
+      window.call(3, BridgeProtocol.EVENTS_CALL, "");
+      Assertions.assertEquals(List.of("1" + SEP + "moved" + SEP + "3,4"), window.awaitEvents(3, 1));
     }
   }
 
@@ -111,7 +115,8 @@ class AbstractWindowTest {
       window.listen("moved", Point.class, points::add);
       window.listen("tick", String.class, texts::add);
 
-      // From Java: the page gets the script, and the Java listeners get the event.
+      // From Java: the page gets the event in its stream, and the Java listeners get it too.
+      window.call(9, BridgeProtocol.EVENTS_CALL, "");
       window.emit("tick", "one");
       Event first = heard.poll(5, TimeUnit.SECONDS);
       Assertions.assertNotNull(first);
@@ -119,24 +124,23 @@ class AbstractWindowTest {
       Assertions.assertEquals("one", first.payload());
       Assertions.assertFalse(first.typed());
       Assertions.assertEquals("one", texts.poll(5, TimeUnit.SECONDS));
-      Assertions.assertTrue(
-          window.evaluated.contains(BridgeProtocol.emitScript("tick", "one", false)));
+      Assertions.assertEquals(List.of("0" + SEP + "tick" + SEP + "one"), window.awaitEvents(9, 1));
 
-      // From the page: window.lwjwae.emit posts an EVENT_CALL message; the promise resolves.
-      window.receive(
-          "1" + SEP + BridgeProtocol.EVENT_CALL + SEP + "1" + SEP + "moved" + SEP + "3,4");
+      // From the page: window.lwjwae.emit is a call to EVENT_CALL, answered with no body.
+      window.call(1, BridgeProtocol.EVENT_CALL, "1" + SEP + "moved" + SEP + "3,4");
       Assertions.assertEquals(new Point(3, 4), points.poll(5, TimeUnit.SECONDS));
-      window.awaitEvaluation(BridgeProtocol.resolveScript(1, ""));
+      Assertions.assertEquals(204, window.awaitReply(1).status());
 
-      window.receive(
-          "2" + SEP + BridgeProtocol.EVENT_CALL + SEP + "0" + SEP + "tick" + SEP + "two");
+      window.call(2, BridgeProtocol.EVENT_CALL, "0" + SEP + "tick" + SEP + "two");
       Event second = heard.poll(5, TimeUnit.SECONDS);
       Assertions.assertNotNull(second);
       Assertions.assertEquals("two", second.payload());
       Assertions.assertTrue(second.id() > first.id(), "IDs count deliveries");
 
-      window.receive("3" + SEP + BridgeProtocol.EVENT_CALL + SEP + "garbage");
-      window.awaitEvaluation(BridgeProtocol.rejectScript(3, "Malformed event"));
+      window.call(3, BridgeProtocol.EVENT_CALL, "garbage");
+      RpcReply malformed = window.awaitReply(3);
+      Assertions.assertEquals(400, malformed.status());
+      Assertions.assertTrue(malformed.body().contains("Malformed event"), malformed.body());
     }
   }
 
@@ -220,9 +224,9 @@ class AbstractWindowTest {
             return new StringBuilder(payload).reverse().toString();
           });
 
-      window.receive("42" + SEP + "reverse" + SEP + "abc");
+      window.call(42, "reverse", "abc");
 
-      window.awaitEvaluation(BridgeProtocol.resolveScript(42, "cba"));
+      Assertions.assertEquals("cba", window.awaitReply(42).body());
       Assertions.assertTrue(
           handlerThread.get().isVirtual(), "handlers must run on virtual threads");
     }
@@ -232,8 +236,10 @@ class AbstractWindowTest {
   void anUnknownNameIsRejectedOnThePageSide() throws Exception {
     try (FakeApplication application = new FakeApplication()) {
       FakeWindow window = application.openFake();
-      window.receive("5" + SEP + "missing" + SEP);
-      window.awaitEvaluation(BridgeProtocol.rejectScript(5, "No handler bound for missing"));
+      window.call(5, "missing", "");
+      RpcReply reply = window.awaitReply(5);
+      Assertions.assertEquals(404, reply.status());
+      Assertions.assertTrue(reply.body().contains("No handler for missing"), reply.body());
     }
   }
 
@@ -246,8 +252,10 @@ class AbstractWindowTest {
           _ -> {
             throw new IllegalStateException("kaboom");
           });
-      window.receive("9" + SEP + "boom" + SEP + "x");
-      window.awaitEvaluation(BridgeProtocol.rejectScript(9, "kaboom"));
+      window.call(9, "boom", "x");
+      RpcReply reply = window.awaitReply(9);
+      Assertions.assertEquals(500, reply.status());
+      Assertions.assertEquals("{\"code\":\"internal\",\"error\":\"kaboom\"}", reply.body());
     }
   }
 
@@ -260,8 +268,8 @@ class AbstractWindowTest {
           _ -> {
             throw new IllegalStateException();
           });
-      window.receive("11" + SEP + "silent" + SEP);
-      window.awaitEvaluation(BridgeProtocol.rejectScript(11, "IllegalStateException"));
+      window.call(11, "silent", "");
+      Assertions.assertTrue(window.awaitReply(11).body().contains("\"IllegalStateException\""));
     }
   }
 
@@ -270,8 +278,8 @@ class AbstractWindowTest {
     try (FakeApplication application = new FakeApplication()) {
       FakeWindow window = application.openFake();
       window.bind("echo", Function.identity());
-      window.receive("1" + SEP + "echo" + SEP + "a" + SEP + "b");
-      window.awaitEvaluation(BridgeProtocol.resolveScript(1, "a" + SEP + "b"));
+      window.call(1, "echo", "a" + SEP + "b");
+      Assertions.assertEquals("a" + SEP + "b", window.awaitReply(1).body());
     }
   }
 
@@ -283,13 +291,14 @@ class AbstractWindowTest {
           captureUncaught(
               () -> {
                 window.receive("no separators here");
-                window.receive("x" + SEP + "name" + SEP + "payload");
+                window.receive(
+                    String.join(SEP, "\u0001rpc", "stolen", "doc", "1", "echo", "", "s", "x"));
               });
       Assertions.assertEquals(2, reported.size());
       Assertions.assertTrue(
           reported.getFirst().getMessage().startsWith("Malformed bridge message"));
-      Assertions.assertTrue(
-          window.evaluated.stream().noneMatch(script -> script.contains("settle")));
+      Assertions.assertTrue(reported.getLast().getMessage().contains("without the window token"));
+      Assertions.assertTrue(window.posted.isEmpty(), "nothing may answer: " + window.posted);
     }
   }
 
@@ -307,13 +316,64 @@ class AbstractWindowTest {
             return "late";
           });
 
-      window.receive("3" + SEP + "slow" + SEP);
+      window.call(3, "slow", "");
       Assertions.assertTrue(handlerStarted.await(5, TimeUnit.SECONDS));
       window.close();
       windowClosed.countDown();
 
       Thread.sleep(200);
-      Assertions.assertFalse(window.evaluated.contains(BridgeProtocol.resolveScript(3, "late")));
+      Assertions.assertTrue(window.posted.isEmpty(), "a closed window gets no answer");
+    }
+  }
+
+  @Test
+  void eventsWaitForTheStreamAndFollowTheNewestDocument() throws Exception {
+    try (FakeApplication application = new FakeApplication()) {
+      FakeWindow window = application.openFake();
+      window.emit("tick", "before any document");
+      window.call(1, BridgeProtocol.EVENTS_CALL, "");
+      Assertions.assertEquals(
+          List.of("0" + SEP + "tick" + SEP + "before any document"), window.awaitEvents(1, 1));
+
+      // The document goes away and gives the stream up; what is emitted then waits for the next.
+      window.cancel(1);
+      window.emit("tick", "for the next document");
+      window.call(2, BridgeProtocol.EVENTS_CALL, "");
+      Assertions.assertEquals(
+          List.of("0" + SEP + "tick" + SEP + "for the next document"), window.awaitEvents(2, 1));
+      Assertions.assertEquals(1, window.awaitEvents(1, 1).size(), "the old stream gets no more");
+
+      // A stream that nobody gave up is taken over by the next one.
+      window.call(3, BridgeProtocol.EVENTS_CALL, "");
+      window.awaitEnd(2);
+      window.emit("tick", "for the third document");
+      Assertions.assertEquals(
+          List.of("0" + SEP + "tick" + SEP + "for the third document"), window.awaitEvents(3, 1));
+    }
+  }
+
+  @Test
+  void cancellingACallInterruptsItsHandler() throws Exception {
+    try (FakeApplication application = new FakeApplication()) {
+      FakeWindow window = application.openFake();
+      CountDownLatch started = new CountDownLatch(1);
+      CountDownLatch interrupted = new CountDownLatch(1);
+      window.handle(
+          "wait",
+          call -> {
+            started.countDown();
+            try {
+              Thread.sleep(10_000);
+            } catch (InterruptedException _) {
+              if (call.isCancelled()) {
+                interrupted.countDown();
+              }
+            }
+          });
+      window.call(1, "wait", "");
+      Assertions.assertTrue(started.await(5, TimeUnit.SECONDS));
+      window.cancel(1);
+      Assertions.assertTrue(interrupted.await(5, TimeUnit.SECONDS));
     }
   }
 

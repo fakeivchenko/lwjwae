@@ -60,6 +60,23 @@ public class Signatures {
   public final FunctionDescriptor INT_POINTER_LONG =
       FunctionDescriptor.of(C_INT, C_POINTER, C_LONG);
 
+  /** {@code gint f(gint)}: {@code close}. */
+  public final FunctionDescriptor INT_INT = FunctionDescriptor.of(C_INT, C_INT);
+
+  /** {@code gssize f(gint, T*, gsize)}: {@code write}. */
+  public final FunctionDescriptor LONG_INT_POINTER_LONG =
+      FunctionDescriptor.of(C_LONG, C_INT, C_POINTER, C_LONG);
+
+  /** {@code T* f(gint, gboolean)}: {@code g_unix_input_stream_new}. */
+  public final FunctionDescriptor POINTER_INT_INT = FunctionDescriptor.of(C_POINTER, C_INT, C_INT);
+
+  /**
+   * {@code gboolean g_input_stream_read_all(GInputStream*, void*, gsize, gsize*, GCancellable*,
+   * GError**)}.
+   */
+  public final FunctionDescriptor G_INPUT_STREAM_READ_ALL =
+      FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_LONG, C_POINTER, C_POINTER, C_POINTER);
+
   /** {@code void f(T*, U*)}. */
   public final FunctionDescriptor VOID_POINTER_POINTER =
       FunctionDescriptor.ofVoid(C_POINTER, C_POINTER);

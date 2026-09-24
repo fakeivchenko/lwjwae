@@ -37,6 +37,10 @@ public class Com {
       NativeLibraries.downcall(Signatures.INT_POINTER_POINTER_POINTER);
   private final MethodHandle CALL_P_P_I =
       NativeLibraries.downcall(Signatures.INT_POINTER_POINTER_INT);
+  private final MethodHandle CALL_P_L_P =
+      NativeLibraries.downcall(Signatures.INT_POINTER_LONG_POINTER);
+  private final MethodHandle CALL_P_P_I_P =
+      NativeLibraries.downcall(Signatures.INT_POINTER_POINTER_INT_POINTER);
   private final MethodHandle CALL_P_RECT = NativeLibraries.downcall(Signatures.INT_POINTER_RECT);
   private final MethodHandle CALL_P_P_I_P_P_P =
       NativeLibraries.downcall(Signatures.INT_POINTER_POINTER_INT_POINTER_X3);
@@ -78,6 +82,19 @@ public class Com {
   @SneakyThrows
   public int call(MemorySegment object, int index, MemorySegment first, int second) {
     return (int) CALL_P_P_I.invokeExact(slot(object, index), object, first, second);
+  }
+
+  /** Calls method {@code index} of {@code object} with a 64-bit integer and a pointer. */
+  @SneakyThrows
+  public int call(MemorySegment object, int index, long first, MemorySegment second) {
+    return (int) CALL_P_L_P.invokeExact(slot(object, index), object, first, second);
+  }
+
+  /** Calls method {@code index} of {@code object} with a pointer, an integer, and a pointer. */
+  @SneakyThrows
+  public int call(
+      MemorySegment object, int index, MemorySegment first, int second, MemorySegment third) {
+    return (int) CALL_P_P_I_P.invokeExact(slot(object, index), object, first, second, third);
   }
 
   /** The shape of {@code ICoreWebView2Environment::CreateWebResourceResponse}. */

@@ -58,6 +58,7 @@ provider only probes its libraries, which loads them without initializing anythi
 |----------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------|
 | [`Gtk4Application`](src/main/java/dev/ivchenko/lwjwae/gtk4/Gtk4Application.java)             | The application. Prepares the web context and serves `app://`; opens windows.      |
 | [`Gtk4Window`](src/main/java/dev/ivchenko/lwjwae/gtk4/Gtk4Window.java)                       | The window. Forwards every call to the GTK thread.                                 |
+| [`Gtk4RpcExchange`](src/main/java/dev/ivchenko/lwjwae/gtk4/Gtk4RpcExchange.java) | One RPC call: a `POST` to the custom scheme, answered through a pipe. |
 | [`Gtk4Dispatcher`](src/main/java/dev/ivchenko/lwjwae/gtk4/Gtk4Dispatcher.java)               | The one GTK thread of the process, running a `GMainLoop` (see `lwjwae-glib`).      |
 | [`binding.Gtk`](src/main/java/dev/ivchenko/lwjwae/gtk4/binding/Gtk.java)                     | `gtk_*` functions: the window.                                                     |
 | [`binding.WebKit`](src/main/java/dev/ivchenko/lwjwae/gtk4/binding/WebKit.java)               | `webkit_*` functions: the view, user scripts, message handlers, the URI scheme.    |
@@ -91,6 +92,12 @@ WebKitGTK 6.0 differ, and what the backend does about each.
   session, new in 6.0, from an `atexit` handler. With no web view left by then, either one is
   disposed, and WebKit aborts: every JVM that used a web view would end in a core dump. The
   application takes one permanent reference to each, as the GTK 3 backend does for the context.
+
+## RPC
+
+Calls travel as on GTK 3, a `POST` under `app://local/__lwjwae/rpc/` answered through a pipe, by
+[`Gtk4RpcExchange`](src/main/java/dev/ivchenko/lwjwae/gtk4/Gtk4RpcExchange.java). See the
+[`lwjwae-gtk`](../lwjwae-gtk/README.md#rpc) README.
 
 ## Tray
 

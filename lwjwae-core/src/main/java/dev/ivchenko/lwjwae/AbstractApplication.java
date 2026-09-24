@@ -6,10 +6,12 @@ import dev.ivchenko.lwjwae.event.Event;
 import dev.ivchenko.lwjwae.event.EventSubscription;
 import dev.ivchenko.lwjwae.notification.Notification;
 import dev.ivchenko.lwjwae.notification.NotificationHandle;
+import dev.ivchenko.lwjwae.rpc.RpcHandler;
 import dev.ivchenko.lwjwae.tray.Tray;
 import dev.ivchenko.lwjwae.tray.TrayIcon;
 import dev.ivchenko.lwjwae.ui.UiDispatcher;
 import dev.ivchenko.lwjwae.util.ThrowableUtil;
+import java.nio.charset.StandardCharsets;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -38,8 +40,9 @@ import java.util.function.Function;
  * another application can be created on it.
  *
  * <p>Application-level bindings are stored as scripts as well as handlers, because a window opened
- * later needs the binding injected into its documents, and only the window knows how. A window that
- * receives a call it has no handler for asks {@link #binding} before it rejects the call.
+ * later needs the binding injected into its documents, and only the window knows how. The handler
+ * is an RPC handler like any other: a window that has no handler of its own for a call asks {@link
+ * #rpcHandler} before it answers {@code 404}.
  */
 public abstract class AbstractApplication implements Application {
   private final UiDispatcher dispatcher;
@@ -47,9 +50,8 @@ public abstract class AbstractApplication implements Application {
   private final Map<Long, AbstractWindow> windows = new ConcurrentHashMap<>();
   private final Set<Tray> trays = ConcurrentHashMap.newKeySet();
   private final Set<NotificationHandle> notifications = ConcurrentHashMap.newKeySet();
+  private final Map<String, RpcHandler> rpcHandlers = new ConcurrentHashMap<>();
   private final AtomicLong windowIds = new AtomicLong();
-  private final Map<String, BiFunction<Window, String, String>> bindings =
-      new ConcurrentHashMap<>();
   private final Map<String, String> bindingScripts = new ConcurrentHashMap<>();
   private final EventListeners listeners = new EventListeners("lwjwae-application-events");
 
@@ -164,9 +166,32 @@ public abstract class AbstractApplication implements Application {
     };
   }
 
-  /** The application-level handler bound under {@code name}, or {@code null}. */
-  final BiFunction<Window, String, String> binding(String name) {
-    return this.bindings.get(name);
+  /**
+   * Adapts a binding to the RPC handler that answers its page function: text in, and text out, or a
+   * value of the codec when {@code typed} is set. An untyped handler that returns {@code null}
+   * answers with no body, which the page function resolves to {@code null}. Package-private so that
+   * a window binds with the same rule.
+   */
+  static RpcHandler bindingHandler(BiFunction<Window, String, String> handler, boolean typed) {
+    return call -> {
+      String result = handler.apply(call.window(), call.text());
+      if (typed) {
+        call.reply(result.getBytes(StandardCharsets.UTF_8), ExchangeRpcCall.VALUE_TYPE);
+      } else if (result != null) {
+        call.reply(result);
+      }
+    };
+  }
+
+  @Override
+  public final void handle(String name, RpcHandler handler) {
+    RpcNames.check(name);
+    this.rpcHandlers.put(name, Objects.requireNonNull(handler, "handler"));
+  }
+
+  /** The application-level RPC handler of {@code name}, or {@code null}. */
+  final RpcHandler rpcHandler(String name) {
+    return this.rpcHandlers.get(name);
   }
 
   @Override
@@ -412,7 +437,7 @@ public abstract class AbstractApplication implements Application {
     Objects.requireNonNull(name, "name");
     BridgeProtocol.checkIdentifier(name);
     String script = BridgeProtocol.bindingScript(name, typed);
-    this.bindings.put(name, handler);
+    this.rpcHandlers.put(name, bindingHandler(handler, typed));
     // The page looks the handler up by name on every call, so a new handler of the same form takes
     // over without a new script; injecting it again would stack a copy on every document.
     if (script.equals(this.bindingScripts.put(name, script))) {

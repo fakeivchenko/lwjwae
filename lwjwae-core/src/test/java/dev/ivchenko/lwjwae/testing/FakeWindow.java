@@ -4,23 +4,36 @@ import dev.ivchenko.lwjwae.AbstractApplication;
 import dev.ivchenko.lwjwae.AbstractWindow;
 import dev.ivchenko.lwjwae.WindowParameters;
 import dev.ivchenko.lwjwae.WindowPosition;
+import dev.ivchenko.lwjwae.bridge.BridgeProtocol;
 import dev.ivchenko.lwjwae.event.LoadEvent;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import lombok.Getter;
 
 /**
  * An {@link AbstractWindow} that records what the base class asks of it. Every script that the base
- * class evaluates or injects, and every URL that it navigates to, is kept for assertions.
+ * class evaluates or injects, every RPC message that it posts to the page, and every URL that it
+ * navigates to, is kept for assertions. A test plays the page through {@link #call}.
  */
 public class FakeWindow extends AbstractWindow {
+  private static final String SEP = BridgeProtocol.SEPARATOR;
+  private static final String DOC = "doc";
+  private static final Pattern TOKEN = Pattern.compile("const token = trusted \\? \"([^\"]+)\"");
+
   public final List<String> injected = new CopyOnWriteArrayList<>();
   public final List<String> evaluated = new CopyOnWriteArrayList<>();
   public final List<String> navigated = new CopyOnWriteArrayList<>();
+  public final List<String> posted = new CopyOnWriteArrayList<>();
 
   private String title;
   private int left;
@@ -49,31 +62,109 @@ public class FakeWindow extends AbstractWindow {
     this.handleBridgeMessage(message);
   }
 
-  /** Exposes the protected hook, so that tests can play the part of the engine. */
-  public void emit(LoadEvent event) {
-    this.emitLoad(event);
+  /** The token of the window, as the bootstrap hands it to a trusted document. */
+  public String token() {
+    Matcher matcher = TOKEN.matcher(this.injected.getFirst());
+    if (!matcher.find()) {
+      throw new AssertionError("The bootstrap carries no token");
+    }
+    return matcher.group(1);
+  }
+
+  /** Plays the page: calls {@code name} with a text body over the message channel. */
+  public void call(long id, String name, String body) {
+    this.call(id, name, "text/plain;charset=utf-8", body);
+  }
+
+  /** Plays the page: calls {@code name} with a body of {@code contentType}. */
+  public void call(long id, String name, String contentType, String body) {
+    this.receive(
+        String.join(
+            SEP, "\u0001rpc", this.token(), DOC, Long.toString(id), name, contentType, "s", body));
+  }
+
+  /** Plays the page: abandons the call {@code id}. */
+  public void cancel(long id) {
+    this.receive(String.join(SEP, "\u0001rpc-cancel", this.token(), DOC, Long.toString(id)));
+  }
+
+  /** Waits up to five seconds for the whole answer of the call {@code id}. */
+  public RpcReply awaitReply(long id) throws InterruptedException {
+    String prefix = "\u0001rpc" + SEP + DOC + SEP + id + SEP + "r" + SEP;
+    String message = this.awaitPosted(prefix, 1).getFirst();
+    String[] fields = message.substring(prefix.length()).split(SEP, 4);
+    String body =
+        fields[2].equals("b")
+            ? new String(Base64.getDecoder().decode(fields[3]), StandardCharsets.UTF_8)
+            : fields[3];
+    return new RpcReply(Integer.parseInt(fields[0]), fields[1], body);
   }
 
   /**
-   * Waits up to five seconds for {@code script} to be evaluated. A bound handler replies from its
-   * own thread, so the reply arrives some time after the call that caused it.
-   *
-   * @throws AssertionError If the script isn't evaluated in time.
+   * Waits up to five seconds for {@code count} events in the answer of the call {@code id}, which
+   * the test opened under {@link BridgeProtocol#EVENTS_CALL}, and returns them as {@code
+   * typed␟name␟payload}.
    */
-  public void awaitEvaluation(String script) throws InterruptedException {
+  public List<String> awaitEvents(long id, int count) throws InterruptedException {
+    String prefix = "\u0001rpc" + SEP + DOC + SEP + id + SEP + "d" + SEP;
     long remaining = TimeUnit.SECONDS.toNanos(5);
     this.evaluations.lock();
     try {
-      while (!this.evaluated.contains(script)) {
+      while (true) {
+        List<String> events = new ArrayList<>();
+        for (String message : this.posted) {
+          if (message.startsWith(prefix)) {
+            String data = message.substring(prefix.length()).split(SEP, 2)[1];
+            ByteBuffer frames = ByteBuffer.wrap(Base64.getDecoder().decode(data));
+            while (frames.remaining() >= 4) {
+              byte[] frame = new byte[frames.getInt()];
+              frames.get(frame);
+              events.add(new String(frame, StandardCharsets.UTF_8));
+            }
+          }
+        }
+        if (events.size() >= count) {
+          return events;
+        }
         if (remaining <= 0) {
-          throw new AssertionError(
-              "Expected evaluation of " + script + " but saw " + this.evaluated);
+          throw new AssertionError("Expected " + count + " events but saw " + events);
         }
         remaining = this.evaluatedScript.awaitNanos(remaining);
       }
     } finally {
       this.evaluations.unlock();
     }
+  }
+
+  /** Waits up to five seconds for the end of the streamed answer of the call {@code id}. */
+  public void awaitEnd(long id) throws InterruptedException {
+    this.awaitPosted("\u0001rpc" + SEP + DOC + SEP + id + SEP + "e" + SEP, 1);
+  }
+
+  /** Waits up to five seconds for {@code count} posted messages that start with {@code prefix}. */
+  private List<String> awaitPosted(String prefix, int count) throws InterruptedException {
+    long remaining = TimeUnit.SECONDS.toNanos(5);
+    this.evaluations.lock();
+    try {
+      while (true) {
+        List<String> matching =
+            this.posted.stream().filter(message -> message.startsWith(prefix)).toList();
+        if (matching.size() >= count) {
+          return matching;
+        }
+        if (remaining <= 0) {
+          throw new AssertionError("Expected a message " + prefix + " but saw " + this.posted);
+        }
+        remaining = this.evaluatedScript.awaitNanos(remaining);
+      }
+    } finally {
+      this.evaluations.unlock();
+    }
+  }
+
+  /** Exposes the protected hook, so that tests can play the part of the engine. */
+  public void emit(LoadEvent event) {
+    this.emitLoad(event);
   }
 
   @Override
@@ -84,6 +175,18 @@ public class FakeWindow extends AbstractWindow {
   @Override
   protected String bridgeTransportScript() {
     return "(message) => fakeHost.post(message)";
+  }
+
+  @Override
+  protected CompletableFuture<?> postRpcMessage(String message) {
+    this.evaluations.lock();
+    try {
+      this.posted.add(message);
+      this.evaluatedScript.signalAll();
+    } finally {
+      this.evaluations.unlock();
+    }
+    return CompletableFuture.completedFuture(null);
   }
 
   @Override

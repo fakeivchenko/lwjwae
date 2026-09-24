@@ -16,6 +16,7 @@ import dev.ivchenko.lwjwae.macos.binding.MethodStub;
 import dev.ivchenko.lwjwae.macos.binding.ObjC;
 import dev.ivchenko.lwjwae.macos.binding.Signatures;
 import dev.ivchenko.lwjwae.macos.binding.WebKit;
+import dev.ivchenko.lwjwae.rpc.RpcExchange;
 import dev.ivchenko.lwjwae.util.MimeTypeUtil;
 import dev.ivchenko.lwjwae.util.ResourceUtil;
 import dev.ivchenko.lwjwae.util.ScriptUtil;
@@ -263,7 +264,7 @@ public class MacWindow extends AbstractWindow {
         .run(
             () -> {
               this.reportedFailure = null;
-              WebKit.loadHtml(this.webView(), html);
+              WebKit.loadHtml(this.webView(), html, this.resourceUrl(""));
             });
   }
 
@@ -404,6 +405,16 @@ public class MacWindow extends AbstractWindow {
     }
     this.reportedFailure = url;
     this.emitLoad(LoadEvent.failed(url, Foundation.errorDescription(error)));
+  }
+
+  /** Serves an RPC request of the page of this window. */
+  void rpc(RpcExchange exchange) {
+    this.serveRpc(exchange);
+  }
+
+  /** Runs {@code task} on the main thread, later, without waiting. */
+  void postToMain(Runnable task) {
+    this.dispatcher().post(task);
   }
 
   /**
@@ -614,7 +625,9 @@ public class MacWindow extends AbstractWindow {
       MemorySegment self, MemorySegment command, MemorySegment webView, MemorySegment task) {
     try {
       MacWindow window = windowOf(self);
-      if (window != null) {
+      if (window != null && WebKit.taskPath(task).startsWith(RpcExchange.PATH_PREFIX)) {
+        MacRpcExchange.start(window, task);
+      } else if (window != null) {
         window.serveResource(task);
       }
     } catch (Throwable t) {
@@ -623,15 +636,21 @@ public class MacWindow extends AbstractWindow {
   }
 
   /**
-   * Resources are answered in one step inside {@link #onStartUrlSchemeTask}, so there's nothing to
-   * stop.
+   * Resources are answered in one step inside {@link #onStartUrlSchemeTask}, so only RPC calls have
+   * anything to stop.
    *
    * <p>Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
    * binds it by name, so no Java code calls it and the compiler sees a dead private method.
    */
   @SuppressWarnings("unused")
   private static void onStopUrlSchemeTask(
-      MemorySegment self, MemorySegment command, MemorySegment webView, MemorySegment task) {}
+      MemorySegment self, MemorySegment command, MemorySegment webView, MemorySegment task) {
+    try {
+      MacRpcExchange.stop(task);
+    } catch (Throwable t) {
+      ThrowableUtil.report(t);
+    }
+  }
 
   /**
    * Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that

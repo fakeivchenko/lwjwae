@@ -216,6 +216,30 @@ public class Signatures {
   public final FunctionDescriptor INT_POINTER_POINTER_INT_POINTER_X3 =
       FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_INT, C_POINTER, C_POINTER, C_POINTER);
 
+  /** {@code HRESULT f(T*, UINT64, U*)}: {@code ICoreWebView2Environment12::CreateSharedBuffer}. */
+  public final FunctionDescriptor INT_POINTER_LONG_POINTER =
+      FunctionDescriptor.of(C_INT, C_POINTER, C_LONG_PTR, C_POINTER);
+
+  /** {@code HRESULT f(T*, U*, ULONG, V*)}: {@code ISequentialStream::Read}. */
+  public final FunctionDescriptor INT_POINTER_POINTER_INT_POINTER =
+      FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_INT, C_POINTER);
+
+  /** {@code HRESULT f(T*, LARGE_INTEGER, DWORD, U*)}: {@code IStream::Seek}. */
+  public final FunctionDescriptor INT_POINTER_LONG_INT_POINTER =
+      FunctionDescriptor.of(C_INT, C_POINTER, C_LONG_PTR, C_INT, C_POINTER);
+
+  /** {@code HRESULT f(T*, ULARGE_INTEGER)}: {@code IStream::SetSize}. */
+  public final FunctionDescriptor INT_POINTER_LONG =
+      FunctionDescriptor.of(C_INT, C_POINTER, C_LONG_PTR);
+
+  /** {@code HRESULT f(T*, U*, ULARGE_INTEGER, V*, W*)}: {@code IStream::CopyTo}. */
+  public final FunctionDescriptor INT_POINTER_POINTER_LONG_POINTER_POINTER =
+      FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_LONG_PTR, C_POINTER, C_POINTER);
+
+  /** {@code HRESULT f(T*, ULARGE_INTEGER, ULARGE_INTEGER, DWORD)}: {@code IStream::LockRegion}. */
+  public final FunctionDescriptor INT_POINTER_LONG_LONG_INT =
+      FunctionDescriptor.of(C_INT, C_POINTER, C_LONG_PTR, C_LONG_PTR, C_INT);
+
   /** {@code int f(T*, RECT)}: {@code ICoreWebView2Controller::put_Bounds}, by value. */
   public final FunctionDescriptor INT_POINTER_RECT = FunctionDescriptor.of(C_INT, C_POINTER, RECT);
 

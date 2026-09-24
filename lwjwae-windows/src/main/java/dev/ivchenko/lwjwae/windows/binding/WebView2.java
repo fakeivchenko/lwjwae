@@ -86,6 +86,7 @@ public class WebView2 {
   private final int WEBVIEW_ADD_NAVIGATION_COMPLETED = 15;
   private final int WEBVIEW_ADD_SCRIPT_ON_DOCUMENT_CREATED = 27;
   private final int WEBVIEW_EXECUTE_SCRIPT = 29;
+  private final int WEBVIEW_POST_WEB_MESSAGE_AS_STRING = 33;
   private final int WEBVIEW_ADD_WEB_MESSAGE_RECEIVED = 34;
   private final int WEBVIEW_ADD_WEB_RESOURCE_REQUESTED = 55;
   private final int WEBVIEW_ADD_WEB_RESOURCE_REQUESTED_FILTER = 57;
@@ -102,6 +103,12 @@ public class WebView2 {
   private final int RESOURCE_REQUESTED_PUT_RESPONSE = 5;
   private final int RESOURCE_REQUESTED_GET_CONTEXT = 7;
   private final int REQUEST_GET_URI = 3;
+  private final MemorySegment IID_WEBVIEW_17 = Com.guid("702e75d4-fd44-434d-9d70-1a68a6b1192a");
+  private final MemorySegment IID_ENVIRONMENT_12 = Com.guid("f503db9b-739f-48dd-b151-fdfcf253f54e");
+  private final int WEBVIEW_17_POST_SHARED_BUFFER_TO_SCRIPT = 116;
+  private final int ENVIRONMENT_12_CREATE_SHARED_BUFFER = 24;
+  private final int SHARED_BUFFER_GET_BUFFER = 4;
+  private final int SHARED_BUFFER_ACCESS_READ_ONLY = 0;
 
   /**
    * The one export used from {@code EmbeddedBrowserWebView.dll}. Loading this class loads the
@@ -427,6 +434,59 @@ public class WebView2 {
       MemorySegment out = arena.allocate(Signatures.C_INT);
       Com.check(name, Com.call(object, slot, out));
       return out.get(Signatures.C_INT, 0);
+    }
+  }
+
+  // --- RPC: web messages and shared buffers ---
+
+  /** {@code PostWebMessageAsString}: {@code event.data} of a {@code message} event on the page. */
+  public void postWebMessageAsString(MemorySegment webView, String message) {
+    try (Arena arena = Arena.ofConfined()) {
+      Com.check(
+          "PostWebMessageAsString",
+          Com.call(webView, WEBVIEW_POST_WEB_MESSAGE_AS_STRING, Wide.allocate(arena, message)));
+    }
+  }
+
+  /**
+   * Copies {@code data} into a new shared buffer and posts it to the page, which receives a {@code
+   * sharedbufferreceived} event with the buffer as an {@code ArrayBuffer}, read-only, and {@code
+   * additionalDataAsJson} as {@code additionalData}. The page releases the buffer with {@code
+   * chrome.webview.releaseBuffer}; Java releases its reference here, and the memory goes when both
+   * have. {@code ICoreWebView2_17} and {@code ICoreWebView2Environment12}, WebView2 runtime 114 and
+   * later.
+   */
+  public void postSharedBuffer(
+      MemorySegment environment, MemorySegment webView, byte[] data, String additionalDataAsJson) {
+    MemorySegment environment12 = WinRt.query(environment, IID_ENVIRONMENT_12);
+    MemorySegment webView17 = null;
+    MemorySegment buffer = null;
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment out = arena.allocate(Signatures.C_POINTER);
+      Com.check(
+          "CreateSharedBuffer",
+          Com.call(environment12, ENVIRONMENT_12_CREATE_SHARED_BUFFER, (long) data.length, out));
+      buffer = Com.pointerAt(out);
+      Com.check("get_Buffer", Com.call(buffer, SHARED_BUFFER_GET_BUFFER, out));
+      MemorySegment.copy(
+          MemorySegment.ofArray(data),
+          0,
+          Com.pointerAt(out).reinterpret(data.length),
+          0,
+          data.length);
+      webView17 = WinRt.query(webView, IID_WEBVIEW_17);
+      Com.check(
+          "PostSharedBufferToScript",
+          Com.call(
+              webView17,
+              WEBVIEW_17_POST_SHARED_BUFFER_TO_SCRIPT,
+              buffer,
+              SHARED_BUFFER_ACCESS_READ_ONLY,
+              Wide.allocate(arena, additionalDataAsJson)));
+    } finally {
+      Com.release(buffer);
+      Com.release(webView17);
+      Com.release(environment12);
     }
   }
 }

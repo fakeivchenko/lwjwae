@@ -170,6 +170,22 @@ secure context in Chromium. For every intercepted request:
 `resourceUrl(path)` returns the `http://app.localhost/PATH` form, so `loadResource` navigates to
 the right place.
 
+## RPC
+
+WebView2 reads a custom response to its end before the page sees any of it, and doesn't tell the
+host when the page gives up on a request, so every call goes through web messages here,
+`lwjwae.call` included. The protocol is the one of every engine's message channel, see
+[`MessageRpcExchange`](../lwjwae-core/src/main/java/dev/ivchenko/lwjwae/MessageRpcExchange.java);
+the window only posts the answers:
+
+1. `rpcTransportScript()` tells the bootstrap to send `lwjwae.call` as a message too and to take
+   answers from the `message` and `sharedbufferreceived` events of `chrome.webview`.
+2. `postRpcMessage` posts a message with `PostWebMessageAsString`, on the UI thread.
+3. `postRpcBuffer` posts a part of 16 KiB or more as a shared buffer
+   (`ICoreWebView2Environment12::CreateSharedBuffer`, `ICoreWebView2_17::PostSharedBufferToScript`),
+   which reaches the page as an `ArrayBuffer` with no encoding; the page copies it and releases it.
+   On a runtime older than 114, the part goes as Base64 in a text message instead.
+
 ## Evaluating scripts
 
 `ICoreWebView2::ExecuteScript` reports a thrown exception as a `null` result instead of a failure,

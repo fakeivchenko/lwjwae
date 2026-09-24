@@ -33,6 +33,7 @@ checks the operating system first and the libraries second, because probing a li
 |----------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------|
 | [`GtkApplication`](src/main/java/dev/ivchenko/lwjwae/gtk/GtkApplication.java)                                                                            | The application. Prepares the web context and serves `app://`; opens `GtkWindow`s.          |
 | [`GtkWindow`](src/main/java/dev/ivchenko/lwjwae/gtk/GtkWindow.java)                                                                                      | The window. Forwards every call to the GTK thread.                                          |
+| [`GtkRpcExchange`](src/main/java/dev/ivchenko/lwjwae/gtk/GtkRpcExchange.java) | One RPC call: a `POST` to the custom scheme, answered through a pipe. |
 | [`GtkDispatcher`](src/main/java/dev/ivchenko/lwjwae/gtk/GtkDispatcher.java)                                                                              | The one GTK thread of the process.                                                          |
 | [`GtkTray`](src/main/java/dev/ivchenko/lwjwae/gtk/GtkTray.java)                                                                                          | A tray icon, through libappindicator or `GtkStatusIcon`.                                    |
 | [`binding.Gtk`](src/main/java/dev/ivchenko/lwjwae/gtk/binding/Gtk.java)                                                                                  | `gtk_*` functions: the window and the main loop.                                            |
@@ -115,6 +116,20 @@ The `app://local/PATH` scheme is answered by `onResourceRequest` in `GtkApplicat
 5. On [`ResourceNotFoundException`](../lwjwae-core/src/main/java/dev/ivchenko/lwjwae/exception/ResourceNotFoundException.java), finishes the request with a `GError` of code 404 whose message
    names the missing path. WebKit reports that to `load-failed`, so the application sees a
    [`LoadEvent.failed`](../lwjwae-core/src/main/java/dev/ivchenko/lwjwae/event/LoadEvent.java) like for any other URL.
+
+## RPC
+
+A `POST` under `app://local/__lwjwae/rpc/` is a call, not a resource. `onResourceRequest` finds the
+window by the web view of the request and hands [`GtkRpcExchange`](src/main/java/dev/ivchenko/lwjwae/gtk/GtkRpcExchange.java) to the core:
+
+1. Reads the method, the path, `Origin`, `Content-Type`, and the body stream on the GTK thread;
+   the body itself is read later, on the thread of the handler.
+2. On the answer, creates a pipe, and finishes the request with a `WebKitURISchemeResponse` over
+   `g_unix_input_stream_new` on its read end, the status, and the headers.
+3. Writes every part of the answer to the write end, from the thread of the handler, so a slow page
+   holds the handler back and no part waits in memory. Closing the write end ends the answer.
+4. A write that fails with `EPIPE` means the page dropped the answer: the call is cancelled. The JVM
+   ignores `SIGPIPE`, so that failure is an error code, not a signal.
 
 ## Evaluating scripts
 

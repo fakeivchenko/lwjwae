@@ -7,24 +7,26 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import lombok.experimental.UtilityClass;
 
 /**
- * The JavaScript half of the bridge between Java and the page, and the wire format that both halves
- * agree on.
+ * The JavaScript half of the bridge between Java and the page, and the names and formats that both
+ * halves agree on.
  *
- * <p>The protocol is deliberately platform neutral. Every supported engine can inject a script
- * before the document loads and hand a string back to the host, but each engine names that channel
- * differently: WebKitGTK and WKWebView use {@code window.webkit.messageHandlers.NAME.postMessage},
- * and WebView2 uses {@code window.chrome.webview.postMessage}. Therefore, the backend supplies one
- * expression, which posts a string, and everything above it is shared: the promise bookkeeping and
- * the message framing.
+ * <p>The bridge speaks RPC only: a binding, an event from the page, and a window that the page
+ * opens are calls, and the events of Java travel in the answer of one call that the page keeps
+ * open. Every supported engine can inject a script before the document loads and hand a string back
+ * to the host, but each engine names that channel differently: WebKitGTK and WKWebView use {@code
+ * window.webkit.messageHandlers.NAME.postMessage}, and WebView2 uses {@code
+ * window.chrome.webview.postMessage}. Therefore, the backend supplies one expression, which posts a
+ * string, and everything above it is shared.
  *
- * <p>A message is {@code id}, {@code name}, and {@code payload}, with {@link #SEPARATOR} between
- * the fields. The separator is a byte that can't occur in a JavaScript identifier and that callers
- * are unlikely to put in a payload, which keeps the framing free of a JSON dependency on either
- * side.
+ * <p>Fields inside a message or a payload are separated by {@link #SEPARATOR}, a byte that can't
+ * occur in a JavaScript identifier and that callers are unlikely to put in a payload, which keeps
+ * the framing free of a JSON dependency on either side.
  */
 @UtilityClass
 public class BridgeProtocol {
@@ -38,12 +40,16 @@ public class BridgeProtocol {
   public final String PAGE_API = "lwjwae";
 
   /**
-   * The name under which the page delivers its own events to Java, through the same message path as
-   * a call. It contains a colon, which no bound name can, so a binding can never shadow it. The
-   * payload of such a message is {@code typed␟name␟payload}, with the same separator as the message
-   * itself.
+   * The call under which the page delivers its own events to Java. It contains a colon, which no
+   * handler name can, so a handler can never shadow it. The body is {@code typed␟name␟payload}.
    */
   public final String EVENT_CALL = "lwjwae:emit";
+
+  /**
+   * The call that a document opens at its start and reads for as long as it lives: its answer
+   * carries the events of Java. Reserved like {@link #EVENT_CALL}.
+   */
+  public final String EVENTS_CALL = "lwjwae:events";
 
   /**
    * The name under which a page asks for a new window, through {@code window.lwjwae.open(options)}.
@@ -84,24 +90,6 @@ public class BridgeProtocol {
   }
 
   /**
-   * Splits a raw message into its fields.
-   *
-   * @return The message, or {@code null} if the text has fewer than three fields or the ID isn't a
-   *     number.
-   */
-  public BridgeMessage parse(String message) {
-    String[] parts = message.split(SEPARATOR, 3);
-    if (parts.length != 3) {
-      return null;
-    }
-    try {
-      return new BridgeMessage(Long.parseLong(parts[0]), parts[1], parts[2]);
-    } catch (NumberFormatException _) {
-      return null;
-    }
-  }
-
-  /**
    * Returns the runtime that's injected into every document before the document runs its own
    * scripts. The script is read once from {@code bootstrap.js} next to this class; only the
    * placeholders are filled per window.
@@ -111,17 +99,33 @@ public class BridgeProtocol {
    * @param pageCodec A JavaScript expression that evaluates to the page half of the codec, see
    *     {@link dev.ivchenko.lwjwae.bridge.codec.BridgeCodec#pageScript()}, or {@code "null"} when
    *     the window has no codec.
+   * @param rpcTransport A JavaScript object that tells the bootstrap how calls reach Java and how
+   *     answers come back: {@code {base: URL}} or {@code {base: null, webview2: true}}.
+   * @param token The secret of the window that a call message carries.
+   * @param trustedOrigins The origins whose documents get the token; a top-level {@code
+   *     about:blank}, what {@code Window.html} shows on WebView2, gets it too.
    */
-  public String bootstrapScript(String postMessage, String pageCodec) {
+  public String bootstrapScript(
+      String postMessage,
+      String pageCodec,
+      String rpcTransport,
+      String token,
+      List<String> trustedOrigins) {
+    String origins =
+        trustedOrigins.stream().map(ScriptUtil::quote).collect(Collectors.joining(",", "[", "]"));
     return BOOTSTRAP_TEMPLATE
         .replace("${channel}", CHANNEL)
         .replace("${pageApi}", PAGE_API)
         .replace("${eventCall}", EVENT_CALL)
+        .replace("${eventsCall}", EVENTS_CALL)
         .replace("${openCall}", OPEN_CALL)
         .replace("${closeCall}", CLOSE_CALL)
         .replace("${separator}", "\u001f")
         .replace("${post}", postMessage)
-        .replace("${codec}", pageCodec);
+        .replace("${codec}", pageCodec)
+        .replace("${rpc}", rpcTransport)
+        .replace("${token}", ScriptUtil.quote(token))
+        .replace("${trusted}", origins);
   }
 
   /**
@@ -140,22 +144,12 @@ public class BridgeProtocol {
    * before the promise resolves, so the page works with values and the codec with text.
    */
   public String bindingScript(String name, boolean typed) {
-    return "window[%s] = (payload) => window.%s.call(%s, payload, %s);"
+    return "window[%s] = (payload) => window.%s.bound(%s, payload, %s);"
         .formatted(ScriptUtil.quote(name), CHANNEL, ScriptUtil.quote(name), typed);
   }
 
   /**
-   * Delivers an event to the page: to every listener registered with {@code
-   * window.lwjwae.listen(name, handler)} or {@code once}. When {@code typed} is set, the payload is
-   * decoded first, so listeners receive the value instead of its text.
-   */
-  public String emitScript(String name, String payload, boolean typed) {
-    return "window.%s.deliver(%s, %s, %s);"
-        .formatted(CHANNEL, ScriptUtil.quote(name), ScriptUtil.quote(payload), typed);
-  }
-
-  /**
-   * Splits the payload of an {@link #EVENT_CALL} message into the event that the page emitted.
+   * Splits the body of an {@link #EVENT_CALL} into the event that the page emitted.
    *
    * @return The event with an ID of zero, which the backend replaces, or {@code null} if the text
    *     has fewer than three fields.
@@ -211,16 +205,5 @@ public class BridgeProtocol {
   /** A number field, or {@code 0}, which the window parameters read as their default. */
   private int integer(String text) {
     return text.isEmpty() ? 0 : Integer.parseInt(text);
-  }
-
-  /** Completes the page-side promise {@code id} with {@code value}. */
-  public String resolveScript(long id, String value) {
-    return "window.%s.settle(%d, %s, null);".formatted(CHANNEL, id, ScriptUtil.quote(value));
-  }
-
-  /** Fails the page-side promise {@code id} with {@code message}. */
-  public String rejectScript(long id, String message) {
-    return "window.%s.settle(%d, null, %s);"
-        .formatted(CHANNEL, id, ScriptUtil.quote(message == null ? "Handler failed" : message));
   }
 }

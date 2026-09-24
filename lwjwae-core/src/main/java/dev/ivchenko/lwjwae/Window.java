@@ -3,6 +3,7 @@ package dev.ivchenko.lwjwae;
 import dev.ivchenko.lwjwae.event.Event;
 import dev.ivchenko.lwjwae.event.EventSubscription;
 import dev.ivchenko.lwjwae.event.LoadEvent;
+import dev.ivchenko.lwjwae.rpc.RpcHandler;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -76,7 +77,11 @@ public interface Window extends AutoCloseable {
   /** Loads a URL. Returns before the page loads; {@link #onLoad} tells when it did. */
   void navigate(String url);
 
-  /** Replaces the document with the given markup. */
+  /**
+   * Replaces the document with the given markup. Where the engine lets the markup have an origin,
+   * it gets the one of the resources, so relative links resolve to the classpath; WebView2 shows it
+   * as {@code about:blank}. Either way the page has the bridge.
+   */
   void html(String html);
 
   /**
@@ -118,6 +123,19 @@ public interface Window extends AutoCloseable {
    * @throws IllegalStateException If there is no codec.
    */
   <T, R> void bind(String name, Class<T> argumentType, Function<T, R> handler);
+
+  /**
+   * Answers the calls that the page makes with {@code lwjwae.call(name, body)}, in this window.
+   *
+   * <p>Unlike {@link #bind}, a call carries bytes both ways, can be answered as a stream that the
+   * page reads while it's produced, and can be abandoned by the page with an {@code AbortSignal}.
+   * On the page, the call resolves to a {@code Response}, as {@code fetch} does. See {@link
+   * RpcHandler}.
+   *
+   * @param name Letters, digits, and {@code . _ -}.
+   * @throws IllegalArgumentException If {@code name} has any other character.
+   */
+  void handle(String name, RpcHandler handler);
 
   /**
    * Delivers an event to the page, to the listeners of this window, and to the listeners of the

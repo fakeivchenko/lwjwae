@@ -6,6 +6,7 @@ import dev.ivchenko.lwjwae.glib.StatusNotifierTray;
 import dev.ivchenko.lwjwae.glib.binding.Dbus;
 import dev.ivchenko.lwjwae.glib.binding.GdkPixbuf;
 import dev.ivchenko.lwjwae.glib.binding.Glib;
+import dev.ivchenko.lwjwae.glib.binding.Unix;
 import dev.ivchenko.lwjwae.gtk.binding.AppIndicator;
 import dev.ivchenko.lwjwae.gtk.binding.Gdk;
 import dev.ivchenko.lwjwae.gtk.binding.Gtk;
@@ -40,6 +41,7 @@ class GtkNativeImageMetadataTest extends NativeImageMetadataContractTest {
         Glib.class,
         Dbus.class,
         GdkPixbuf.class,
+        Unix.class,
         GlibDispatcher.class,
         FreedesktopNotifier.class,
         StatusNotifierTray.class,

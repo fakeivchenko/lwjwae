@@ -2,6 +2,7 @@ package dev.ivchenko.lwjwae.bridge;
 
 import dev.ivchenko.lwjwae.WindowParameters;
 import dev.ivchenko.lwjwae.event.Event;
+import java.util.List;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -12,34 +13,40 @@ class BridgeProtocolTest {
   }
 
   @Test
-  void parseSplitsIntoThreeFieldsAndKeepsSeparatorsInThePayload() {
-    String sep = BridgeProtocol.SEPARATOR;
-    BridgeMessage message = BridgeProtocol.parse("7" + sep + "echo" + sep + "a" + sep + "b");
-    Assertions.assertEquals(new BridgeMessage(7, "echo", "a" + sep + "b"), message);
-    Assertions.assertEquals(
-        new BridgeMessage(1, "empty", ""), BridgeProtocol.parse("1" + sep + "empty" + sep));
-  }
-
-  @Test
-  void parseRejectsMalformedMessages() {
-    String sep = BridgeProtocol.SEPARATOR;
-    Assertions.assertNull(BridgeProtocol.parse("no separators"));
-    Assertions.assertNull(BridgeProtocol.parse("1" + sep + "only-two"));
-    Assertions.assertNull(BridgeProtocol.parse("x" + sep + "name" + sep + "payload"));
-  }
-
-  @Test
-  void bootstrapEmbedsTheTransportAndTheChannel() {
-    String script = BridgeProtocol.bootstrapScript("(m) => host.post(m)", "fakeCodec");
+  void bootstrapEmbedsTheTransportTheTokenAndTheTrustedOrigins() {
+    String script =
+        BridgeProtocol.bootstrapScript(
+            "(m) => host.post(m)",
+            "fakeCodec",
+            "{base:\"app://local/__lwjwae/rpc/\"}",
+            "secret",
+            List.of("app://local", "http://localhost:5173"));
     Assertions.assertTrue(script.contains("const post = (m) => host.post(m);"));
     Assertions.assertTrue(script.contains("const codec = fakeCodec;"));
-    Assertions.assertTrue(script.contains("window." + BridgeProtocol.CHANNEL + " = {"));
+    Assertions.assertTrue(script.contains("const rpc = {base:\"app://local/__lwjwae/rpc/\"};"));
+    Assertions.assertTrue(script.contains("const token = trusted ? \"secret\" : null;"));
+    Assertions.assertTrue(
+        script.contains("[\"app://local\",\"http://localhost:5173\"].includes(location.origin)"));
+    Assertions.assertTrue(
+        script.contains("window." + BridgeProtocol.CHANNEL + " = { receive, bound };"));
     Assertions.assertTrue(
         script.contains(
-            "window." + BridgeProtocol.PAGE_API + " = { listen, once, emit, open, close };"));
-    Assertions.assertTrue(script.contains("call(\"" + BridgeProtocol.EVENT_CALL + "\""));
-    Assertions.assertTrue(script.contains("call(\"" + BridgeProtocol.OPEN_CALL + "\""));
-    Assertions.assertTrue(script.contains("call(\"" + BridgeProtocol.CLOSE_CALL + "\""));
+            "window."
+                + BridgeProtocol.PAGE_API
+                + " = { listen, once, emit, open, close, call: callRpc, invoke: rpcInvoke, RpcError"
+                + " };"));
+    for (String reserved :
+        List.of(
+            BridgeProtocol.EVENT_CALL,
+            BridgeProtocol.EVENTS_CALL,
+            BridgeProtocol.OPEN_CALL,
+            BridgeProtocol.CLOSE_CALL)) {
+      Assertions.assertTrue(script.contains("\"" + reserved + "\""), reserved);
+    }
+    for (String placeholder :
+        List.of("${channel}", "${post}", "${rpc}", "${token}", "${trusted}")) {
+      Assertions.assertFalse(script.contains(placeholder), placeholder + " is filled");
+    }
     Assertions.assertTrue(
         script.contains("if (window." + BridgeProtocol.CHANNEL + ") return;"),
         "must be safe to inject twice");
@@ -48,22 +55,12 @@ class BridgeProtocolTest {
   @Test
   void bindingPublishesWindowFunction() {
     Assertions.assertEquals(
-        "window[\"reverse\"] = (payload) => window.__lwjwaeBridge.call(\"reverse\", payload,"
+        "window[\"reverse\"] = (payload) => window.__lwjwaeBridge.bound(\"reverse\", payload,"
             + " false);",
         BridgeProtocol.bindingScript("reverse"));
     Assertions.assertEquals(
-        "window[\"typed\"] = (payload) => window.__lwjwaeBridge.call(\"typed\", payload, true);",
+        "window[\"typed\"] = (payload) => window.__lwjwaeBridge.bound(\"typed\", payload, true);",
         BridgeProtocol.bindingScript("typed", true));
-  }
-
-  @Test
-  void emitQuotesTheNameAndThePayload() {
-    Assertions.assertEquals(
-        "window.__lwjwaeBridge.deliver(\"tick\", \"{\\\"n\\\":1}\", true);",
-        BridgeProtocol.emitScript("tick", "{\"n\":1}", true));
-    Assertions.assertEquals(
-        "window.__lwjwaeBridge.deliver(\"tick\", \"plain\", false);",
-        BridgeProtocol.emitScript("tick", "plain", false));
   }
 
   @Test
@@ -107,17 +104,5 @@ class BridgeProtocolTest {
         IllegalArgumentException.class, () -> BridgeProtocol.checkIdentifier("not valid"));
     Assertions.assertThrows(
         IllegalArgumentException.class, () -> BridgeProtocol.checkIdentifier("lwjwae:emit"));
-  }
-
-  @Test
-  void resolveAndRejectQuoteTheirArguments() {
-    Assertions.assertEquals(
-        "window.__lwjwaeBridge.settle(7, \"a \\\"b\\\"\", null);",
-        BridgeProtocol.resolveScript(7, "a \"b\""));
-    Assertions.assertEquals(
-        "window.__lwjwaeBridge.settle(7, null, \"boom\");", BridgeProtocol.rejectScript(7, "boom"));
-    Assertions.assertEquals(
-        "window.__lwjwaeBridge.settle(7, null, \"Handler failed\");",
-        BridgeProtocol.rejectScript(7, null));
   }
 }

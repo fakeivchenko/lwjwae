@@ -12,12 +12,15 @@ import dev.ivchenko.lwjwae.glib.binding.Glib;
 import dev.ivchenko.lwjwae.gtk4.binding.Gtk;
 import dev.ivchenko.lwjwae.gtk4.binding.Signatures;
 import dev.ivchenko.lwjwae.gtk4.binding.WebKit;
+import dev.ivchenko.lwjwae.rpc.RpcExchange;
 import dev.ivchenko.lwjwae.util.ThrowableUtil;
 import java.lang.foreign.MemorySegment;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * A window backed by GTK 4 and WebKitGTK 6.0, opened by a {@link Gtk4Application}.
@@ -33,6 +36,7 @@ import java.util.concurrent.CompletableFuture;
  */
 public class Gtk4Window extends AbstractWindow {
   private static final CallbackRegistry<Gtk4Window> WINDOWS = new CallbackRegistry<>();
+  private static final Map<Long, Gtk4Window> BY_WEB_VIEW = new ConcurrentHashMap<>();
   private static final CallbackRegistry<CompletableFuture<String>> PENDING_EVALUATIONS =
       new CallbackRegistry<>();
 
@@ -152,6 +156,7 @@ public class Gtk4Window extends AbstractWindow {
 
     this.window = newWindow;
     this.webView = newWebView;
+    BY_WEB_VIEW.put(newWebView.address(), this);
     this.userContentManager = manager;
     this.installBridge();
   }
@@ -229,7 +234,7 @@ public class Gtk4Window extends AbstractWindow {
   @Override
   public void html(String html) {
     Objects.requireNonNull(html, "html");
-    this.dispatcher().run(() -> WebKit.loadHtml(this.webView(), html, null));
+    this.dispatcher().run(() -> WebKit.loadHtml(this.webView(), html, this.resourceUrl("")));
   }
 
   @Override
@@ -309,6 +314,16 @@ public class Gtk4Window extends AbstractWindow {
             });
   }
 
+  /** The window that shows {@code webView}, or {@code null}. */
+  static Gtk4Window ofWebView(MemorySegment webView) {
+    return BY_WEB_VIEW.get(webView.address());
+  }
+
+  /** Serves an RPC request of the page of this window. */
+  void rpc(RpcExchange exchange) {
+    this.serveRpc(exchange);
+  }
+
   private MemorySegment window() {
     return this.alive(this.window);
   }
@@ -330,6 +345,10 @@ public class Gtk4Window extends AbstractWindow {
   }
 
   private void handleDestroyed() {
+    MemorySegment view = this.webView;
+    if (view != null) {
+      BY_WEB_VIEW.remove(view.address());
+    }
     this.window = null;
     this.webView = null;
     this.userContentManager = null;

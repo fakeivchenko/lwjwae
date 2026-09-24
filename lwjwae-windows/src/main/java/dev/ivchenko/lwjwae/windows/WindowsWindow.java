@@ -30,6 +30,7 @@ import java.lang.invoke.MethodType;
 import java.time.Duration;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Supplier;
 
 /**
  * A window backed by a Win32 window and WebView2, opened by a {@link WindowsApplication}.
@@ -44,6 +45,8 @@ import java.util.concurrent.CompletableFuture;
  * answered from the JAR file, and {@code .localhost} is a secure context in Chromium.
  */
 public class WindowsWindow extends AbstractWindow {
+  private volatile boolean sharedBuffers = true;
+
   private static final String WINDOW_CLASS = "lwjwae";
   private static final String RESOURCE_ORIGIN = "http://app.localhost/";
   private static final Duration CREATION_TIMEOUT = Duration.ofMinutes(1);
@@ -413,6 +416,68 @@ public class WindowsWindow extends AbstractWindow {
     MemorySegment callback = ComCallback.event(iid, handler);
     registration.add(this.webView, callback);
     Com.release(callback);
+  }
+
+  /**
+   * WebView2 reads a custom response to its end before the page sees any of it, and doesn't tell
+   * the host when the page gives up on a request, so every call, {@code lwjwae.call} included, goes
+   * through web messages here.
+   */
+  @Override
+  protected String rpcTransportScript() {
+    return "{base:null,webview2:true}";
+  }
+
+  @Override
+  protected CompletableFuture<?> postRpcMessage(String message) {
+    CompletableFuture<Void> posted = new CompletableFuture<>();
+    this.dispatcher()
+        .post(
+            () -> {
+              try {
+                MemorySegment view = this.webView;
+                if (view != null) {
+                  WebView2.postWebMessageAsString(view, message);
+                }
+                posted.complete(null);
+              } catch (Throwable t) {
+                posted.completeExceptionally(t);
+              }
+            });
+    return posted;
+  }
+
+  /**
+   * Posts {@code data} as a shared buffer, which reaches the page as an {@code ArrayBuffer} with no
+   * encoding, or {@code fallback} where the runtime has no shared buffers, older than 114.
+   */
+  @Override
+  protected CompletableFuture<?> postRpcBuffer(
+      byte[] data, String additionalDataAsJson, Supplier<String> fallback) {
+    if (!this.sharedBuffers) {
+      return this.postRpcMessage(fallback.get());
+    }
+    CompletableFuture<Void> posted = new CompletableFuture<>();
+    this.dispatcher()
+        .post(
+            () -> {
+              try {
+                MemorySegment view = this.webView;
+                if (view != null) {
+                  try {
+                    WebView2.postSharedBuffer(
+                        this.application.environment(), view, data, additionalDataAsJson);
+                  } catch (ComCallFailedException _) {
+                    this.sharedBuffers = false;
+                    WebView2.postWebMessageAsString(view, fallback.get());
+                  }
+                }
+                posted.complete(null);
+              } catch (Throwable t) {
+                posted.completeExceptionally(t);
+              }
+            });
+    return posted;
   }
 
   /** Answers one {@code http://app.localhost/} request out of the classpath. */
