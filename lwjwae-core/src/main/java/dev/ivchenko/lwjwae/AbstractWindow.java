@@ -408,13 +408,14 @@ public abstract class AbstractWindow implements Window {
    */
   protected final void markClosed() {
     this.closed = true;
+    // Straight after the flag: a thread that sees the window closed must not find it in the list.
+    this.application.windowClosed(this);
     this.pageEvents.close();
     MessageRpcCalls calls = this.messageCalls;
     if (calls != null) {
       calls.cancelAll();
     }
     this.listeners.shutdown();
-    this.application.windowClosed(this);
   }
 
   /** Fails with {@link IllegalStateException} once the window is closed. */
