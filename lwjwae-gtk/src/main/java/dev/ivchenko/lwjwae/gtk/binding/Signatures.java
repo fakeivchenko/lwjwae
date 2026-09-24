@@ -87,6 +87,10 @@ public class Signatures {
   public final FunctionDescriptor VOID_POINTER_INT_INT =
       FunctionDescriptor.ofVoid(C_POINTER, C_INT, C_INT);
 
+  /** {@code void f(T*, guint, const gchar*)}: {@code webkit_uri_scheme_response_set_status}. */
+  public final FunctionDescriptor VOID_POINTER_INT_POINTER =
+      FunctionDescriptor.ofVoid(C_POINTER, C_INT, C_POINTER);
+
   /** {@code void f(T*, U*, gint64, V*)}: {@code webkit_uri_scheme_request_finish}. */
   public final FunctionDescriptor VOID_POINTER_POINTER_LONG_POINTER =
       FunctionDescriptor.ofVoid(C_POINTER, C_POINTER, C_LONG, C_POINTER);

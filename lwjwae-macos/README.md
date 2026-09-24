@@ -15,6 +15,7 @@ The provider [`MacBackendProvider`](src/main/java/dev/ivchenko/lwjwae/macos/MacB
 |-----------------------------------------------------------------------------------------|-------------------------------------------------------------------------------|
 | [`MacApplication`](src/main/java/dev/ivchenko/lwjwae/macos/MacApplication.java)         | The application. Runs the loop from the main thread of a native image.        |
 | [`MacWindow`](src/main/java/dev/ivchenko/lwjwae/macos/MacWindow.java)                   | The window. Forwards every call to the main thread.                           |
+| [`MacRpcExchange`](src/main/java/dev/ivchenko/lwjwae/macos/MacRpcExchange.java) | One RPC call over a `WKURLSchemeTask`. |
 | [`MacDispatcher`](src/main/java/dev/ivchenko/lwjwae/macos/MacDispatcher.java)           | The main thread of the process, and how work reaches it.                      |
 | [`MacTray`](src/main/java/dev/ivchenko/lwjwae/macos/MacTray.java)                       | A tray icon: an `NSStatusItem` in the menu bar.                               |
 | [`MacNotifier`](src/main/java/dev/ivchenko/lwjwae/macos/MacNotifier.java), [`MacNotification`](src/main/java/dev/ivchenko/lwjwae/macos/MacNotification.java) | Notifications, through `UNUserNotificationCenter`. |
@@ -124,6 +125,20 @@ The `app://local/PATH` scheme is answered per window through `WKURLSchemeHandler
    `dev.ivchenko.lwjwae` domain. WebKit reports that to the navigation delegate as a failed
    provisional navigation. When the missing resource is the document being loaded, the backend also
    emits [`LoadEvent.failed`](../lwjwae-core/src/main/java/dev/ivchenko/lwjwae/event/LoadEvent.java) itself and remembers the URL, so the delegate doesn't report it twice.
+
+## RPC
+
+A `POST` under `app://local/__lwjwae/rpc/` is a call, handled by [`MacRpcExchange`](src/main/java/dev/ivchenko/lwjwae/macos/MacRpcExchange.java):
+
+1. Reads the method, the path, `Origin`, `Content-Type`, and the body (`HTTPBody`, or
+   `HTTPBodyStream` read to its end) in the start callback, and retains the task.
+2. Answers with `didReceiveResponse:`, one `didReceiveData:` per part, and `didFinish`, each posted
+   to the main thread with at most 16 waiting.
+3. `webView:stopURLSchemeTask:` marks the call cancelled and releases the task. A task must not be
+   touched after it is stopped, since that raises an Objective-C exception, so every step checks on
+   the main thread, where the stop also runs, whether the task is still live.
+
+This path is compiled but not yet run on macOS.
 
 ## Evaluating scripts
 

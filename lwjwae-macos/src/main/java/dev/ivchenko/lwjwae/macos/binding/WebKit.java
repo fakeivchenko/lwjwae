@@ -4,6 +4,7 @@ import dev.ivchenko.lwjwae.foreign.NativeLibraries;
 import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.SymbolLookup;
+import java.lang.foreign.ValueLayout;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import lombok.experimental.UtilityClass;
@@ -119,12 +120,13 @@ public class WebKit {
   }
 
   /**
-   * Calls {@code -[WKWebView loadHTMLString:baseURL:]} with no base URL, so relative links can't
-   * resolve.
+   * Calls {@code -[WKWebView loadHTMLString:baseURL:]}: relative links resolve against {@code
+   * baseUrl}, and the document has its origin.
    */
-  public void loadHtml(MemorySegment webView, String html) {
+  public void loadHtml(MemorySegment webView, String html, String baseUrl) {
     MemorySegment _ =
-        ObjC.send(webView, "loadHTMLString:baseURL:", Foundation.string(html), MemorySegment.NULL);
+        ObjC.send(
+            webView, "loadHTMLString:baseURL:", Foundation.string(html), Foundation.url(baseUrl));
   }
 
   /** The current URL, or {@code null} before the first load. */
@@ -188,5 +190,91 @@ public class WebKit {
     }
     Matcher release = MACOS_RELEASE.matcher(Foundation.operatingSystemVersion());
     return (build == null ? "0" : build) + " macOS " + (release.find() ? release.group(1) : "0");
+  }
+
+  // --- RPC: requests with a method and a body, answered in parts ---
+
+  /** {@code task.request.HTTPMethod}. */
+  public String taskMethod(MemorySegment task) {
+    return Foundation.string(ObjC.send(ObjC.send(task, "request"), "HTTPMethod"));
+  }
+
+  /** {@code task.request.URL.path}. */
+  public String taskPath(MemorySegment task) {
+    return Foundation.string(ObjC.send(ObjC.send(ObjC.send(task, "request"), "URL"), "path"));
+  }
+
+  /** {@code [task.request valueForHTTPHeaderField:name]}, or null. */
+  public String taskHeader(MemorySegment task, String name) {
+    return Foundation.string(
+        ObjC.send(ObjC.send(task, "request"), "valueForHTTPHeaderField:", Foundation.string(name)));
+  }
+
+  /** {@code task.request.URL.query}, or an empty string. */
+  public String taskQuery(MemorySegment task) {
+    String query =
+        Foundation.string(ObjC.send(ObjC.send(ObjC.send(task, "request"), "URL"), "query"));
+    return query == null ? "" : query;
+  }
+
+  /**
+   * The body of the request of {@code task}: {@code HTTPBody}, or, where WebKit hands the body over
+   * as a stream instead, {@code HTTPBodyStream} read to its end.
+   */
+  public byte[] taskBody(MemorySegment task) {
+    MemorySegment request = ObjC.send(task, "request");
+    MemorySegment data = ObjC.send(request, "HTTPBody");
+    if (!ObjC.isNull(data)) {
+      long length = ObjC.sendLong(data, "length");
+      return ObjC.send(data, "bytes").reinterpret(length).toArray(ValueLayout.JAVA_BYTE);
+    }
+    MemorySegment stream = ObjC.send(request, "HTTPBodyStream");
+    if (ObjC.isNull(stream)) {
+      return new byte[0];
+    }
+    java.io.ByteArrayOutputStream body = new java.io.ByteArrayOutputStream();
+    ObjC.sendVoid(stream, "open");
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment buffer = arena.allocate(65536);
+      long read;
+      while ((read = ObjC.sendLong(stream, "read:maxLength:", buffer, 65536)) > 0) {
+        body.write(buffer.asSlice(0, read).toArray(ValueLayout.JAVA_BYTE), 0, (int) read);
+      }
+    } finally {
+      ObjC.sendVoid(stream, "close");
+    }
+    return body.toByteArray();
+  }
+
+  /** Starts the answer of {@code task}: an {@code NSHTTPURLResponse} with a status and headers. */
+  public void taskRespond(MemorySegment task, int status, java.util.Map<String, String> headers) {
+    MemorySegment fields = ObjC.send(ObjC.cls("NSMutableDictionary"), "dictionary");
+    for (java.util.Map.Entry<String, String> header : headers.entrySet()) {
+      ObjC.sendVoid(
+          fields,
+          "setObject:forKey:",
+          Foundation.string(header.getValue()),
+          Foundation.string(header.getKey()));
+    }
+    MemorySegment response =
+        ObjC.send(
+            ObjC.send(ObjC.cls("NSHTTPURLResponse"), "alloc"),
+            "initWithURL:statusCode:HTTPVersion:headerFields:",
+            ObjC.send(ObjC.send(task, "request"), "URL"),
+            status,
+            Foundation.string("HTTP/1.1"),
+            fields);
+    ObjC.sendVoid(task, "didReceiveResponse:", response);
+    Foundation.release(response);
+  }
+
+  /** Hands one part of the answer to the page. */
+  public void taskData(MemorySegment task, byte[] part) {
+    ObjC.sendVoid(task, "didReceiveData:", Foundation.data(part));
+  }
+
+  /** Ends the answer of {@code task}. */
+  public void taskFinish(MemorySegment task) {
+    ObjC.sendVoid(task, "didFinish");
   }
 }

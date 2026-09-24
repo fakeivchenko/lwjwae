@@ -194,6 +194,15 @@ public class Signatures {
       FunctionDescriptor.of(
           C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER);
 
+  /** {@code id -[receiver selector:id selector:NSInteger selector:id selector:id]}. */
+  public final FunctionDescriptor MSG_ID_ID_LONG_ID_ID =
+      FunctionDescriptor.of(
+          C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_LONG, C_POINTER, C_POINTER);
+
+  /** {@code NSInteger -[receiver selector:void* selector:NSUInteger]}: {@code read:maxLength:}. */
+  public final FunctionDescriptor MSG_LONG_POINTER_LONG =
+      FunctionDescriptor.of(C_LONG, C_POINTER, C_POINTER, C_POINTER, C_LONG);
+
   /** {@code void -[receiver selector:NSUInteger selector:id]}. */
   public final FunctionDescriptor MSG_VOID_LONG_ID =
       FunctionDescriptor.ofVoid(C_POINTER, C_POINTER, C_LONG, C_POINTER);

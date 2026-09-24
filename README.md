@@ -125,8 +125,12 @@ dependencies {
   `window.NAME(payload)`, which returns a promise. `emit` delivers an event to the page. On a window,
   they belong to that window; on the application, a binding reaches every window and learns which
   one called, a listener hears every window, and `emit` reaches every page. Handlers run on virtual
-  threads, so a slow one doesn't freeze the window. The protocol is a string, so the core has no
-  serialization dependency; a codec adds typed calls with records and objects.
+  threads, so a slow one doesn't freeze the window. The core has no serialization dependency; a
+  codec adds typed calls with records and objects. Pages of other origins can't call Java.
+- **Calls with bytes and streams.** `handle` answers `lwjwae.call(name, body)` on the page with a
+  `Response`: text, bytes, a value through the codec, or a stream that the page reads while Java
+  writes it, several hundred MB/s. An `AbortSignal` reaches the handler. Only the pages of the
+  application, and the development server, may call.
 - **A tray icon, and windows that hide.** `Application.tray(TrayIcon)` puts an icon with a menu in
   the notification area on Windows, the menu bar on macOS, or the StatusNotifier or XEmbed tray on
   Linux. With `CloseAction.HIDE`, the close button hides a window instead of closing it while a tray
@@ -175,8 +179,11 @@ Two sibling repositories complete the picture:
   window and the set of stubs stays fixed for `native-image`.
 - **Nothing unwinds into C.** Every callback catches `Throwable` and reports it. A Java exception
   crossing into a toolkit is undefined behavior.
-- **The bridge is a string protocol.** A message is `id`, `name`, and `payload`, separated by the
-  ASCII unit separator. Only the transport expression differs between engines.
+- **The bridge is one protocol, RPC.** A binding, an event from the page, and a window that the
+  page opens are calls; the events of Java travel in the answer of one call that the page keeps
+  open. Small calls take the message channel of the engine, `lwjwae.call` the transport that
+  streams best. Only a document of the application's origin, or of the development server, may
+  call.
 - **A codec brings both halves.** The Java half encodes and decodes objects; the page half is a
   JavaScript object that the codec ships and the bridge runtime evaluates in every document.
 

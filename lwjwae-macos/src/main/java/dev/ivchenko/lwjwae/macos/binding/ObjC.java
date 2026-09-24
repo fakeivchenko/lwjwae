@@ -96,6 +96,10 @@ public class ObjC {
       NativeLibraries.downcall(OBJC, "objc_msgSend", Signatures.MSG_ID_ID_ID_ID_LONG);
   private final MethodHandle MSG_ID_ID_ID_ID_POINTER =
       NativeLibraries.downcall(OBJC, "objc_msgSend", Signatures.MSG_ID_ID_ID_ID_POINTER);
+  private final MethodHandle MSG_ID_ID_LONG_ID_ID =
+      NativeLibraries.downcall(OBJC, "objc_msgSend", Signatures.MSG_ID_ID_LONG_ID_ID);
+  private final MethodHandle MSG_LONG_POINTER_LONG =
+      NativeLibraries.downcall(OBJC, "objc_msgSend", Signatures.MSG_LONG_POINTER_LONG);
   private final MethodHandle MSG_VOID_LONG_ID =
       NativeLibraries.downcall(OBJC, "objc_msgSend", Signatures.MSG_VOID_LONG_ID);
   private final MethodHandle CALL_BLOCK = NativeLibraries.downcall(Signatures.CALL_BLOCK);
@@ -354,6 +358,21 @@ public class ObjC {
   }
 
   /**
+   * Sends {@code selector} to {@code receiver}: {@code id -[receiver selector:id:NSInteger:id:id]}.
+   */
+  @SneakyThrows
+  public MemorySegment send(
+      MemorySegment receiver,
+      String selector,
+      MemorySegment first,
+      long second,
+      MemorySegment third,
+      MemorySegment fourth) {
+    return (MemorySegment)
+        MSG_ID_ID_LONG_ID_ID.invokeExact(receiver, sel(selector), first, second, third, fourth);
+  }
+
+  /**
    * Sends {@code selector} to {@code receiver}: {@code id -[receiver selector:id:id:id
    * error:NSError**]}, with {@code NULL} for the error, which the caller learns from the {@code
    * nil} result.
@@ -450,6 +469,15 @@ public class ObjC {
   @SneakyThrows
   public void sendVoidSize(MemorySegment receiver, String selector, MemorySegment size) {
     MSG_VOID_SIZE.invokeExact(receiver, sel(selector), size);
+  }
+
+  /**
+   * Sends {@code selector} to {@code receiver}: {@code NSInteger -[receiver selector:void*
+   * selector:NSUInteger]}.
+   */
+  @SneakyThrows
+  public long sendLong(MemorySegment receiver, String selector, MemorySegment buffer, long length) {
+    return (long) MSG_LONG_POINTER_LONG.invokeExact(receiver, sel(selector), buffer, length);
   }
 
   /** Sends {@code selector} to {@code receiver}: {@code NSInteger -[receiver selector]}. */

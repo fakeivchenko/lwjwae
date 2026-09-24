@@ -13,6 +13,7 @@ import dev.ivchenko.lwjwae.gtk4.binding.Signatures;
 import dev.ivchenko.lwjwae.gtk4.binding.WebKit;
 import dev.ivchenko.lwjwae.notification.Notification;
 import dev.ivchenko.lwjwae.notification.NotificationHandle;
+import dev.ivchenko.lwjwae.rpc.RpcExchange;
 import dev.ivchenko.lwjwae.tray.Tray;
 import dev.ivchenko.lwjwae.tray.TrayIcon;
 import dev.ivchenko.lwjwae.util.MimeTypeUtil;
@@ -123,6 +124,13 @@ public class Gtk4Application extends AbstractApplication {
     String path = "";
     try {
       path = WebKit.uriSchemeRequestPath(request);
+      if (path != null && path.startsWith(RpcExchange.PATH_PREFIX)) {
+        Gtk4Window window = Gtk4Window.ofWebView(WebKit.uriSchemeRequestWebView(request));
+        if (window != null) {
+          window.rpc(new Gtk4RpcExchange(Gtk4Dispatcher.instance(), request, path));
+          return;
+        }
+      }
       byte[] content = ResourceUtil.read(path);
       MemorySegment stream = Glib.memoryInputStream(Glib.copyToNative(content), content.length);
       try {

@@ -147,6 +147,14 @@
           "jlong",
           "void*"
         ]
+      },
+      {
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "jint",
+          "void*"
+        ]
       }
     ],
     "directUpcalls": [
