@@ -4,6 +4,7 @@ import dev.ivchenko.lwjwae.AbstractApplication;
 import dev.ivchenko.lwjwae.AbstractWindow;
 import dev.ivchenko.lwjwae.WindowParameters;
 import dev.ivchenko.lwjwae.WindowPosition;
+import dev.ivchenko.lwjwae.WindowSize;
 import dev.ivchenko.lwjwae.bridge.BridgeProtocol;
 import dev.ivchenko.lwjwae.bridge.RpcMessageChannel;
 import dev.ivchenko.lwjwae.event.LoadEvent;
@@ -43,6 +44,12 @@ public class FakeWindow extends AbstractWindow {
   private int height;
   private boolean resizable = true;
   private boolean devToolsEnabled;
+  private WindowSize minimumSize = WindowSize.NONE;
+  private WindowSize maximumSize = WindowSize.NONE;
+  private boolean minimized;
+  private boolean maximized;
+  private boolean fullscreen;
+  private boolean alwaysOnTop;
 
   /** Whether {@link #show()} was called. */
   @Getter private boolean shown;
@@ -273,6 +280,83 @@ public class FakeWindow extends AbstractWindow {
   @Override
   public void resizable(boolean resizable) {
     this.resizable = resizable;
+  }
+
+  @Override
+  public WindowSize minimumSize() {
+    return this.minimumSize;
+  }
+
+  @Override
+  public void minimumSize(int width, int height) {
+    this.minimumSize = new WindowSize(width, height);
+  }
+
+  @Override
+  public WindowSize maximumSize() {
+    return this.maximumSize;
+  }
+
+  @Override
+  public void maximumSize(int width, int height) {
+    this.maximumSize = new WindowSize(width, height);
+  }
+
+  @Override
+  public boolean isMinimized() {
+    return this.minimized;
+  }
+
+  @Override
+  public void minimize() {
+    this.minimized = true;
+  }
+
+  @Override
+  public boolean isMaximized() {
+    return this.maximized;
+  }
+
+  @Override
+  public void maximize() {
+    this.maximized = true;
+  }
+
+  @Override
+  public void restore() {
+    this.minimized = false;
+    this.maximized = false;
+  }
+
+  @Override
+  public boolean isFullscreen() {
+    return this.fullscreen;
+  }
+
+  @Override
+  public void fullscreen(boolean fullscreen) {
+    this.fullscreen = fullscreen;
+  }
+
+  @Override
+  public boolean isAlwaysOnTop() {
+    return this.alwaysOnTop;
+  }
+
+  @Override
+  public void alwaysOnTop(boolean alwaysOnTop) {
+    this.alwaysOnTop = alwaysOnTop;
+  }
+
+  @Override
+  public boolean isFocused() {
+    return this.shown && !this.minimized;
+  }
+
+  @Override
+  public void focus() {
+    this.shown = true;
+    this.minimized = false;
   }
 
   @Override

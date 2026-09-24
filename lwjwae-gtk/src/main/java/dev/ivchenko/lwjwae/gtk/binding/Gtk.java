@@ -2,8 +2,10 @@ package dev.ivchenko.lwjwae.gtk.binding;
 
 import dev.ivchenko.lwjwae.foreign.NativeLibraries;
 import java.lang.foreign.Arena;
+import java.lang.foreign.MemoryLayout;
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.SymbolLookup;
+import java.lang.foreign.ValueLayout;
 import java.lang.invoke.MethodHandle;
 import lombok.SneakyThrows;
 import lombok.experimental.UtilityClass;
@@ -50,6 +52,27 @@ public class Gtk {
       NativeLibraries.downcall(GTK, "gtk_window_set_resizable", Signatures.VOID_POINTER_INT);
   private final MethodHandle WINDOW_GET_RESIZABLE =
       NativeLibraries.downcall(GTK, "gtk_window_get_resizable", Signatures.INT_POINTER);
+  private final MethodHandle WINDOW_ICONIFY =
+      NativeLibraries.downcall(GTK, "gtk_window_iconify", Signatures.VOID_POINTER);
+  private final MethodHandle WINDOW_DEICONIFY =
+      NativeLibraries.downcall(GTK, "gtk_window_deiconify", Signatures.VOID_POINTER);
+  private final MethodHandle WINDOW_MAXIMIZE =
+      NativeLibraries.downcall(GTK, "gtk_window_maximize", Signatures.VOID_POINTER);
+  private final MethodHandle WINDOW_UNMAXIMIZE =
+      NativeLibraries.downcall(GTK, "gtk_window_unmaximize", Signatures.VOID_POINTER);
+  private final MethodHandle WINDOW_IS_MAXIMIZED =
+      NativeLibraries.downcall(GTK, "gtk_window_is_maximized", Signatures.INT_POINTER);
+  private final MethodHandle WINDOW_FULLSCREEN =
+      NativeLibraries.downcall(GTK, "gtk_window_fullscreen", Signatures.VOID_POINTER);
+  private final MethodHandle WINDOW_UNFULLSCREEN =
+      NativeLibraries.downcall(GTK, "gtk_window_unfullscreen", Signatures.VOID_POINTER);
+  private final MethodHandle WINDOW_SET_KEEP_ABOVE =
+      NativeLibraries.downcall(GTK, "gtk_window_set_keep_above", Signatures.VOID_POINTER_INT);
+  private final MethodHandle WINDOW_IS_ACTIVE =
+      NativeLibraries.downcall(GTK, "gtk_window_is_active", Signatures.INT_POINTER);
+  private final MethodHandle WINDOW_SET_GEOMETRY_HINTS =
+      NativeLibraries.downcall(
+          GTK, "gtk_window_set_geometry_hints", Signatures.VOID_POINTER_POINTER_POINTER_INT);
   private final MethodHandle CONTAINER_ADD =
       NativeLibraries.downcall(GTK, "gtk_container_add", Signatures.VOID_POINTER_POINTER);
   private final MethodHandle WIDGET_GET_WINDOW =
@@ -196,6 +219,98 @@ public class Gtk {
   @SneakyThrows
   public boolean isWindowResizable(MemorySegment window) {
     return (int) WINDOW_GET_RESIZABLE.invokeExact(window) != 0;
+  }
+
+  /** {@code GDK_HINT_MIN_SIZE}. */
+  private final int HINT_MIN_SIZE = 1 << 1;
+
+  /** {@code GDK_HINT_MAX_SIZE}. */
+  private final int HINT_MAX_SIZE = 1 << 2;
+
+  /**
+   * {@code struct GdkGeometry}: the size limits first, then the base size, the increments, the
+   * aspect ratios, and the gravity, none of which the backend sets.
+   */
+  private final MemoryLayout GEOMETRY =
+      MemoryLayout.structLayout(
+          MemoryLayout.sequenceLayout(8, Signatures.C_INT).withName("sizes"),
+          MemoryLayout.sequenceLayout(2, ValueLayout.JAVA_DOUBLE).withName("aspects"),
+          Signatures.C_INT.withName("gravity"),
+          MemoryLayout.paddingLayout(4));
+
+  /** Calls {@code gtk_window_iconify}. */
+  @SneakyThrows
+  public void windowIconify(MemorySegment window) {
+    WINDOW_ICONIFY.invokeExact(window);
+  }
+
+  /** Calls {@code gtk_window_deiconify}. */
+  @SneakyThrows
+  public void windowDeiconify(MemorySegment window) {
+    WINDOW_DEICONIFY.invokeExact(window);
+  }
+
+  /** Calls {@code gtk_window_maximize}. */
+  @SneakyThrows
+  public void windowMaximize(MemorySegment window) {
+    WINDOW_MAXIMIZE.invokeExact(window);
+  }
+
+  /** Calls {@code gtk_window_unmaximize}. */
+  @SneakyThrows
+  public void windowUnmaximize(MemorySegment window) {
+    WINDOW_UNMAXIMIZE.invokeExact(window);
+  }
+
+  /** Calls {@code gtk_window_is_maximized}. */
+  @SneakyThrows
+  public boolean isWindowMaximized(MemorySegment window) {
+    return (int) WINDOW_IS_MAXIMIZED.invokeExact(window) != 0;
+  }
+
+  /** Calls {@code gtk_window_fullscreen} or {@code gtk_window_unfullscreen}. */
+  @SneakyThrows
+  public void windowSetFullscreen(MemorySegment window, boolean fullscreen) {
+    if (fullscreen) {
+      WINDOW_FULLSCREEN.invokeExact(window);
+    } else {
+      WINDOW_UNFULLSCREEN.invokeExact(window);
+    }
+  }
+
+  /** Calls {@code gtk_window_set_keep_above}. */
+  @SneakyThrows
+  public void windowSetKeepAbove(MemorySegment window, boolean above) {
+    WINDOW_SET_KEEP_ABOVE.invokeExact(window, above ? 1 : 0);
+  }
+
+  /** Calls {@code gtk_window_is_active}: whether the window has the keyboard focus. */
+  @SneakyThrows
+  public boolean isWindowActive(MemorySegment window) {
+    return (int) WINDOW_IS_ACTIVE.invokeExact(window) != 0;
+  }
+
+  /**
+   * Calls {@code gtk_window_set_geometry_hints} with the size limits of the window, which replace
+   * the ones set before. Zero in a dimension means no limit there.
+   */
+  @SneakyThrows
+  public void windowSetSizeLimits(
+      MemorySegment window, int minWidth, int minHeight, int maxWidth, int maxHeight) {
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment geometry = arena.allocate(GEOMETRY);
+      int[] sizes = {
+        minWidth,
+        minHeight,
+        maxWidth == 0 ? Short.MAX_VALUE : maxWidth,
+        maxHeight == 0 ? Short.MAX_VALUE : maxHeight
+      };
+      MemorySegment.copy(sizes, 0, geometry, Signatures.C_INT, 0, sizes.length);
+      int hints =
+          (minWidth > 0 || minHeight > 0 ? HINT_MIN_SIZE : 0)
+              | (maxWidth > 0 || maxHeight > 0 ? HINT_MAX_SIZE : 0);
+      WINDOW_SET_GEOMETRY_HINTS.invokeExact(window, MemorySegment.NULL, geometry, hints);
+    }
   }
 
   /** Calls {@code gtk_container_add}: the container sinks the floating reference of the child. */

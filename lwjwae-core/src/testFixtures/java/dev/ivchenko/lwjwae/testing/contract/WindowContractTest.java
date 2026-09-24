@@ -5,6 +5,7 @@ import dev.ivchenko.lwjwae.CloseAction;
 import dev.ivchenko.lwjwae.Window;
 import dev.ivchenko.lwjwae.WindowParameters;
 import dev.ivchenko.lwjwae.WindowPosition;
+import dev.ivchenko.lwjwae.WindowSize;
 import dev.ivchenko.lwjwae.event.LoadEvent;
 import dev.ivchenko.lwjwae.testing.Icons;
 import dev.ivchenko.lwjwae.testing.Loads;
@@ -158,6 +159,9 @@ public abstract class WindowContractTest extends DisplayContractTest {
       Assertions.assertFalse(window.isDevToolsEnabled());
 
       window.resizable(true);
+      if (!this.canResizeShownWindows()) {
+        return;
+      }
       window.size(640, 480);
       // Toolkits apply the request asynchronously and offer no completion signal; polling is the
       // point.
@@ -176,6 +180,138 @@ public abstract class WindowContractTest extends DisplayContractTest {
    */
   protected boolean canPlaceWindows() {
     return true;
+  }
+
+  /** Whether the platform tells a client that its window is minimized. Wayland doesn't. */
+  protected boolean canTellMinimized() {
+    return true;
+  }
+
+  /**
+   * Whether a client may take the keyboard focus for its own window. Wayland lets only the
+   * compositor decide that.
+   */
+  protected boolean canTakeFocus() {
+    return true;
+  }
+
+  /** Whether a window that is on screen can be resized by its client. GTK 4 on Wayland can't. */
+  protected boolean canResizeShownWindows() {
+    return true;
+  }
+
+  /** Whether the toolkit can keep a window above the others. GTK 4 can't. */
+  protected boolean canKeepOnTop() {
+    return true;
+  }
+
+  /** Whether the toolkit can limit the size of a window from above. GTK 4 can't. */
+  protected boolean hasMaximumSize() {
+    return true;
+  }
+
+  @Test
+  void sizeLimitsResizeTheWindowIntoThem() throws Exception {
+    WindowParameters parameters =
+        WindowParameters.builder()
+            .title("lwjwae :: limits")
+            .width(400)
+            .height(300)
+            .minimumSize(new WindowSize(500, 350))
+            .build();
+    try (Application application = Application.create()) {
+      Window window = application.open(parameters);
+      window.show();
+      Assertions.assertEquals(new WindowSize(500, 350), window.minimumSize());
+      awaitTrue(
+          () -> window.width() >= 500 && window.height() >= 350,
+          "the minimum must grow the window");
+
+      window.size(300, 200);
+      Thread.sleep(300);
+      Assertions.assertTrue(
+          window.width() >= 500 && window.height() >= 350,
+          "a resize below the minimum stops at it: " + window.width() + "x" + window.height());
+
+      if (this.hasMaximumSize()) {
+        window.maximumSize(600, 450);
+        Assertions.assertEquals(new WindowSize(600, 450), window.maximumSize());
+        window.size(900, 700);
+        Thread.sleep(300);
+        Assertions.assertTrue(
+            window.width() <= 600 && window.height() <= 450,
+            "a resize beyond the maximum stops at it: " + window.width() + "x" + window.height());
+      }
+
+      window.minimumSize(0, 0);
+      window.maximumSize(0, 0);
+      Assertions.assertEquals(WindowSize.NONE, window.minimumSize());
+      window.size(320, 240);
+      awaitTrue(() -> window.width() < 500, "without limits the window shrinks again");
+    }
+  }
+
+  @Test
+  void windowMaximizesMinimizesAndRestores() throws Exception {
+    try (Application application = Application.create()) {
+      Window window =
+          application.open(
+              WindowParameters.builder().title("lwjwae :: state").width(400).height(300).build());
+      window.show();
+      awaitTrue(window::isVisible, "the window must show");
+
+      window.maximize();
+      awaitTrue(window::isMaximized, "maximize must maximize");
+      Screenshots.capture("window-maximized");
+      window.restore();
+      awaitTrue(() -> !window.isMaximized(), "restore must bring the size back");
+
+      window.minimize();
+      if (this.canTellMinimized()) {
+        awaitTrue(window::isMinimized, "minimize must minimize");
+      }
+      window.focus();
+      awaitTrue(() -> !window.isMinimized(), "focus must bring a minimized window back");
+      if (this.canTakeFocus()) {
+        awaitTrue(window::isFocused, "focus must give the window the keyboard focus");
+      }
+    }
+  }
+
+  @Test
+  void windowEntersAndLeavesFullscreen() throws Exception {
+    try (Application application = Application.create()) {
+      Window window =
+          application.open(
+              WindowParameters.builder()
+                  .title("lwjwae :: full screen")
+                  .width(400)
+                  .height(300)
+                  .build());
+      window.show();
+      awaitTrue(window::isVisible, "the window must show");
+
+      window.fullscreen(true);
+      awaitTrue(window::isFullscreen, "full screen must start");
+      awaitTrue(() -> window.width() > 400, "full screen must cover more than the window did");
+      Screenshots.capture("window-fullscreen");
+      window.fullscreen(false);
+      awaitTrue(() -> !window.isFullscreen(), "full screen must end");
+      awaitTrue(() -> window.width() < 500, "the window must come back to its size");
+    }
+  }
+
+  @Test
+  void alwaysOnTopRoundTrips() throws Exception {
+    WindowParameters parameters =
+        WindowParameters.builder().title("lwjwae :: on top").alwaysOnTop(true).build();
+    try (Application application = Application.create()) {
+      Window window = application.open(parameters);
+      window.show();
+      Assertions.assertEquals(this.canKeepOnTop(), window.isAlwaysOnTop());
+      window.alwaysOnTop(false);
+      Assertions.assertFalse(window.isAlwaysOnTop());
+    }
   }
 
   @Test

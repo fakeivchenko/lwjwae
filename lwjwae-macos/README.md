@@ -140,6 +140,13 @@ A `POST` under `app://local/__lwjwae/rpc/` is a call, handled by [`MacRpcExchang
 
 This path is compiled but not yet run on macOS.
 
+## Window state
+
+`miniaturize:`, `zoom:`, and `toggleFullScreen:` change the state; the last two toggle, so they're
+sent only when the state differs. On top is the floating window level; focus is the key window.
+`setContentMinSize:` and `setContentMaxSize:` set the limits, and a window outside them is resized
+into them, since AppKit only keeps the user within them.
+
 ## Evaluating scripts
 
 `evaluateJavaScript:completionHandler:` takes a block. The backend builds one by hand:

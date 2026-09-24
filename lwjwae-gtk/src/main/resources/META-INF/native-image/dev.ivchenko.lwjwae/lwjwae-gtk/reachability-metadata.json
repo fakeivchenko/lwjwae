@@ -194,6 +194,15 @@
           "jint",
           "void*"
         ]
+      },
+      {
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "void*",
+          "jint"
+        ]
       }
     ],
     "directUpcalls": [

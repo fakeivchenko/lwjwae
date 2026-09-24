@@ -40,6 +40,34 @@ public class Gtk {
       NativeLibraries.downcall(GTK, "gtk_window_set_resizable", Signatures.VOID_POINTER_INT);
   private final MethodHandle WINDOW_GET_RESIZABLE =
       NativeLibraries.downcall(GTK, "gtk_window_get_resizable", Signatures.INT_POINTER);
+  private final MethodHandle WINDOW_MINIMIZE =
+      NativeLibraries.downcall(GTK, "gtk_window_minimize", Signatures.VOID_POINTER);
+  private final MethodHandle WINDOW_UNMINIMIZE =
+      NativeLibraries.downcall(GTK, "gtk_window_unminimize", Signatures.VOID_POINTER);
+  private final MethodHandle WINDOW_MAXIMIZE =
+      NativeLibraries.downcall(GTK, "gtk_window_maximize", Signatures.VOID_POINTER);
+  private final MethodHandle WINDOW_UNMAXIMIZE =
+      NativeLibraries.downcall(GTK, "gtk_window_unmaximize", Signatures.VOID_POINTER);
+  private final MethodHandle WINDOW_IS_MAXIMIZED =
+      NativeLibraries.downcall(GTK, "gtk_window_is_maximized", Signatures.INT_POINTER);
+  private final MethodHandle WINDOW_FULLSCREEN =
+      NativeLibraries.downcall(GTK, "gtk_window_fullscreen", Signatures.VOID_POINTER);
+  private final MethodHandle WINDOW_UNFULLSCREEN =
+      NativeLibraries.downcall(GTK, "gtk_window_unfullscreen", Signatures.VOID_POINTER);
+  private final MethodHandle WINDOW_IS_FULLSCREEN =
+      NativeLibraries.downcall(GTK, "gtk_window_is_fullscreen", Signatures.INT_POINTER);
+  private final MethodHandle WINDOW_IS_ACTIVE =
+      NativeLibraries.downcall(GTK, "gtk_window_is_active", Signatures.INT_POINTER);
+  private final MethodHandle WIDGET_GET_WIDTH =
+      NativeLibraries.downcall(GTK, "gtk_widget_get_width", Signatures.INT_POINTER);
+  private final MethodHandle WIDGET_GET_HEIGHT =
+      NativeLibraries.downcall(GTK, "gtk_widget_get_height", Signatures.INT_POINTER);
+  private final MethodHandle WIDGET_SET_SIZE_REQUEST =
+      NativeLibraries.downcall(GTK, "gtk_widget_set_size_request", Signatures.VOID_POINTER_INT_INT);
+  private final MethodHandle NATIVE_GET_SURFACE =
+      NativeLibraries.downcall(GTK, "gtk_native_get_surface", Signatures.POINTER_POINTER);
+  private final MethodHandle TOPLEVEL_GET_STATE =
+      NativeLibraries.downcall(GTK, "gdk_toplevel_get_state", Signatures.INT_POINTER);
   private final MethodHandle WINDOW_PRESENT =
       NativeLibraries.downcall(GTK, "gtk_window_present", Signatures.VOID_POINTER);
   private final MethodHandle WINDOW_CLOSE =
@@ -159,5 +187,87 @@ public class Gtk {
   @SneakyThrows
   public boolean isWidgetVisible(MemorySegment widget) {
     return (int) WIDGET_GET_VISIBLE.invokeExact(widget) != 0;
+  }
+
+  /** {@code GDK_TOPLEVEL_STATE_MINIMIZED}. */
+  private final int STATE_MINIMIZED = 1;
+
+  /** Calls {@code gtk_window_minimize} or {@code gtk_window_unminimize}. */
+  @SneakyThrows
+  public void windowSetMinimized(MemorySegment window, boolean minimized) {
+    if (minimized) {
+      WINDOW_MINIMIZE.invokeExact(window);
+    } else {
+      WINDOW_UNMINIMIZE.invokeExact(window);
+    }
+  }
+
+  /**
+   * Whether the surface of the window is minimized, by {@code gdk_toplevel_get_state}; {@code
+   * false} for a window that has no surface yet.
+   */
+  @SneakyThrows
+  public boolean isWindowMinimized(MemorySegment window) {
+    MemorySegment surface = (MemorySegment) NATIVE_GET_SURFACE.invokeExact(window);
+    return !surface.equals(MemorySegment.NULL)
+        && ((int) TOPLEVEL_GET_STATE.invokeExact(surface) & STATE_MINIMIZED) != 0;
+  }
+
+  /** Calls {@code gtk_window_maximize} or {@code gtk_window_unmaximize}. */
+  @SneakyThrows
+  public void windowSetMaximized(MemorySegment window, boolean maximized) {
+    if (maximized) {
+      WINDOW_MAXIMIZE.invokeExact(window);
+    } else {
+      WINDOW_UNMAXIMIZE.invokeExact(window);
+    }
+  }
+
+  /** Calls {@code gtk_window_is_maximized}. */
+  @SneakyThrows
+  public boolean isWindowMaximized(MemorySegment window) {
+    return (int) WINDOW_IS_MAXIMIZED.invokeExact(window) != 0;
+  }
+
+  /** Calls {@code gtk_window_fullscreen} or {@code gtk_window_unfullscreen}. */
+  @SneakyThrows
+  public void windowSetFullscreen(MemorySegment window, boolean fullscreen) {
+    if (fullscreen) {
+      WINDOW_FULLSCREEN.invokeExact(window);
+    } else {
+      WINDOW_UNFULLSCREEN.invokeExact(window);
+    }
+  }
+
+  /** Calls {@code gtk_window_is_fullscreen}. */
+  @SneakyThrows
+  public boolean isWindowFullscreen(MemorySegment window) {
+    return (int) WINDOW_IS_FULLSCREEN.invokeExact(window) != 0;
+  }
+
+  /** Calls {@code gtk_window_is_active}: whether the window has the keyboard focus. */
+  @SneakyThrows
+  public boolean isWindowActive(MemorySegment window) {
+    return (int) WINDOW_IS_ACTIVE.invokeExact(window) != 0;
+  }
+
+  /**
+   * Calls {@code gtk_widget_set_size_request}: the widget, and so the window around it, gets no
+   * smaller. {@code -1} leaves a dimension to the natural size.
+   */
+  @SneakyThrows
+  public void widgetSetSizeRequest(MemorySegment widget, int width, int height) {
+    WIDGET_SET_SIZE_REQUEST.invokeExact(widget, width, height);
+  }
+
+  /**
+   * {@code {width, height}} that the widget was last allocated, by {@code gtk_widget_get_width} and
+   * {@code gtk_widget_get_height}; zero for a widget that was never shown.
+   */
+  @SneakyThrows
+  public int[] widgetSize(MemorySegment widget) {
+    return new int[] {
+      (int) WIDGET_GET_WIDTH.invokeExact(widget), (int) WIDGET_GET_HEIGHT.invokeExact(widget)
+    };
   }
 }

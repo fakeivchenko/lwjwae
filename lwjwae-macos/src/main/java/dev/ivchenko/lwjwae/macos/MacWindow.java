@@ -3,6 +3,7 @@ package dev.ivchenko.lwjwae.macos;
 import dev.ivchenko.lwjwae.AbstractWindow;
 import dev.ivchenko.lwjwae.WindowParameters;
 import dev.ivchenko.lwjwae.WindowPosition;
+import dev.ivchenko.lwjwae.WindowSize;
 import dev.ivchenko.lwjwae.bridge.BridgeProtocol;
 import dev.ivchenko.lwjwae.event.LoadEvent;
 import dev.ivchenko.lwjwae.event.LoadState;
@@ -106,6 +107,8 @@ public class MacWindow extends AbstractWindow {
   private volatile MemorySegment delegate;
   private volatile String loading = "about:blank";
   private volatile String reportedFailure;
+  private volatile WindowSize minimumSize = WindowSize.NONE;
+  private volatile WindowSize maximumSize = WindowSize.NONE;
 
   /**
    * Creates the window and the web view on the main thread and returns when they exist. The window
@@ -214,6 +217,119 @@ public class MacWindow extends AbstractWindow {
                   resizable
                       ? styleMask | AppKit.STYLE_RESIZABLE
                       : styleMask & ~AppKit.STYLE_RESIZABLE);
+            });
+  }
+
+  @Override
+  public WindowSize minimumSize() {
+    return this.minimumSize;
+  }
+
+  @Override
+  public void minimumSize(int width, int height) {
+    this.minimumSize = new WindowSize(width, height);
+    this.dispatcher().run(this::applySizeLimits);
+  }
+
+  @Override
+  public WindowSize maximumSize() {
+    return this.maximumSize;
+  }
+
+  @Override
+  public void maximumSize(int width, int height) {
+    this.maximumSize = new WindowSize(width, height);
+    this.dispatcher().run(this::applySizeLimits);
+  }
+
+  /**
+   * AppKit keeps the user within the limits but leaves a window that is outside them already as it
+   * is, so the content is resized into them here.
+   */
+  private void applySizeLimits() {
+    WindowSize minimum = this.minimumSize;
+    WindowSize maximum = this.maximumSize;
+    MemorySegment current = this.window();
+    AppKit.setContentSizeLimits(
+        current, minimum.width(), minimum.height(), maximum.width(), maximum.height());
+    int[] size = AppKit.contentSize(current);
+    int width = clamp(size[0], minimum.width(), maximum.width());
+    int height = clamp(size[1], minimum.height(), maximum.height());
+    if (width != size[0] || height != size[1]) {
+      AppKit.setContentSize(current, width, height);
+    }
+  }
+
+  /** {@code value} within {@code minimum} and {@code maximum}, where zero means no limit. */
+  private static int clamp(int value, int minimum, int maximum) {
+    int atLeast = Math.max(value, minimum);
+    return maximum > 0 ? Math.min(atLeast, maximum) : atLeast;
+  }
+
+  @Override
+  public boolean isMinimized() {
+    return this.dispatcher().call(() -> AppKit.isMiniaturized(this.window()));
+  }
+
+  @Override
+  public void minimize() {
+    this.dispatcher().run(() -> AppKit.setMiniaturized(this.window(), true));
+  }
+
+  @Override
+  public boolean isMaximized() {
+    return this.dispatcher().call(() -> AppKit.isZoomed(this.window()));
+  }
+
+  @Override
+  public void maximize() {
+    this.dispatcher().run(() -> AppKit.setZoomed(this.window(), true));
+  }
+
+  @Override
+  public void restore() {
+    this.dispatcher()
+        .run(
+            () -> {
+              AppKit.setMiniaturized(this.window(), false);
+              AppKit.setZoomed(this.window(), false);
+            });
+  }
+
+  @Override
+  public boolean isFullscreen() {
+    return this.dispatcher()
+        .call(() -> (AppKit.styleMask(this.window()) & AppKit.STYLE_FULL_SCREEN) != 0);
+  }
+
+  @Override
+  public void fullscreen(boolean fullscreen) {
+    this.dispatcher().run(() -> AppKit.setFullScreen(this.window(), fullscreen));
+  }
+
+  @Override
+  public boolean isAlwaysOnTop() {
+    return this.dispatcher().call(() -> AppKit.isFloating(this.window()));
+  }
+
+  @Override
+  public void alwaysOnTop(boolean alwaysOnTop) {
+    this.dispatcher().run(() -> AppKit.setFloating(this.window(), alwaysOnTop));
+  }
+
+  @Override
+  public boolean isFocused() {
+    return this.dispatcher().call(() -> AppKit.isKeyWindow(this.window()));
+  }
+
+  @Override
+  public void focus() {
+    this.dispatcher()
+        .run(
+            () -> {
+              AppKit.setMiniaturized(this.window(), false);
+              AppKit.show(this.window());
+              AppKit.activate();
             });
   }
 

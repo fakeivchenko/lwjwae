@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 #
-# Runs Gradle tasks in the Linux CI environment of Dockerfile.test: a virtual X display (Xvfb), a
-# private session bus with dunst as the notification server, and software rendering, the way the
-# Linux job on GitHub runs them.
+# Runs Gradle tasks in the Linux CI environment of Dockerfile.test: a virtual X display (Xvfb) with
+# openbox as the window manager, a private session bus with dunst as the notification server, and
+# software rendering, the way the Linux job on GitHub runs them.
 #
 #   scripts/linux/test-in-docker.sh                                  # every display test
 #   scripts/linux/test-in-docker.sh :lwjwae-gtk4:displayTest --tests '*Bridge*'
@@ -34,7 +34,7 @@ docker run --rm \
     "$image" bash -c '
         rsync -a --exclude build --exclude .gradle --exclude .git /src/ /work/
         status=0
-        timeout '"$timeout"' xvfb-run -a dbus-run-session -- ./gradlew --no-daemon --console=plain --continue "$@" || status=$?
+        timeout '"$timeout"' xvfb-run -a dbus-run-session -- scripts/linux/with-window-manager.sh ./gradlew --no-daemon --console=plain --continue "$@" || status=$?
         [ $status -eq 124 ] && echo "Timed out after '"$timeout"' s"
         for module in */build; do
             name=${module%/build}

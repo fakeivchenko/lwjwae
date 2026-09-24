@@ -31,6 +31,12 @@ import lombok.Builder;
  *     Window#loadResource} does, or {@code null}. Wins over {@code url}.
  * @param closeAction What the window does when the user closes it. Default: {@link
  *     CloseAction#CLOSE}. {@link Window#closeAction(CloseAction)} changes it later.
+ * @param minimumSize The smallest size of the content area, see {@link Window#minimumSize(int,
+ *     int)}. Default: {@link WindowSize#NONE}.
+ * @param maximumSize The largest size of the content area, see {@link Window#maximumSize(int,
+ *     int)}. Default: {@link WindowSize#NONE}.
+ * @param alwaysOnTop Whether the window stays above other windows, see {@link
+ *     Window#alwaysOnTop(boolean)}. Default: {@code false}.
  */
 @Builder(toBuilder = true)
 public record WindowParameters(
@@ -42,7 +48,10 @@ public record WindowParameters(
     boolean centered,
     String url,
     String resource,
-    CloseAction closeAction) {
+    CloseAction closeAction,
+    WindowSize minimumSize,
+    WindowSize maximumSize,
+    boolean alwaysOnTop) {
   private static final String DEFAULT_TITLE = "Application";
   private static final int DEFAULT_WIDTH = 1024;
   private static final int DEFAULT_HEIGHT = 768;
@@ -50,6 +59,12 @@ public record WindowParameters(
   public WindowParameters {
     if (closeAction == null) {
       closeAction = CloseAction.CLOSE;
+    }
+    if (minimumSize == null) {
+      minimumSize = WindowSize.NONE;
+    }
+    if (maximumSize == null) {
+      maximumSize = WindowSize.NONE;
     }
     if (title == null || title.isBlank()) {
       title = DEFAULT_TITLE;

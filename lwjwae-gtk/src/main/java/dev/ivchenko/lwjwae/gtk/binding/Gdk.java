@@ -12,7 +12,7 @@ import lombok.experimental.UtilityClass;
 
 /**
  * Bindings to the subset of GDK that the backend needs: where the monitors are, so that a window
- * can be centered after it is mapped.
+ * can be centered after it is mapped, and the state of a window that the window manager reports.
  *
  * <p>Every function here must be called on the GTK thread.
  */
@@ -35,11 +35,31 @@ public class Gdk {
           GDK, "gdk_display_get_monitor_at_window", Signatures.POINTER_POINTER_POINTER);
   private final MethodHandle MONITOR_GET_WORKAREA =
       NativeLibraries.downcall(GDK, "gdk_monitor_get_workarea", Signatures.VOID_POINTER_POINTER);
+  private final MethodHandle WINDOW_GET_STATE =
+      NativeLibraries.downcall(GDK, "gdk_window_get_state", Signatures.INT_POINTER);
   private final MethodHandle WAYLAND_DISPLAY_GET_TYPE =
       NativeLibraries.downcallIfPresent(
           GDK.find("gdk_wayland_display_get_type").isPresent() ? GDK : null,
           "gdk_wayland_display_get_type",
           Signatures.LONG_VOID);
+
+  /** {@code GDK_WINDOW_STATE_ICONIFIED}. */
+  public final int STATE_ICONIFIED = 1 << 1;
+
+  /** {@code GDK_WINDOW_STATE_FULLSCREEN}. */
+  public final int STATE_FULLSCREEN = 1 << 4;
+
+  /**
+   * Calls {@code gdk_window_get_state}: the {@code GdkWindowState} flags that the window manager
+   * last reported, or none for a window that isn't realized yet.
+   */
+  @SneakyThrows
+  public int windowState(MemorySegment gdkWindow) {
+    if (gdkWindow.equals(MemorySegment.NULL)) {
+      return 0;
+    }
+    return (int) WINDOW_GET_STATE.invokeExact(gdkWindow);
+  }
 
   /**
    * Returns {@code {x, y, width, height}} of the work area of the monitor that holds {@code

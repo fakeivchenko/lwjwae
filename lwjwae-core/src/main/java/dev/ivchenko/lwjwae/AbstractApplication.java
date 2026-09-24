@@ -99,6 +99,7 @@ public abstract class AbstractApplication implements Application {
     long id = this.windowIds.incrementAndGet();
     AbstractWindow window = this.createWindow(id, parameters);
     window.closeAction(parameters.closeAction());
+    applyLimits(window, parameters);
     this.windows.put(id, window);
     // Closed while it was being created: leave the list the way markClosed would have.
     if (this.closed.get()) {
@@ -113,6 +114,19 @@ public abstract class AbstractApplication implements Application {
       window.navigate(parameters.url());
     }
     return window;
+  }
+
+  /** Applies what a window starts with beyond what the backend creates it with. */
+  private static void applyLimits(Window window, WindowParameters parameters) {
+    if (!parameters.minimumSize().equals(WindowSize.NONE)) {
+      window.minimumSize(parameters.minimumSize().width(), parameters.minimumSize().height());
+    }
+    if (!parameters.maximumSize().equals(WindowSize.NONE)) {
+      window.maximumSize(parameters.maximumSize().width(), parameters.maximumSize().height());
+    }
+    if (parameters.alwaysOnTop()) {
+      window.alwaysOnTop(true);
+    }
   }
 
   @Override

@@ -77,8 +77,13 @@ WebKitGTK 6.0 differ, and what the backend does about each.
   `close-request` instead of `delete-event`; `TRUE` cancels the close, as before, which is how
   `CloseAction.HIDE` hides the window.
 - **Size.** There is no `gtk_window_resize`: `gtk_window_set_default_size` also resizes a window that
-  is on screen, and GTK 4 keeps the default size in step with the size of the window, so it is also
-  what `width()` and `height()` read.
+  is on screen on X11, but not on Wayland, where the size of a window on screen is the user's.
+  GTK 4 keeps the default size as the size that the window goes back to, so it stays put while the
+  window is maximized or in full screen; `width()` and `height()` read the size of the web view.
+- **Limits and state.** A minimum size goes on the web view with `gtk_widget_set_size_request`, since
+  GTK 4 has no minimum size of a window. There's no maximum size and no way to keep a window on
+  top, so `maximumSize` and `alwaysOnTop` do nothing. Minimizing is `gtk_window_minimize`, and
+  whether a window is minimized comes from the state of its `GdkToplevel`.
 - **Placement.** GTK 4 can't move a window or tell where it is, on X11 as on Wayland. The position in
   `WindowParameters` is ignored, `position()` answers `0, 0`, and `position(x, y)` and `center()` do
   nothing: what the API promises for Wayland, everywhere.

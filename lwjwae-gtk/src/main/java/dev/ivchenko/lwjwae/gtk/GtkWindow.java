@@ -3,6 +3,7 @@ package dev.ivchenko.lwjwae.gtk;
 import dev.ivchenko.lwjwae.AbstractWindow;
 import dev.ivchenko.lwjwae.WindowParameters;
 import dev.ivchenko.lwjwae.WindowPosition;
+import dev.ivchenko.lwjwae.WindowSize;
 import dev.ivchenko.lwjwae.bridge.BridgeProtocol;
 import dev.ivchenko.lwjwae.event.LoadEvent;
 import dev.ivchenko.lwjwae.event.LoadState;
@@ -105,6 +106,11 @@ public class GtkWindow extends AbstractWindow {
   private volatile MemorySegment window;
   private volatile MemorySegment webView;
   private volatile MemorySegment userContentManager;
+
+  // GTK keeps these without a getter, so the window remembers what it asked for.
+  private volatile WindowSize minimumSize = WindowSize.NONE;
+  private volatile WindowSize maximumSize = WindowSize.NONE;
+  private volatile boolean alwaysOnTop;
 
   /**
    * Creates the native window on the GTK thread and returns when it exists. The window is hidden
@@ -241,6 +247,104 @@ public class GtkWindow extends AbstractWindow {
   @Override
   public void resizable(boolean resizable) {
     this.dispatcher().run(() -> Gtk.windowSetResizable(this.window(), resizable));
+  }
+
+  @Override
+  public WindowSize minimumSize() {
+    return this.minimumSize;
+  }
+
+  @Override
+  public void minimumSize(int width, int height) {
+    this.minimumSize = new WindowSize(width, height);
+    this.dispatcher().run(this::applySizeLimits);
+  }
+
+  @Override
+  public WindowSize maximumSize() {
+    return this.maximumSize;
+  }
+
+  @Override
+  public void maximumSize(int width, int height) {
+    this.maximumSize = new WindowSize(width, height);
+    this.dispatcher().run(this::applySizeLimits);
+  }
+
+  private void applySizeLimits() {
+    Gtk.windowSetSizeLimits(
+        this.window(),
+        this.minimumSize.width(),
+        this.minimumSize.height(),
+        this.maximumSize.width(),
+        this.maximumSize.height());
+  }
+
+  @Override
+  public boolean isMinimized() {
+    return this.dispatcher().call(() -> (this.state() & Gdk.STATE_ICONIFIED) != 0);
+  }
+
+  @Override
+  public void minimize() {
+    this.dispatcher().run(() -> Gtk.windowIconify(this.window()));
+  }
+
+  @Override
+  public boolean isMaximized() {
+    return this.dispatcher().call(() -> Gtk.isWindowMaximized(this.window()));
+  }
+
+  @Override
+  public void maximize() {
+    this.dispatcher().run(() -> Gtk.windowMaximize(this.window()));
+  }
+
+  @Override
+  public void restore() {
+    this.dispatcher()
+        .run(
+            () -> {
+              Gtk.windowDeiconify(this.window());
+              Gtk.windowUnmaximize(this.window());
+            });
+  }
+
+  @Override
+  public boolean isFullscreen() {
+    return this.dispatcher().call(() -> (this.state() & Gdk.STATE_FULLSCREEN) != 0);
+  }
+
+  @Override
+  public void fullscreen(boolean fullscreen) {
+    this.dispatcher().run(() -> Gtk.windowSetFullscreen(this.window(), fullscreen));
+  }
+
+  @Override
+  public boolean isAlwaysOnTop() {
+    return this.alwaysOnTop;
+  }
+
+  @Override
+  public void alwaysOnTop(boolean alwaysOnTop) {
+    this.alwaysOnTop = alwaysOnTop;
+    this.dispatcher().run(() -> Gtk.windowSetKeepAbove(this.window(), alwaysOnTop));
+  }
+
+  @Override
+  public boolean isFocused() {
+    return this.dispatcher().call(() -> Gtk.isWindowActive(this.window()));
+  }
+
+  /** {@code gtk_window_present} also deiconifies the window. */
+  @Override
+  public void focus() {
+    this.show();
+  }
+
+  /** The {@code GdkWindowState} flags of the window. Call on the GTK thread. */
+  private int state() {
+    return Gdk.windowState(Gtk.widgetGetWindow(this.window()));
   }
 
   @Override

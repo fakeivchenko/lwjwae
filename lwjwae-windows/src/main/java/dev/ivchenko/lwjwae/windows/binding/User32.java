@@ -6,6 +6,7 @@ import java.lang.foreign.Arena;
 import java.lang.foreign.MemoryLayout;
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.SymbolLookup;
+import java.lang.foreign.ValueLayout;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.VarHandle;
 import lombok.SneakyThrows;
@@ -25,6 +26,9 @@ public class User32 {
   public final int CW_USEDEFAULT = 0x80000000;
   public final int SW_HIDE = 0;
   public final int SW_SHOW = 5;
+  public final int SW_MAXIMIZE = 3;
+  public final int SW_MINIMIZE = 6;
+  public final int SW_RESTORE = 9;
   public final int GWL_STYLE = -16;
   public final int GWLP_USERDATA = -21;
   public final int SWP_NOSIZE = 0x0001;
@@ -32,11 +36,23 @@ public class User32 {
   public final int SWP_NOZORDER = 0x0004;
   public final int SWP_NOACTIVATE = 0x0010;
   public final int SWP_FRAMECHANGED = 0x0020;
+  public final int SWP_NOOWNERZORDER = 0x0200;
+  private final int GWL_EXSTYLE = -20;
+  private final long WS_EX_TOPMOST = 0x00000008;
+
+  /** {@code sizeof(WINDOWPLACEMENT)}. */
+  private final int WINDOWPLACEMENT_SIZE = 44;
+
+  /** Where {@code ptMinTrackSize} and {@code ptMaxTrackSize} sit in a {@code MINMAXINFO}. */
+  private final int MIN_TRACK_SIZE_OFFSET = 24;
+
+  private final int MAX_TRACK_SIZE_OFFSET = 32;
   public final int MONITOR_DEFAULTTONEAREST = 2;
   public final int PM_NOREMOVE = 0x0000;
   public final int WM_DESTROY = 0x0002;
   public final int WM_SIZE = 0x0005;
   public final int WM_CLOSE = 0x0010;
+  public final int WM_GETMINMAXINFO = 0x0024;
   public final int WM_NULL = 0x0000;
   public final int WM_CONTEXTMENU = 0x007B;
   public final int WM_LBUTTONUP = 0x0202;
@@ -124,6 +140,16 @@ public class User32 {
       NativeLibraries.downcall(USER32, "DestroyIcon", Signatures.INT_POINTER);
   private final MethodHandle IS_WINDOW_VISIBLE =
       NativeLibraries.downcall(USER32, "IsWindowVisible", Signatures.INT_POINTER);
+  private final MethodHandle IS_ICONIC =
+      NativeLibraries.downcall(USER32, "IsIconic", Signatures.INT_POINTER);
+  private final MethodHandle IS_ZOOMED =
+      NativeLibraries.downcall(USER32, "IsZoomed", Signatures.INT_POINTER);
+  private final MethodHandle GET_FOREGROUND_WINDOW =
+      NativeLibraries.downcall(USER32, "GetForegroundWindow", Signatures.POINTER_VOID);
+  private final MethodHandle GET_WINDOW_PLACEMENT =
+      NativeLibraries.downcall(USER32, "GetWindowPlacement", Signatures.INT_POINTER_POINTER);
+  private final MethodHandle SET_WINDOW_PLACEMENT =
+      NativeLibraries.downcall(USER32, "SetWindowPlacement", Signatures.INT_POINTER_POINTER);
   private final MethodHandle SET_FOREGROUND_WINDOW =
       NativeLibraries.downcall(USER32, "SetForegroundWindow", Signatures.INT_POINTER);
   private final MethodHandle SET_WINDOW_TEXT =
@@ -227,12 +253,6 @@ public class User32 {
   public long defWindowProc(
       MemorySegment hwnd, int message, long wordParameter, long longParameter) {
     return (long) DEF_WINDOW_PROC.invokeExact(hwnd, message, wordParameter, longParameter);
-  }
-
-  /** Calls {@code ShowWindow(hwnd, SW_SHOW)}. */
-  @SneakyThrows
-  public void show(MemorySegment hwnd) {
-    int _ = (int) SHOW_WINDOW.invokeExact(hwnd, SW_SHOW);
   }
 
   /** Calls {@code ShowWindow(hwnd, SW_HIDE)}: the window leaves the screen and the taskbar. */
@@ -401,6 +421,106 @@ public class User32 {
     int _ = (int) SET_FOREGROUND_WINDOW.invokeExact(hwnd);
   }
 
+  /** Calls {@code ShowWindow} with one of the {@code SW_} commands. */
+  @SneakyThrows
+  public void showWindow(MemorySegment hwnd, int command) {
+    int _ = (int) SHOW_WINDOW.invokeExact(hwnd, command);
+  }
+
+  /** Calls {@code IsIconic}: whether the window is minimized. */
+  @SneakyThrows
+  public boolean isMinimized(MemorySegment hwnd) {
+    return (int) IS_ICONIC.invokeExact(hwnd) != 0;
+  }
+
+  /** Calls {@code IsZoomed}: whether the window is maximized. */
+  @SneakyThrows
+  public boolean isMaximized(MemorySegment hwnd) {
+    return (int) IS_ZOOMED.invokeExact(hwnd) != 0;
+  }
+
+  /**
+   * Whether {@code hwnd} is the window that the user works with, by {@code GetForegroundWindow}.
+   */
+  @SneakyThrows
+  public boolean isForeground(MemorySegment hwnd) {
+    return ((MemorySegment) GET_FOREGROUND_WINDOW.invokeExact()).address() == hwnd.address();
+  }
+
+  /** Whether the window has {@code WS_EX_TOPMOST}: it stays above windows that don't. */
+  @SneakyThrows
+  public boolean isTopmost(MemorySegment hwnd) {
+    return ((long) GET_WINDOW_LONG_PTR.invokeExact(hwnd, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0;
+  }
+
+  /**
+   * Puts the window into the topmost band of the z-order, or takes it out, without activating it.
+   */
+  @SneakyThrows
+  public void topmost(MemorySegment hwnd, boolean topmost) {
+    MemorySegment insertAfter = MemorySegment.ofAddress(topmost ? -1 : -2);
+    int _ =
+        (int)
+            SET_WINDOW_POS.invokeExact(
+                hwnd, insertAfter, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+  }
+
+  /**
+   * Calls {@code GetWindowPlacement}: the normal position, size, and state of the window, as the
+   * bytes of a {@code WINDOWPLACEMENT} that {@link #placement(MemorySegment, byte[])} takes back.
+   */
+  @SneakyThrows
+  public byte[] placement(MemorySegment hwnd) {
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment placement = arena.allocate(WINDOWPLACEMENT_SIZE);
+      placement.set(Signatures.C_INT, 0, WINDOWPLACEMENT_SIZE);
+      int _ = (int) GET_WINDOW_PLACEMENT.invokeExact(hwnd, placement);
+      return placement.toArray(ValueLayout.JAVA_BYTE);
+    }
+  }
+
+  /** Calls {@code SetWindowPlacement} with what {@link #placement(MemorySegment)} returned. */
+  @SneakyThrows
+  public void placement(MemorySegment hwnd, byte[] placement) {
+    try (Arena arena = Arena.ofConfined()) {
+      int _ =
+          (int)
+              SET_WINDOW_PLACEMENT.invokeExact(
+                  hwnd, arena.allocateFrom(ValueLayout.JAVA_BYTE, placement));
+    }
+  }
+
+  /** Moves and resizes the frame of the window to cover {@code {left, top, right, bottom}}. */
+  @SneakyThrows
+  public void bounds(MemorySegment hwnd, int[] rect) {
+    int _ =
+        (int)
+            SET_WINDOW_POS.invokeExact(
+                hwnd,
+                MemorySegment.NULL,
+                rect[0],
+                rect[1],
+                rect[2] - rect[0],
+                rect[3] - rect[1],
+                SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+  }
+
+  /**
+   * Writes the smallest and largest frame sizes that the user may resize the window to into the
+   * {@code MINMAXINFO} of a {@code WM_GETMINMAXINFO}. {@code null} leaves a limit as it is.
+   */
+  public void sizeLimits(long minMaxInfo, int[] minimum, int[] maximum) {
+    MemorySegment info = MemorySegment.ofAddress(minMaxInfo).reinterpret(40);
+    if (minimum != null) {
+      info.set(Signatures.C_INT, MIN_TRACK_SIZE_OFFSET, minimum[0]);
+      info.set(Signatures.C_INT, MIN_TRACK_SIZE_OFFSET + 4, minimum[1]);
+    }
+    if (maximum != null) {
+      info.set(Signatures.C_INT, MAX_TRACK_SIZE_OFFSET, maximum[0]);
+      info.set(Signatures.C_INT, MAX_TRACK_SIZE_OFFSET + 4, maximum[1]);
+    }
+  }
+
   /** {@code DestroyWindow}: sends {@code WM_DESTROY} synchronously before returning. */
   @SneakyThrows
   public void destroy(MemorySegment hwnd) {
@@ -488,23 +608,52 @@ public class User32 {
   /** Resizes the window so that its client area is {@code width} by {@code height}. */
   @SneakyThrows
   public void resizeClient(MemorySegment hwnd, int width, int height) {
+    int[] frame = frameSize(hwnd, width, height);
+    int _ =
+        (int)
+            SET_WINDOW_POS.invokeExact(
+                hwnd,
+                MemorySegment.NULL,
+                0,
+                0,
+                frame[0],
+                frame[1],
+                SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+  }
+
+  /**
+   * {@code {width, height}} of the frame around a client area of {@code width} by {@code height},
+   * with the current style of the window, by {@code AdjustWindowRectEx}.
+   */
+  @SneakyThrows
+  public int[] frameSize(MemorySegment hwnd, int width, int height) {
     try (Arena arena = Arena.ofConfined()) {
       MemorySegment rect = arena.allocate(Signatures.RECT);
       RECT_RIGHT.set(rect, 0L, width);
       RECT_BOTTOM.set(rect, 0L, height);
       int _ = (int) ADJUST_WINDOW_RECT_EX.invokeExact(rect, (int) style(hwnd), 0, 0);
-      int outerWidth = (int) RECT_RIGHT.get(rect, 0L) - (int) RECT_LEFT.get(rect, 0L);
-      int outerHeight = (int) RECT_BOTTOM.get(rect, 0L) - (int) RECT_TOP.get(rect, 0L);
-      int _ =
-          (int)
-              SET_WINDOW_POS.invokeExact(
-                  hwnd,
-                  MemorySegment.NULL,
-                  0,
-                  0,
-                  outerWidth,
-                  outerHeight,
-                  SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+      return new int[] {
+        (int) RECT_RIGHT.get(rect, 0L) - (int) RECT_LEFT.get(rect, 0L),
+        (int) RECT_BOTTOM.get(rect, 0L) - (int) RECT_TOP.get(rect, 0L)
+      };
+    }
+  }
+
+  /** {@code {left, top, right, bottom}} of the whole monitor that holds most of the window. */
+  @SneakyThrows
+  public int[] monitorRect(MemorySegment hwnd) {
+    MemorySegment monitor =
+        (MemorySegment) MONITOR_FROM_WINDOW.invokeExact(hwnd, MONITOR_DEFAULTTONEAREST);
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment info = arena.allocate(Signatures.MONITORINFO);
+      info.set(Signatures.C_INT, 0, (int) Signatures.MONITORINFO.byteSize());
+      int _ = (int) GET_MONITOR_INFO.invokeExact(monitor, info);
+      return new int[] {
+        info.get(Signatures.C_INT, 4),
+        info.get(Signatures.C_INT, 8),
+        info.get(Signatures.C_INT, 12),
+        info.get(Signatures.C_INT, 16)
+      };
     }
   }
 

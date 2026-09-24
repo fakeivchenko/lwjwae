@@ -208,7 +208,8 @@ can't be called twice, and another application can be created on the same thread
 ```
 
 The metadata test initializes the binding classes, which loads GTK and WebKitGTK but opens no
-window, so it runs on a headless Linux machine. On CI, run the display tests under Xvfb with
+window, so it runs on a headless Linux machine. On CI, run the display tests under Xvfb with a
+window manager, as `scripts/linux/with-window-manager.sh` does with openbox, and with
 `-Dlwjwae.requireDisplay=true`, and keep `GDK_BACKEND=x11`,
 `WEBKIT_DISABLE_DMABUF_RENDERER=1`, and `WEBKIT_DISABLE_COMPOSITING_MODE=1` in the environment,
 because a runner has no GPU.

@@ -3,6 +3,7 @@ package dev.ivchenko.lwjwae.gtk4;
 import dev.ivchenko.lwjwae.AbstractWindow;
 import dev.ivchenko.lwjwae.WindowParameters;
 import dev.ivchenko.lwjwae.WindowPosition;
+import dev.ivchenko.lwjwae.WindowSize;
 import dev.ivchenko.lwjwae.bridge.BridgeProtocol;
 import dev.ivchenko.lwjwae.event.LoadEvent;
 import dev.ivchenko.lwjwae.event.LoadState;
@@ -104,6 +105,7 @@ public class Gtk4Window extends AbstractWindow {
           Signatures.SCRIPT_MESSAGE_CALLBACK);
   private final long callbackId;
 
+  private volatile WindowSize minimumSize = WindowSize.NONE;
   private volatile MemorySegment window;
   private volatile MemorySegment webView;
   private volatile MemorySegment userContentManager;
@@ -173,12 +175,22 @@ public class Gtk4Window extends AbstractWindow {
 
   @Override
   public int width() {
-    return this.dispatcher().call(() -> Gtk.windowGetDefaultSize(this.window())[0]);
+    return this.dispatcher().call(() -> this.contentSize()[0]);
   }
 
   @Override
   public int height() {
-    return this.dispatcher().call(() -> Gtk.windowGetDefaultSize(this.window())[1]);
+    return this.dispatcher().call(() -> this.contentSize()[1]);
+  }
+
+  /**
+   * The size that the web view was allocated. GTK 4 keeps the default size of a window as the size
+   * it goes back to, so it stays put while the window is maximized or in full screen; only a window
+   * that was never shown, and has no allocation yet, answers with it.
+   */
+  private int[] contentSize() {
+    int[] allocated = Gtk.widgetSize(this.webView());
+    return allocated[0] > 0 ? allocated : Gtk.windowGetDefaultSize(this.window());
   }
 
   @Override
@@ -213,6 +225,102 @@ public class Gtk4Window extends AbstractWindow {
   @Override
   public void resizable(boolean resizable) {
     this.dispatcher().run(() -> Gtk.windowSetResizable(this.window(), resizable));
+  }
+
+  /**
+   * GTK 4 has no minimum size of a window, only of a widget, so the limit goes on the web view: the
+   * window can't get smaller than what it holds.
+   */
+  @Override
+  public WindowSize minimumSize() {
+    return this.minimumSize;
+  }
+
+  @Override
+  public void minimumSize(int width, int height) {
+    this.minimumSize = new WindowSize(width, height);
+    this.dispatcher()
+        .run(
+            () ->
+                Gtk.widgetSetSizeRequest(
+                    this.webView(), width > 0 ? width : -1, height > 0 ? height : -1));
+  }
+
+  /** Always {@link WindowSize#NONE}: GTK 4 has no maximum size. */
+  @Override
+  public WindowSize maximumSize() {
+    this.checkOpen();
+    return WindowSize.NONE;
+  }
+
+  /** Does nothing: GTK 4 has no maximum size. */
+  @Override
+  public void maximumSize(int width, int height) {
+    this.checkOpen();
+  }
+
+  @Override
+  public boolean isMinimized() {
+    return this.dispatcher().call(() -> Gtk.isWindowMinimized(this.window()));
+  }
+
+  @Override
+  public void minimize() {
+    this.dispatcher().run(() -> Gtk.windowSetMinimized(this.window(), true));
+  }
+
+  @Override
+  public boolean isMaximized() {
+    return this.dispatcher().call(() -> Gtk.isWindowMaximized(this.window()));
+  }
+
+  @Override
+  public void maximize() {
+    this.dispatcher().run(() -> Gtk.windowSetMaximized(this.window(), true));
+  }
+
+  @Override
+  public void restore() {
+    this.dispatcher()
+        .run(
+            () -> {
+              Gtk.windowSetMinimized(this.window(), false);
+              Gtk.windowSetMaximized(this.window(), false);
+            });
+  }
+
+  @Override
+  public boolean isFullscreen() {
+    return this.dispatcher().call(() -> Gtk.isWindowFullscreen(this.window()));
+  }
+
+  @Override
+  public void fullscreen(boolean fullscreen) {
+    this.dispatcher().run(() -> Gtk.windowSetFullscreen(this.window(), fullscreen));
+  }
+
+  /** Always {@code false}: GTK 4 has no way to keep a window above the others. */
+  @Override
+  public boolean isAlwaysOnTop() {
+    this.checkOpen();
+    return false;
+  }
+
+  /** Does nothing: GTK 4 has no way to keep a window above the others. */
+  @Override
+  public void alwaysOnTop(boolean alwaysOnTop) {
+    this.checkOpen();
+  }
+
+  @Override
+  public boolean isFocused() {
+    return this.dispatcher().call(() -> Gtk.isWindowActive(this.window()));
+  }
+
+  /** {@code gtk_window_present} also unminimizes the window. */
+  @Override
+  public void focus() {
+    this.show();
   }
 
   @Override

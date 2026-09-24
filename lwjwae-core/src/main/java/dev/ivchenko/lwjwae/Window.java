@@ -44,7 +44,10 @@ public interface Window extends AutoCloseable {
   /** The height of the content area, in pixels. */
   int height();
 
-  /** Resizes the content area. The toolkit applies the request asynchronously. */
+  /**
+   * Resizes the content area. The toolkit applies the request asynchronously. GTK 4 on Wayland
+   * applies it only to a window that isn't on screen yet: once it is, its size is the user's.
+   */
   void size(int width, int height);
 
   /**
@@ -64,6 +67,81 @@ public interface Window extends AutoCloseable {
 
   /** Lets the user resize the window, or not. */
   void resizable(boolean resizable);
+
+  /** The smallest size that the user can resize the content area to, or {@link WindowSize#NONE}. */
+  WindowSize minimumSize();
+
+  /**
+   * Keeps the user from resizing the content area below {@code width} by {@code height}, and grows
+   * the window if it's smaller. Zero in a dimension removes the limit there.
+   */
+  void minimumSize(int width, int height);
+
+  /**
+   * The largest size that the user can resize the content area to, or {@link WindowSize#NONE}. GTK
+   * 4 has no such limit, and the answer there is always {@code NONE}.
+   */
+  WindowSize maximumSize();
+
+  /**
+   * Keeps the user from resizing the content area beyond {@code width} by {@code height}, and
+   * shrinks the window if it's larger. Zero in a dimension removes the limit there. Does nothing on
+   * GTK 4.
+   */
+  void maximumSize(int width, int height);
+
+  /**
+   * Whether the window is minimized: in the taskbar, the Dock, or wherever the desktop keeps it.
+   * Wayland doesn't tell a client, and the answer there is {@code false}.
+   */
+  boolean isMinimized();
+
+  /** Minimizes the window. A request that the window manager applies asynchronously. */
+  void minimize();
+
+  /** Whether the window fills the work area of its screen, as the maximize button does. */
+  boolean isMaximized();
+
+  /** Maximizes the window. A request that the window manager applies asynchronously. */
+  void maximize();
+
+  /**
+   * Brings a minimized or maximized window back to its normal size and place. Full screen is left
+   * alone; {@link #fullscreen(boolean)} ends it. A request that the window manager applies
+   * asynchronously.
+   */
+  void restore();
+
+  /** Whether the window covers its whole screen, without a frame. */
+  boolean isFullscreen();
+
+  /**
+   * Puts the window into full screen, or brings it back. On macOS, full screen is a space of its
+   * own, entered with an animation. A request that the window manager applies asynchronously.
+   */
+  void fullscreen(boolean fullscreen);
+
+  /**
+   * Whether the window stays above other windows. On Linux, this is what was asked for: the window
+   * manager may not honor it, and GTK 4 has no way to ask, so the answer there is {@code false}.
+   */
+  boolean isAlwaysOnTop();
+
+  /**
+   * Keeps the window above other windows, or not. Does nothing on GTK 4, and a Wayland compositor
+   * may ignore it.
+   */
+  void alwaysOnTop(boolean alwaysOnTop);
+
+  /** Whether the window has the keyboard focus. */
+  boolean isFocused();
+
+  /**
+   * Brings the window to the front and gives it the keyboard focus, showing it and restoring it
+   * from minimized first. The system may refuse to take the focus from another application, and
+   * draw attention to the window instead.
+   */
+  void focus();
 
   /** Whether the developer tools of the engine are reachable from the context menu. */
   boolean isDevToolsEnabled();

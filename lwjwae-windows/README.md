@@ -186,6 +186,21 @@ the window only posts the answers:
    which reaches the page as an `ArrayBuffer` with no encoding; the page copies it and releases it.
    On a runtime older than 114, the part goes as Base64 in a text message instead.
 
+## Window state
+
+- **Minimize, maximize, restore.** `ShowWindow` with `SW_MINIMIZE`, `SW_MAXIMIZE`, and
+  `SW_RESTORE`, read back with `IsIconic` and `IsZoomed`. `ShowWindow` would show a hidden window,
+  which the other backends don't do, so a hidden window keeps the command until `show()`. A
+  window that was maximized before it was minimized comes back maximized from `SW_RESTORE`, so
+  `restore()` sends it a second time.
+- **Full screen.** Windows has no such state: the window drops `WS_OVERLAPPEDWINDOW` and covers its
+  monitor, and the style and the `WINDOWPLACEMENT` from before are kept to put back.
+- **Limits.** The window procedure answers `WM_GETMINMAXINFO` with the limits turned into frame
+  sizes by `AdjustWindowRectEx`, except in full screen. Setting a limit resizes the window to its
+  own size, which runs it through the limits.
+- **On top and focus.** `HWND_TOPMOST` and `WS_EX_TOPMOST`; `SetForegroundWindow` and
+  `GetForegroundWindow`.
+
 ## Evaluating scripts
 
 `ICoreWebView2::ExecuteScript` reports a thrown exception as a `null` result instead of a failure,

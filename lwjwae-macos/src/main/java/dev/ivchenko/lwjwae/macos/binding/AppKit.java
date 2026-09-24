@@ -172,6 +172,84 @@ public class AppKit {
     return Foundation.rect(ObjC.send(screens, "firstObject"), "frame");
   }
 
+  /** {@code NSWindowStyleMaskFullScreen}: the window is in a full screen space of its own. */
+  public final long STYLE_FULL_SCREEN = 1 << 14;
+
+  /** {@code NSNormalWindowLevel}. */
+  private final long LEVEL_NORMAL = 0;
+
+  /** {@code NSFloatingWindowLevel}: above the normal windows of every application. */
+  private final long LEVEL_FLOATING = 3;
+
+  /** The content size that stands for no maximum: {@code FLT_MAX}, AppKit's own default. */
+  private final double UNLIMITED = Float.MAX_VALUE;
+
+  /** Calls {@code -[NSWindow miniaturize:]} or {@code -[NSWindow deminiaturize:]}. */
+  public void setMiniaturized(MemorySegment window, boolean miniaturized) {
+    ObjC.sendVoid(window, miniaturized ? "miniaturize:" : "deminiaturize:", MemorySegment.NULL);
+  }
+
+  /** Calls {@code -[NSWindow isMiniaturized]}. */
+  public boolean isMiniaturized(MemorySegment window) {
+    return ObjC.sendBool(window, "isMiniaturized");
+  }
+
+  /**
+   * Zooms the window, the way the green button does with the Option key: to fill the screen, or
+   * back. {@code -[NSWindow zoom:]} toggles, so it's sent only when the state differs.
+   */
+  public void setZoomed(MemorySegment window, boolean zoomed) {
+    if (isZoomed(window) != zoomed) {
+      ObjC.sendVoid(window, "zoom:", MemorySegment.NULL);
+    }
+  }
+
+  /** Calls {@code -[NSWindow isZoomed]}. */
+  public boolean isZoomed(MemorySegment window) {
+    return ObjC.sendBool(window, "isZoomed");
+  }
+
+  /**
+   * Enters or leaves full screen with {@code -[NSWindow toggleFullScreen:]}, which toggles, so it's
+   * sent only when the state differs.
+   */
+  public void setFullScreen(MemorySegment window, boolean fullScreen) {
+    if (((styleMask(window) & STYLE_FULL_SCREEN) != 0) != fullScreen) {
+      ObjC.sendVoid(window, "toggleFullScreen:", MemorySegment.NULL);
+    }
+  }
+
+  /** Puts the window on the floating level, above normal windows, or back on the normal one. */
+  public void setFloating(MemorySegment window, boolean floating) {
+    ObjC.sendVoid(window, "setLevel:", floating ? LEVEL_FLOATING : LEVEL_NORMAL);
+  }
+
+  /** Whether the window is on a level above the normal one. */
+  public boolean isFloating(MemorySegment window) {
+    return ObjC.sendLong(window, "level") > LEVEL_NORMAL;
+  }
+
+  /** Calls {@code -[NSWindow isKeyWindow]}: whether the window takes the keyboard input. */
+  public boolean isKeyWindow(MemorySegment window) {
+    return ObjC.sendBool(window, "isKeyWindow");
+  }
+
+  /**
+   * Calls {@code -[NSWindow setContentMinSize:]} and {@code setContentMaxSize:}. Zero in a
+   * dimension means no limit there.
+   */
+  public void setContentSizeLimits(
+      MemorySegment window, int minWidth, int minHeight, int maxWidth, int maxHeight) {
+    try (Arena arena = Arena.ofConfined()) {
+      ObjC.sendVoidSize(window, "setContentMinSize:", Foundation.size(arena, minWidth, minHeight));
+      ObjC.sendVoidSize(
+          window,
+          "setContentMaxSize:",
+          Foundation.size(
+              arena, maxWidth > 0 ? maxWidth : UNLIMITED, maxHeight > 0 ? maxHeight : UNLIMITED));
+    }
+  }
+
   /** Calls {@code -[NSWindow styleMask]}. */
   public long styleMask(MemorySegment window) {
     return ObjC.sendLong(window, "styleMask");

@@ -17,6 +17,40 @@ class Gtk4WindowTest extends WindowContractTest {
     return false;
   }
 
+  /** Wayland tells a client nothing about minimizing. */
+  @Override
+  protected boolean canTellMinimized() {
+    return isX11();
+  }
+
+  /** Wayland keeps the focus with the compositor. */
+  @Override
+  protected boolean canTakeFocus() {
+    return isX11();
+  }
+
+  /** GTK 4 on Wayland leaves the size of a window on screen to the compositor. */
+  @Override
+  protected boolean canResizeShownWindows() {
+    return isX11();
+  }
+
+  private static boolean isX11() {
+    return System.getenv("WAYLAND_DISPLAY") == null || "x11".equals(System.getenv("GDK_BACKEND"));
+  }
+
+  /** GTK 4 has no way to keep a window above the others. */
+  @Override
+  protected boolean canKeepOnTop() {
+    return false;
+  }
+
+  /** GTK 4 has no maximum size. */
+  @Override
+  protected boolean hasMaximumSize() {
+    return false;
+  }
+
   @Override
   protected Class<? extends Application> expectedApplicationType() {
     return Gtk4Application.class;

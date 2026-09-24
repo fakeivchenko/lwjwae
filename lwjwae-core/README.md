@@ -12,7 +12,7 @@ the window; a codec module supplies JSON when you use the typed bridge methods.
 | Type                                                                                                                                                                                                                                                                                                                      | Role                                                                                                                                                                                                                                                                                                                                                   |
 |---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | [`Application`](src/main/java/dev/ivchenko/lwjwae/Application.java)                                                                                                                                                                                                                                                       | Entry point and the process-wide half: `create` picks a backend; `open` adds a window; `run`, `quit`; the bridge across every window.                                                                                                                                                                                                                  |
-| [`Window`](src/main/java/dev/ivchenko/lwjwae/Window.java)                                                                                                                                                                                                                                                                 | One native window with a web view inside: title, size, position, `show`/`hide`, navigation, `eval`, the bridge of that window.                                                                                                                                                                                                                         |
+| [`Window`](src/main/java/dev/ivchenko/lwjwae/Window.java)                                                                                                                                                                                                                                                                 | One native window with a web view inside: title, size and its limits, position, minimized, maximized, full screen, on top, focus, `show`/`hide`, navigation, `eval`, the bridge of that window. |
 | [`ApplicationParameters`](src/main/java/dev/ivchenko/lwjwae/ApplicationParameters.java)                                                                                                                                                                                                                                   | What the application starts with: development server, codec, and the name that notifications show.                                                                                                                                                                                                                                                     |
 | [`WindowParameters`](src/main/java/dev/ivchenko/lwjwae/WindowParameters.java)                                                                                                                                                                                                                                             | What a window starts with: title, size, position, URL or resource, and its close action.                                                                                                                                                                                                                                                               |
 | [`CloseAction`](src/main/java/dev/ivchenko/lwjwae/CloseAction.java)                                                                                                                                                                                                                                                       | What the close button of the title bar does: `CLOSE`, or `HIDE` for an application that lives in the tray; `HIDE` hides only while a tray icon is up. `Window.closeAction(...)` changes it at run time; `requestClose()` does what the button does, `close()` always closes.                                                                                                                      |
@@ -67,6 +67,25 @@ coordinates are those of the window frame, from the top left of the screen, in t
 platform. Wayland is the exception: the protocol keeps window placement with the compositor, so
 there `position(x, y)` does nothing, `position()` returns `0, 0`, and `center()` is a request that
 the compositor may ignore. X11, Windows, and macOS place windows as asked.
+
+### The state of the window
+
+`minimize()`, `maximize()`, `restore()`, `fullscreen(boolean)`, `alwaysOnTop(boolean)`, and
+`focus()` change the state of the window, and `isMinimized()`, `isMaximized()`, `isFullscreen()`,
+`isAlwaysOnTop()`, and `isFocused()` read it. The window manager applies a change
+asynchronously, so a read right after a change may still see the old state. `minimumSize(width,
+height)` and `maximumSize(width, height)` keep the user within limits of the content area, zero
+meaning no limit, and resize a window that is outside them; `WindowParameters` takes the limits
+and `alwaysOnTop` for a window from its start. A hidden window keeps a minimize or a maximize
+until it's shown.
+
+Where the platform can't, the call does what it can and the reads say so:
+
+| Platform      | What's missing                                                                                                   |
+|---------------|------------------------------------------------------------------------------------------------------------------|
+| Wayland       | `isMinimized()` is always `false`; `focus()` can't take the focus from another application; `alwaysOnTop` is up to the compositor. |
+| GTK 4         | No `maximumSize` and no `alwaysOnTop`: both do nothing and read back as none. On Wayland, `size()` doesn't resize a window on screen. |
+| Windows       | `focus()` from a process in the background may only flash the taskbar entry.                                      |
 
 Every method of `Application` and `Window` is safe to call from any thread. The backend forwards
 the call to its UI thread, and a getter blocks until the UI thread has answered.
@@ -397,7 +416,9 @@ throwable unwind into C is undefined behavior.
 
 The display tests skip when no display is present, so a headless machine gets a passing build. With
 `-Dlwjwae.requireDisplay=true`, a missing display fails the build instead, which is what CI runs
-under Xvfb. `-Dlwjwae.screenshots=true` captures the screen while each window is open.
+under Xvfb. The window tests need a window manager, or nobody answers a request to minimize or
+maximize; CI runs openbox, and `WindowContractTest` has a hook for each thing that a platform
+can't do, such as telling a Wayland client that its window is minimized. `-Dlwjwae.screenshots=true` captures the screen while each window is open.
 
 The bridge tests need a [`BridgeCodec`](src/main/java/dev/ivchenko/lwjwae/bridge/codec/BridgeCodec.java). A backend module registers [`PointCodec`](src/testFixtures/java/dev/ivchenko/lwjwae/testing/PointCodec.java) from the fixtures
 in the `META-INF/services` of its test classpath, so the tests run without a JSON library.

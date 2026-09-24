@@ -198,8 +198,10 @@ Two sibling repositories complete the picture:
 ```
 
 The display tests skip when no display is present, so a headless machine gets a passing build. CI
-runs them under Xvfb with `-Dlwjwae.requireDisplay=true`, which turns a missing display into a
-failure. The Windows backend compiles and runs its headless tests anywhere; `scripts/windows` drives
+runs them under Xvfb with openbox as the window manager, through
+`scripts/linux/with-window-manager.sh`, and with `-Dlwjwae.requireDisplay=true`, which turns a
+missing display into a failure. `scripts/linux/test-in-docker.sh` runs the same environment
+locally. The Windows backend compiles and runs its headless tests anywhere; `scripts/windows` drives
 a Windows VM over SSH for the rest.
 
 The code follows Google Java Style with a few additions; [docs/CODE_STYLE.md](docs/CODE_STYLE.md)
