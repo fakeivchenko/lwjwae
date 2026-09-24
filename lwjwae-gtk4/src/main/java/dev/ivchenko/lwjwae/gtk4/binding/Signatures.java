@@ -209,6 +209,13 @@ public class Signatures {
    */
   public final FunctionDescriptor CLOSE_REQUEST_CALLBACK = INT_POINTER_POINTER;
 
+  /** {@code void (*)(GObject*, GParamSpec*, gpointer)}: a {@code notify::} handler. */
+  public final FunctionDescriptor NOTIFY_CALLBACK = VOID_POINTER_POINTER_POINTER;
+
+  /** {@code void (*)(GdkSurface*, gint, gint, gpointer)}: {@code layout} of a surface. */
+  public final FunctionDescriptor LAYOUT_CALLBACK =
+      FunctionDescriptor.ofVoid(C_POINTER, C_INT, C_INT, C_POINTER);
+
   /**
    * {@code void (*)(WebKitUserContentManager*, JSCValue*, gpointer)}: bridge messages. WebKitGTK
    * 6.0 passes the value itself, where 4.1 wrapped it in a {@code WebKitJavascriptResult}.

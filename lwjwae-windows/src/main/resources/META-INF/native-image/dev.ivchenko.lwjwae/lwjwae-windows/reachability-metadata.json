@@ -460,6 +460,14 @@
           "jint",
           "void*"
         ]
+      },
+      {
+        "returnType": "jint",
+        "parameterTypes": [
+          "jint",
+          "jint",
+          "jint"
+        ]
       }
     ]
   }

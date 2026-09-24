@@ -33,14 +33,15 @@ class BridgeProtocolTest {
         script.contains(
             "window."
                 + BridgeProtocol.PAGE_API
-                + " = { listen, once, emit, open, close, call: callRpc, invoke: rpcInvoke, RpcError"
-                + " };"));
+                + " = { listen, once, emit, open, close, call: callRpc, invoke: rpcInvoke,"
+                + " RpcError, window: windowApi };"));
     for (String reserved :
         List.of(
             BridgeProtocol.EVENT_CALL,
             BridgeProtocol.EVENTS_CALL,
             BridgeProtocol.OPEN_CALL,
-            BridgeProtocol.CLOSE_CALL)) {
+            BridgeProtocol.CLOSE_CALL,
+            BridgeProtocol.WINDOW_EVENT)) {
       Assertions.assertTrue(script.contains("\"" + reserved + "\""), reserved);
     }
     for (String placeholder :

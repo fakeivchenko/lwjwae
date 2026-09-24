@@ -7,11 +7,15 @@ import dev.ivchenko.lwjwae.event.EventSubscription;
 import dev.ivchenko.lwjwae.notification.Notification;
 import dev.ivchenko.lwjwae.notification.NotificationHandle;
 import dev.ivchenko.lwjwae.rpc.RpcHandler;
+import dev.ivchenko.lwjwae.state.SavedWindowState;
+import dev.ivchenko.lwjwae.state.WindowStateStore;
+import dev.ivchenko.lwjwae.state.WindowStateTracker;
 import dev.ivchenko.lwjwae.tray.Tray;
 import dev.ivchenko.lwjwae.tray.TrayIcon;
 import dev.ivchenko.lwjwae.ui.UiDispatcher;
 import dev.ivchenko.lwjwae.util.ThrowableUtil;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -54,6 +58,7 @@ public abstract class AbstractApplication implements Application {
   private final AtomicLong windowIds = new AtomicLong();
   private final Map<String, String> bindingScripts = new ConcurrentHashMap<>();
   private final EventListeners listeners = new EventListeners("lwjwae-application-events");
+  private final Map<Long, WindowStateTracker> stateTrackers = new ConcurrentHashMap<>();
 
   private final ReentrantLock lifecycle = new ReentrantLock();
   private final Condition idle = this.lifecycle.newCondition();
@@ -100,6 +105,7 @@ public abstract class AbstractApplication implements Application {
     AbstractWindow window = this.createWindow(id, parameters);
     window.closeAction(parameters.closeAction());
     applyLimits(window, parameters);
+    this.restoreState(window, parameters);
     this.windows.put(id, window);
     // Closed while it was being created: leave the list the way markClosed would have.
     if (this.closed.get()) {
@@ -114,6 +120,31 @@ public abstract class AbstractApplication implements Application {
       window.navigate(parameters.url());
     }
     return window;
+  }
+
+  /**
+   * Opens a window with a state key the way it was when it last closed, and follows it from now on,
+   * to save it when it closes. Without a data directory, a state key does nothing.
+   */
+  private void restoreState(Window window, WindowParameters parameters) {
+    Path directory = this.parameters.dataDirectory();
+    String key = parameters.stateKey();
+    if (key == null || directory == null) {
+      return;
+    }
+    SavedWindowState saved = new WindowStateStore(directory).load(key).orElse(null);
+    if (saved != null) {
+      window.size(saved.width(), saved.height());
+      if (saved.hasPosition()) {
+        window.position(saved.x(), saved.y());
+      }
+      if (saved.maximized()) {
+        window.maximize();
+      }
+    }
+    WindowStateTracker tracker = new WindowStateTracker(key, window, saved);
+    window.onWindowEvent(tracker::update);
+    this.stateTrackers.put(window.id(), tracker);
   }
 
   /** Applies what a window starts with beyond what the backend creates it with. */
@@ -331,6 +362,10 @@ public abstract class AbstractApplication implements Application {
   /** Called by a window once its native window is gone. The last one wakes {@link #run()}. */
   final void windowClosed(AbstractWindow window) {
     this.windows.remove(window.id(), window);
+    WindowStateTracker tracker = this.stateTrackers.remove(window.id());
+    if (tracker != null) {
+      new WindowStateStore(this.parameters.dataDirectory()).save(tracker.key(), tracker.state());
+    }
     if (!this.isRunnable()) {
       this.signalIdle();
     }

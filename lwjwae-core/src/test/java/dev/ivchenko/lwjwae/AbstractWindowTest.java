@@ -5,6 +5,8 @@ import dev.ivchenko.lwjwae.event.Event;
 import dev.ivchenko.lwjwae.event.EventSubscription;
 import dev.ivchenko.lwjwae.event.LoadEvent;
 import dev.ivchenko.lwjwae.event.LoadState;
+import dev.ivchenko.lwjwae.event.WindowEvent;
+import dev.ivchenko.lwjwae.event.WindowEventType;
 import dev.ivchenko.lwjwae.testing.FakeApplication;
 import dev.ivchenko.lwjwae.testing.FakeWindow;
 import dev.ivchenko.lwjwae.testing.Point;
@@ -374,6 +376,43 @@ class AbstractWindowTest {
       Assertions.assertTrue(started.await(5, TimeUnit.SECONDS));
       window.cancel(1);
       Assertions.assertTrue(interrupted.await(5, TimeUnit.SECONDS));
+    }
+  }
+
+  @Test
+  void windowEventsReportWhatChangedToJavaAndToThePage() throws Exception {
+    try (FakeApplication application = new FakeApplication()) {
+      FakeWindow window = application.openFake();
+      BlockingQueue<WindowEvent> heard = new LinkedBlockingQueue<>();
+      window.onWindowEvent(heard::add);
+      window.call(1, BridgeProtocol.EVENTS_CALL, "");
+      // The fake changes at once, not on the UI thread: the first reading must come before.
+      window.awaitUiThread();
+
+      window.maximize();
+      window.size(800, 600);
+      window.reportChange();
+      WindowEvent maximized = heard.poll(5, TimeUnit.SECONDS);
+      Assertions.assertNotNull(maximized);
+      Assertions.assertEquals(WindowEventType.MAXIMIZED, maximized.type());
+      Assertions.assertSame(window, maximized.window());
+      WindowEvent resized = heard.poll(5, TimeUnit.SECONDS);
+      Assertions.assertNotNull(resized);
+      Assertions.assertEquals(WindowEventType.RESIZED, resized.type());
+      Assertions.assertEquals(new WindowSize(800, 600), resized.size());
+
+      window.reportChange();
+      Assertions.assertNull(heard.poll(300, TimeUnit.MILLISECONDS), "nothing changed, no event");
+
+      List<String> page = window.awaitEvents(1, 2);
+      Assertions.assertEquals(
+          "0"
+              + SEP
+              + BridgeProtocol.WINDOW_EVENT
+              + SEP
+              + "{\"type\":\"maximized\",\"width\":800,\"height\":600,\"x\":0,\"y\":0}",
+          page.getFirst());
+      Assertions.assertTrue(page.get(1).contains("\"type\":\"resized\""), page.get(1));
     }
   }
 

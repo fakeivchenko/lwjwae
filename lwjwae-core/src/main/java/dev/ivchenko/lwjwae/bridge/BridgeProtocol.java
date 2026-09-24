@@ -52,6 +52,12 @@ public class BridgeProtocol {
   public final String EVENTS_CALL = "lwjwae:events";
 
   /**
+   * The event that carries the changes of the window to the page, as JSON: {@code type}, {@code
+   * width}, {@code height}, {@code x}, {@code y}. {@code window.lwjwae.window.listen} hears it.
+   */
+  public final String WINDOW_EVENT = "lwjwae:window";
+
+  /**
    * The name under which a page asks for a new window, through {@code window.lwjwae.open(options)}.
    * Reserved like {@link #EVENT_CALL}. The payload is what {@link #parseWindowParameters} reads;
    * the promise resolves to the ID of the window.
@@ -129,6 +135,7 @@ public class BridgeProtocol {
         .replace("${pageApi}", PAGE_API)
         .replace("${eventCall}", EVENT_CALL)
         .replace("${eventsCall}", EVENTS_CALL)
+        .replace("${windowEvent}", WINDOW_EVENT)
         .replace("${openCall}", OPEN_CALL)
         .replace("${closeCall}", CLOSE_CALL)
         .replace("${separator}", "\u001f")

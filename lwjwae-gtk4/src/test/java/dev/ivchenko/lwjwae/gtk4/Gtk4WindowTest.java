@@ -29,10 +29,10 @@ class Gtk4WindowTest extends WindowContractTest {
     return isX11();
   }
 
-  /** GTK 4 on Wayland leaves the size of a window on screen to the compositor. */
+  /** GTK 4 uses the default size only for the first show; after that, the size is the user's. */
   @Override
   protected boolean canResizeShownWindows() {
-    return isX11();
+    return false;
   }
 
   private static boolean isX11() {

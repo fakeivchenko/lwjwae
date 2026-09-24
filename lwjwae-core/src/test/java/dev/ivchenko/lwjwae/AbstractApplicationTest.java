@@ -11,6 +11,7 @@ import dev.ivchenko.lwjwae.testing.PointCodec;
 import dev.ivchenko.lwjwae.testing.RpcReply;
 import dev.ivchenko.lwjwae.tray.Tray;
 import dev.ivchenko.lwjwae.tray.TrayIcon;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
@@ -19,6 +20,7 @@ import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.api.io.TempDir;
 
 /** Tests the toolkit-independent half of an application through {@link FakeApplication}. */
 @Timeout(10)
@@ -417,6 +419,38 @@ class AbstractApplicationTest {
       application.run();
       Assertions.assertTrue(window.isClosed());
       Assertions.assertTrue(application.windows().isEmpty());
+    }
+  }
+
+  @Test
+  void windowRemembersItsSizePlaceAndMaximizedAcrossRuns(@TempDir Path directory) throws Exception {
+    ApplicationParameters parameters =
+        ApplicationParameters.builder().dataDirectory(directory).build();
+    WindowParameters remembered = WindowParameters.builder().stateKey("main").build();
+    try (FakeApplication application = new FakeApplication(parameters)) {
+      FakeWindow window = (FakeWindow) application.open(remembered);
+      window.awaitUiThread();
+      window.size(800, 600);
+      window.position(10, 20);
+      window.reportChange();
+      window.awaitUiThread();
+      // Maximized later: the size and the place from before are what it comes back to.
+      window.maximize();
+      window.size(1920, 1080);
+      window.reportChange();
+      window.awaitUiThread();
+      Thread.sleep(200);
+    }
+
+    try (FakeApplication application = new FakeApplication(parameters)) {
+      FakeWindow window = (FakeWindow) application.open(remembered);
+      Assertions.assertEquals(800, window.width());
+      Assertions.assertEquals(600, window.height());
+      Assertions.assertEquals(new WindowPosition(10, 20), window.position());
+      Assertions.assertTrue(window.isMaximized());
+
+      FakeWindow other = application.openFake();
+      Assertions.assertEquals(1024, other.width(), "a window without a state key opens as asked");
     }
   }
 }

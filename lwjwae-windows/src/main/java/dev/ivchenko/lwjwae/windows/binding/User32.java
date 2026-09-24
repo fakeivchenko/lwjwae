@@ -50,7 +50,9 @@ public class User32 {
   public final int MONITOR_DEFAULTTONEAREST = 2;
   public final int PM_NOREMOVE = 0x0000;
   public final int WM_DESTROY = 0x0002;
+  public final int WM_MOVE = 0x0003;
   public final int WM_SIZE = 0x0005;
+  public final int WM_ACTIVATE = 0x0006;
   public final int WM_CLOSE = 0x0010;
   public final int WM_GETMINMAXINFO = 0x0024;
   public final int WM_NULL = 0x0000;
@@ -146,6 +148,12 @@ public class User32 {
       NativeLibraries.downcall(USER32, "IsZoomed", Signatures.INT_POINTER);
   private final MethodHandle GET_FOREGROUND_WINDOW =
       NativeLibraries.downcall(USER32, "GetForegroundWindow", Signatures.POINTER_VOID);
+  private final MethodHandle GET_WINDOW_THREAD_PROCESS_ID =
+      NativeLibraries.downcall(USER32, "GetWindowThreadProcessId", Signatures.INT_POINTER_POINTER);
+  private final MethodHandle ATTACH_THREAD_INPUT =
+      NativeLibraries.downcall(USER32, "AttachThreadInput", Signatures.INT_INT_INT_INT);
+  private final MethodHandle BRING_WINDOW_TO_TOP =
+      NativeLibraries.downcall(USER32, "BringWindowToTop", Signatures.INT_POINTER);
   private final MethodHandle GET_WINDOW_PLACEMENT =
       NativeLibraries.downcall(USER32, "GetWindowPlacement", Signatures.INT_POINTER_POINTER);
   private final MethodHandle SET_WINDOW_PLACEMENT =
@@ -220,16 +228,18 @@ public class User32 {
 
   /**
    * A hidden top-level window of {@code className}. {@code show} makes it visible. {@code x} and
-   * {@code y} place the frame; {@code CW_USEDEFAULT} for both lets Windows choose.
+   * {@code y} place the frame; {@code CW_USEDEFAULT} for both lets Windows choose. {@code topmost}
+   * creates it above the windows that aren't, with {@code WS_EX_TOPMOST}: later, {@link
+   * #topmost(MemorySegment, boolean)} works only for the process in the foreground.
    */
   @SneakyThrows
   public MemorySegment createWindow(
-      String className, String title, int x, int y, int width, int height) {
+      String className, String title, int x, int y, int width, int height, boolean topmost) {
     try (Arena arena = Arena.ofConfined()) {
       MemorySegment hwnd =
           (MemorySegment)
               CREATE_WINDOW_EX.invokeExact(
-                  0,
+                  topmost ? (int) WS_EX_TOPMOST : 0,
                   Wide.allocate(arena, className),
                   Wide.allocate(arena, title),
                   WS_OVERLAPPEDWINDOW,
@@ -445,6 +455,39 @@ public class User32 {
   @SneakyThrows
   public boolean isForeground(MemorySegment hwnd) {
     return ((MemorySegment) GET_FOREGROUND_WINDOW.invokeExact()).address() == hwnd.address();
+  }
+
+  /**
+   * Brings {@code hwnd} to the front and gives it the focus, from a process that may be in the
+   * background.
+   *
+   * <p>{@code SetForegroundWindow} is granted only to the process that the user last worked with.
+   * When it isn't, the thread of the window joins the input of the thread that owns the foreground
+   * window for the time of the call, which puts the two on the same footing, and leaves again. This
+   * is the one call that the application makes to come to the front on purpose, from its tray icon
+   * or a second instance, so it's worth the step.
+   */
+  @SneakyThrows
+  public void bringToFront(MemorySegment hwnd) {
+    MemorySegment foreground = (MemorySegment) GET_FOREGROUND_WINDOW.invokeExact();
+    if (foreground.address() == hwnd.address()) {
+      return;
+    }
+    int ours = Kernel32.currentThreadId();
+    int theirs =
+        foreground.equals(MemorySegment.NULL)
+            ? ours
+            : (int) GET_WINDOW_THREAD_PROCESS_ID.invokeExact(foreground, MemorySegment.NULL);
+    boolean attached =
+        theirs != ours && (int) ATTACH_THREAD_INPUT.invokeExact(theirs, ours, 1) != 0;
+    try {
+      int _ = (int) BRING_WINDOW_TO_TOP.invokeExact(hwnd);
+      int _ = (int) SET_FOREGROUND_WINDOW.invokeExact(hwnd);
+    } finally {
+      if (attached) {
+        int _ = (int) ATTACH_THREAD_INPUT.invokeExact(theirs, ours, 0);
+      }
+    }
   }
 
   /** Whether the window has {@code WS_EX_TOPMOST}: it stays above windows that don't. */

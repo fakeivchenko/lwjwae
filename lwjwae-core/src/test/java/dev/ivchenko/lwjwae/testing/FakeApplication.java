@@ -20,7 +20,13 @@ public class FakeApplication extends AbstractApplication {
   }
 
   public FakeApplication(ApplicationParameters parameters) {
-    super(new FakeUiDispatcher(), parameters);
+    super(started(new FakeUiDispatcher()), parameters);
+  }
+
+  /** A backend starts its UI thread before the application; the fake does the same. */
+  private static FakeUiDispatcher started(FakeUiDispatcher dispatcher) {
+    dispatcher.start();
+    return dispatcher;
   }
 
   /** Opens a window and returns it as the fake, so a test needs no cast. */

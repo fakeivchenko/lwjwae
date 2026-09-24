@@ -65,6 +65,7 @@ public class MacWindow extends AbstractWindow {
               boolean.class, MemorySegment.class, MemorySegment.class, MemorySegment.class),
           Signatures.DELEGATE_1_BOOL);
   private static final MemorySegment ON_WINDOW_WILL_CLOSE = delegateStub("onWindowWillClose", 1);
+  private static final MemorySegment ON_WINDOW_CHANGED = delegateStub("onWindowChanged", 1);
   private static final MemorySegment ON_DID_START =
       delegateStub("onDidStartProvisionalNavigation", 2);
   private static final MemorySegment ON_DID_COMMIT = delegateStub("onDidCommitNavigation", 2);
@@ -87,19 +88,31 @@ public class MacWindow extends AbstractWindow {
       ObjC.defineClass(
           "LwjwaeDelegate",
           ObjC.cls("NSObject"),
-          Map.of(
-              "windowShouldClose:", new MethodStub(ON_WINDOW_SHOULD_CLOSE, "B@:@"),
-              "windowWillClose:", new MethodStub(ON_WINDOW_WILL_CLOSE, "v@:@"),
-              "webView:didStartProvisionalNavigation:", new MethodStub(ON_DID_START, "v@:@@"),
-              "webView:didCommitNavigation:", new MethodStub(ON_DID_COMMIT, "v@:@@"),
-              "webView:didFinishNavigation:", new MethodStub(ON_DID_FINISH, "v@:@@"),
-              "webView:didFailProvisionalNavigation:withError:",
-                  new MethodStub(ON_DID_FAIL, "v@:@@@"),
-              "webView:didFailNavigation:withError:", new MethodStub(ON_DID_FAIL, "v@:@@@"),
-              "userContentController:didReceiveScriptMessage:",
-                  new MethodStub(ON_DID_RECEIVE_MESSAGE, "v@:@@"),
-              "webView:startURLSchemeTask:", new MethodStub(ON_START_TASK, "v@:@@"),
-              "webView:stopURLSchemeTask:", new MethodStub(ON_STOP_TASK, "v@:@@")));
+          Map.ofEntries(
+              Map.entry("windowShouldClose:", new MethodStub(ON_WINDOW_SHOULD_CLOSE, "B@:@")),
+              Map.entry("windowWillClose:", new MethodStub(ON_WINDOW_WILL_CLOSE, "v@:@")),
+              Map.entry(
+                  "webView:didStartProvisionalNavigation:", new MethodStub(ON_DID_START, "v@:@@")),
+              Map.entry("webView:didCommitNavigation:", new MethodStub(ON_DID_COMMIT, "v@:@@")),
+              Map.entry("webView:didFinishNavigation:", new MethodStub(ON_DID_FINISH, "v@:@@")),
+              Map.entry(
+                  "webView:didFailProvisionalNavigation:withError:",
+                  new MethodStub(ON_DID_FAIL, "v@:@@@")),
+              Map.entry(
+                  "webView:didFailNavigation:withError:", new MethodStub(ON_DID_FAIL, "v@:@@@")),
+              Map.entry(
+                  "userContentController:didReceiveScriptMessage:",
+                  new MethodStub(ON_DID_RECEIVE_MESSAGE, "v@:@@")),
+              Map.entry("webView:startURLSchemeTask:", new MethodStub(ON_START_TASK, "v@:@@")),
+              Map.entry("webView:stopURLSchemeTask:", new MethodStub(ON_STOP_TASK, "v@:@@")),
+              Map.entry("windowDidResize:", new MethodStub(ON_WINDOW_CHANGED, "v@:@")),
+              Map.entry("windowDidMove:", new MethodStub(ON_WINDOW_CHANGED, "v@:@")),
+              Map.entry("windowDidBecomeKey:", new MethodStub(ON_WINDOW_CHANGED, "v@:@")),
+              Map.entry("windowDidResignKey:", new MethodStub(ON_WINDOW_CHANGED, "v@:@")),
+              Map.entry("windowDidMiniaturize:", new MethodStub(ON_WINDOW_CHANGED, "v@:@")),
+              Map.entry("windowDidDeminiaturize:", new MethodStub(ON_WINDOW_CHANGED, "v@:@")),
+              Map.entry("windowDidEnterFullScreen:", new MethodStub(ON_WINDOW_CHANGED, "v@:@")),
+              Map.entry("windowDidExitFullScreen:", new MethodStub(ON_WINDOW_CHANGED, "v@:@"))));
 
   private volatile MemorySegment window;
   private volatile MemorySegment webView;
@@ -603,6 +616,31 @@ public class MacWindow extends AbstractWindow {
       ThrowableUtil.report(t);
     }
     return true;
+  }
+
+  /**
+   * {@code windowDidResize:}, {@code windowDidMove:}, {@code windowDidBecomeKey:}, {@code
+   * windowDidResignKey:}, {@code windowDidMiniaturize:}, {@code windowDidDeminiaturize:}, {@code
+   * windowDidEnterFullScreen:}, and {@code windowDidExitFullScreen:}: the window may have changed.
+   * There's no notification of a zoom; the resize that comes with it reports it.
+   *
+   * <p>Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
+   * binds it by name, so no Java code calls it and the compiler sees a dead private method. {@code
+   * resource}: the window is {@code AutoCloseable}, and a lookup that returns it looks like an
+   * unclosed resource. It is not: the application owns the window and closes it, this method only
+   * borrows it.
+   */
+  @SuppressWarnings({"unused", "resource"})
+  private static void onWindowChanged(
+      MemorySegment self, MemorySegment command, MemorySegment notification) {
+    try {
+      MacWindow window = windowOf(self);
+      if (window != null) {
+        window.windowChanged();
+      }
+    } catch (Throwable t) {
+      ThrowableUtil.report(t);
+    }
   }
 
   /**

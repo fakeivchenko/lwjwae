@@ -127,7 +127,8 @@ public class WindowsWindow extends AbstractWindow {
             placed ? parameters.x() : User32.CW_USEDEFAULT,
             placed ? parameters.y() : User32.CW_USEDEFAULT,
             parameters.width(),
-            parameters.height());
+            parameters.height(),
+            parameters.alwaysOnTop());
     User32.userData(window, this.callbackId);
     this.hwnd = window;
     User32.resizeClient(window, parameters.width(), parameters.height());
@@ -375,7 +376,7 @@ public class WindowsWindow extends AbstractWindow {
               if (User32.isMinimized(this.window())) {
                 User32.showWindow(this.window(), User32.SW_RESTORE);
               }
-              User32.setForeground(this.window());
+              User32.bringToFront(this.window());
             });
   }
 
@@ -793,6 +794,9 @@ public class WindowsWindow extends AbstractWindow {
           return 0;
         } else if (message == User32.WM_SIZE && window.controller != null) {
           window.fitWebView();
+          window.windowChanged();
+        } else if (message == User32.WM_MOVE || message == User32.WM_ACTIVATE) {
+          window.windowChanged();
         } else if (message == User32.WM_CLOSE && window.hidesOnCloseRequest()) {
           // Not passed on: DefWindowProc would destroy the window.
           window.hideNow();

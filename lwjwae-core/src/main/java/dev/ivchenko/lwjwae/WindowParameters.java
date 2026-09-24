@@ -37,6 +37,10 @@ import lombok.Builder;
  *     int)}. Default: {@link WindowSize#NONE}.
  * @param alwaysOnTop Whether the window stays above other windows, see {@link
  *     Window#alwaysOnTop(boolean)}. Default: {@code false}.
+ * @param stateKey The name under which the window remembers its size, its place, and whether it was
+ *     maximized, from one run of the application to the next, in {@link
+ *     ApplicationParameters#dataDirectory()}. What it remembers wins over the size and the position
+ *     here. Default: none, and the window opens as these parameters say every time.
  */
 @Builder(toBuilder = true)
 public record WindowParameters(
@@ -51,7 +55,8 @@ public record WindowParameters(
     CloseAction closeAction,
     WindowSize minimumSize,
     WindowSize maximumSize,
-    boolean alwaysOnTop) {
+    boolean alwaysOnTop,
+    String stateKey) {
   private static final String DEFAULT_TITLE = "Application";
   private static final int DEFAULT_WIDTH = 1024;
   private static final int DEFAULT_HEIGHT = 768;
@@ -84,6 +89,9 @@ public record WindowParameters(
     }
     if (resource != null && resource.isBlank()) {
       resource = null;
+    }
+    if (stateKey != null && stateKey.isBlank()) {
+      stateKey = null;
     }
   }
 

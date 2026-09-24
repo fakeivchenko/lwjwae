@@ -3,6 +3,7 @@ package dev.ivchenko.lwjwae;
 import dev.ivchenko.lwjwae.event.Event;
 import dev.ivchenko.lwjwae.event.EventSubscription;
 import dev.ivchenko.lwjwae.event.LoadEvent;
+import dev.ivchenko.lwjwae.event.WindowEvent;
 import dev.ivchenko.lwjwae.rpc.RpcHandler;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
@@ -45,8 +46,8 @@ public interface Window extends AutoCloseable {
   int height();
 
   /**
-   * Resizes the content area. The toolkit applies the request asynchronously. GTK 4 on Wayland
-   * applies it only to a window that isn't on screen yet: once it is, its size is the user's.
+   * Resizes the content area. The toolkit applies the request asynchronously. GTK 4 applies it only
+   * to a window that hasn't been on screen yet: once it has, its size is the user's.
    */
   void size(int width, int height);
 
@@ -129,7 +130,8 @@ public interface Window extends AutoCloseable {
 
   /**
    * Keeps the window above other windows, or not. Does nothing on GTK 4, and a Wayland compositor
-   * may ignore it.
+   * may ignore it. Windows grants it only to the application in the foreground; {@link
+   * WindowParameters#alwaysOnTop()} works from the background too.
    */
   void alwaysOnTop(boolean alwaysOnTop);
 
@@ -254,6 +256,13 @@ public interface Window extends AutoCloseable {
 
   /** Registers a listener for the load lifecycle of every navigation. Runs on the UI thread. */
   void onLoad(Consumer<LoadEvent> listener);
+
+  /**
+   * Registers a listener for every change of the window: its size, its place, minimized, maximized,
+   * full screen, and focus. It runs on a thread of the window, one event after the other. The page
+   * hears the same events through {@code window.lwjwae.window.listen}.
+   */
+  EventSubscription onWindowEvent(Consumer<WindowEvent> listener);
 
   /** Puts the window on screen, or back on it after {@link #hide()}, and brings it to the front. */
   void show();

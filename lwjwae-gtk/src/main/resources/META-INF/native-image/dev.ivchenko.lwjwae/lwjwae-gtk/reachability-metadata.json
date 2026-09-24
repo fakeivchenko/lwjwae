@@ -12,6 +12,14 @@
           ]
         },
         {
+          "name": "onDeleteEvent",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
+        },
+        {
           "name": "onDestroy",
           "parameterTypes": [
             "java.lang.foreign.MemorySegment",
@@ -45,7 +53,7 @@
           ]
         },
         {
-          "name": "onDeleteEvent",
+          "name": "onWindowEvent",
           "parameterTypes": [
             "java.lang.foreign.MemorySegment",
             "java.lang.foreign.MemorySegment",
@@ -310,6 +318,16 @@
       {
         "class": "dev.ivchenko.lwjwae.gtk.GtkWindow",
         "method": "onDeleteEvent",
+        "returnType": "jint",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.gtk.GtkWindow",
+        "method": "onWindowEvent",
         "returnType": "jint",
         "parameterTypes": [
           "void*",

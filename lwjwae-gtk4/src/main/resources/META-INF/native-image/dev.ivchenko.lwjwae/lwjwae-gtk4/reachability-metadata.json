@@ -4,8 +4,9 @@
       "type": "dev.ivchenko.lwjwae.gtk4.Gtk4Window",
       "methods": [
         {
-          "name": "onDestroy",
+          "name": "onBridgeMessage",
           "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
             "java.lang.foreign.MemorySegment",
             "java.lang.foreign.MemorySegment"
           ]
@@ -14,6 +15,39 @@
           "name": "onCloseRequest",
           "parameterTypes": [
             "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
+        },
+        {
+          "name": "onContextMenu",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
+        },
+        {
+          "name": "onDestroy",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
+        },
+        {
+          "name": "onEvaluationReady",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
+        },
+        {
+          "name": "onLayout",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "int",
+            "int",
             "java.lang.foreign.MemorySegment"
           ]
         },
@@ -36,24 +70,14 @@
           ]
         },
         {
-          "name": "onContextMenu",
+          "name": "onRealize",
           "parameterTypes": [
-            "java.lang.foreign.MemorySegment",
-            "java.lang.foreign.MemorySegment",
             "java.lang.foreign.MemorySegment",
             "java.lang.foreign.MemorySegment"
           ]
         },
         {
-          "name": "onEvaluationReady",
-          "parameterTypes": [
-            "java.lang.foreign.MemorySegment",
-            "java.lang.foreign.MemorySegment",
-            "java.lang.foreign.MemorySegment"
-          ]
-        },
-        {
-          "name": "onBridgeMessage",
+          "name": "onStateNotify",
           "parameterTypes": [
             "java.lang.foreign.MemorySegment",
             "java.lang.foreign.MemorySegment",
@@ -235,6 +259,36 @@
         "returnType": "void",
         "parameterTypes": [
           "void*",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.gtk4.Gtk4Window",
+        "method": "onRealize",
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.gtk4.Gtk4Window",
+        "method": "onStateNotify",
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.gtk4.Gtk4Window",
+        "method": "onLayout",
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "jint",
+          "jint",
           "void*"
         ]
       }

@@ -131,6 +131,9 @@ dependencies {
   `Response`: text, bytes, a value through the codec, or a stream that the page reads while Java
   writes it, several hundred MB/s. An `AbortSignal` reaches the handler. Only the pages of the
   application, and the development server, may call.
+- **Windows under control.** Minimize, maximize, full screen, on top, focus, size limits, and events
+  for every change of a window in Java and on the page. With a state key, a window opens the way it
+  last closed.
 - **A tray icon, and windows that hide.** `Application.tray(TrayIcon)` puts an icon with a menu in
   the notification area on Windows, the menu bar on macOS, or the StatusNotifier or XEmbed tray on
   Linux. With `CloseAction.HIDE`, the close button hides a window instead of closing it while a tray

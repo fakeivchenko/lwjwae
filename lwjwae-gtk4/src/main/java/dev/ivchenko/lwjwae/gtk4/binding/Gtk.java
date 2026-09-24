@@ -270,4 +270,10 @@ public class Gtk {
       (int) WIDGET_GET_WIDTH.invokeExact(widget), (int) WIDGET_GET_HEIGHT.invokeExact(widget)
     };
   }
+
+  /** Calls {@code gtk_native_get_surface}: the surface of a realized window. */
+  @SneakyThrows
+  public MemorySegment windowSurface(MemorySegment window) {
+    return (MemorySegment) NATIVE_GET_SURFACE.invokeExact(window);
+  }
 }

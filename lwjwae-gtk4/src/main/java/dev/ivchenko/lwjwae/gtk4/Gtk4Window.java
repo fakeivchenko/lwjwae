@@ -48,6 +48,29 @@ public class Gtk4Window extends AbstractWindow {
           "onDestroy",
           MethodType.methodType(void.class, MemorySegment.class, MemorySegment.class),
           Signatures.WIDGET_CALLBACK);
+  private static final MemorySegment ON_REALIZE =
+      NativeLibraries.upcall(
+          MethodHandles.lookup(),
+          Gtk4Window.class,
+          "onRealize",
+          MethodType.methodType(void.class, MemorySegment.class, MemorySegment.class),
+          Signatures.WIDGET_CALLBACK);
+  private static final MemorySegment ON_STATE_NOTIFY =
+      NativeLibraries.upcall(
+          MethodHandles.lookup(),
+          Gtk4Window.class,
+          "onStateNotify",
+          MethodType.methodType(
+              void.class, MemorySegment.class, MemorySegment.class, MemorySegment.class),
+          Signatures.NOTIFY_CALLBACK);
+  private static final MemorySegment ON_LAYOUT =
+      NativeLibraries.upcall(
+          MethodHandles.lookup(),
+          Gtk4Window.class,
+          "onLayout",
+          MethodType.methodType(
+              void.class, MemorySegment.class, int.class, int.class, MemorySegment.class),
+          Signatures.LAYOUT_CALLBACK);
   private static final MemorySegment ON_CLOSE_REQUEST =
       NativeLibraries.upcall(
           MethodHandles.lookup(),
@@ -151,6 +174,7 @@ public class Gtk4Window extends AbstractWindow {
     Gtk.windowSetChild(newWindow, newWebView);
 
     Glib.signalConnect(newWindow, "close-request", ON_CLOSE_REQUEST, userData);
+    Glib.signalConnect(newWindow, "realize", ON_REALIZE, userData);
     Glib.signalConnect(newWindow, "destroy", ON_DESTROY, userData);
     Glib.signalConnect(newWebView, "load-changed", ON_LOAD_CHANGED, userData);
     Glib.signalConnect(newWebView, "load-failed", ON_LOAD_FAILED, userData);
@@ -487,6 +511,69 @@ public class Gtk4Window extends AbstractWindow {
       ThrowableUtil.report(t);
     }
     return 0;
+  }
+
+  /**
+   * The window is realized, and has a surface: GTK 4 reports the state of a window, minimized,
+   * maximized, full screen, and focus, only on its {@code GdkToplevel}, and its size on the {@code
+   * layout} of the surface.
+   *
+   * <p>Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
+   * binds it by name, so no Java code calls it and the compiler sees a dead private method. {@code
+   * resource}: the window is {@code AutoCloseable}, and a lookup that returns it looks like an
+   * unclosed resource. It is not: the application owns the window and closes it, this method only
+   * borrows it.
+   */
+  @SuppressWarnings({"unused", "resource"})
+  private static void onRealize(MemorySegment widget, MemorySegment userData) {
+    try {
+      Gtk4Window window = WINDOWS.lookup(userData);
+      if (window == null) {
+        return;
+      }
+      MemorySegment surface = Gtk.windowSurface(widget);
+      Glib.signalConnect(surface, "notify::state", ON_STATE_NOTIFY, userData);
+      Glib.signalConnect(surface, "layout", ON_LAYOUT, userData);
+      window.windowChanged();
+    } catch (Throwable t) {
+      ThrowableUtil.report(t);
+    }
+  }
+
+  /**
+   * The state of the surface changed.
+   *
+   * <p>Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
+   * binds it by name. {@code resource}: the window is only borrowed.
+   */
+  @SuppressWarnings({"unused", "resource"})
+  private static void onStateNotify(
+      MemorySegment surface, MemorySegment property, MemorySegment userData) {
+    changed(userData);
+  }
+
+  /**
+   * The surface has a new size.
+   *
+   * <p>Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
+   * binds it by name. {@code resource}: the window is only borrowed.
+   */
+  @SuppressWarnings({"unused", "resource"})
+  private static void onLayout(
+      MemorySegment surface, int width, int height, MemorySegment userData) {
+    changed(userData);
+  }
+
+  @SuppressWarnings("resource")
+  private static void changed(MemorySegment userData) {
+    try {
+      Gtk4Window window = WINDOWS.lookup(userData);
+      if (window != null) {
+        window.windowChanged();
+      }
+    } catch (Throwable t) {
+      ThrowableUtil.report(t);
+    }
   }
 
   /**

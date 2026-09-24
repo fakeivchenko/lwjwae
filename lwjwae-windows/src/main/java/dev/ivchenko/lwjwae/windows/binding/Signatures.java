@@ -131,6 +131,10 @@ public class Signatures {
   /** {@code int f(void)}. */
   public final FunctionDescriptor INT_VOID = FunctionDescriptor.of(C_INT);
 
+  /** {@code BOOL f(DWORD, DWORD, BOOL)}: {@code AttachThreadInput}. */
+  public final FunctionDescriptor INT_INT_INT_INT =
+      FunctionDescriptor.of(C_INT, C_INT, C_INT, C_INT);
+
   /** {@code int f(int)}: {@code GetSystemMetrics}. */
   public final FunctionDescriptor INT_INT = FunctionDescriptor.of(C_INT, C_INT);
 

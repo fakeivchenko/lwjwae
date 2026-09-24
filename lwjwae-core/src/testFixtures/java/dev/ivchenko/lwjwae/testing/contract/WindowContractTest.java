@@ -1,12 +1,15 @@
 package dev.ivchenko.lwjwae.testing.contract;
 
 import dev.ivchenko.lwjwae.Application;
+import dev.ivchenko.lwjwae.ApplicationParameters;
 import dev.ivchenko.lwjwae.CloseAction;
 import dev.ivchenko.lwjwae.Window;
 import dev.ivchenko.lwjwae.WindowParameters;
 import dev.ivchenko.lwjwae.WindowPosition;
 import dev.ivchenko.lwjwae.WindowSize;
 import dev.ivchenko.lwjwae.event.LoadEvent;
+import dev.ivchenko.lwjwae.event.WindowEvent;
+import dev.ivchenko.lwjwae.event.WindowEventType;
 import dev.ivchenko.lwjwae.testing.Icons;
 import dev.ivchenko.lwjwae.testing.Loads;
 import dev.ivchenko.lwjwae.testing.LocalPages;
@@ -15,13 +18,17 @@ import dev.ivchenko.lwjwae.testing.Tags;
 import dev.ivchenko.lwjwae.tray.Tray;
 import dev.ivchenko.lwjwae.tray.TrayIcon;
 import java.awt.Color;
+import java.nio.file.Path;
 import java.util.List;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BooleanSupplier;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.api.io.TempDir;
 
 /**
  * Opens a real window and renders a real {@code http://} page that's served from this machine.
@@ -195,7 +202,7 @@ public abstract class WindowContractTest extends DisplayContractTest {
     return true;
   }
 
-  /** Whether a window that is on screen can be resized by its client. GTK 4 on Wayland can't. */
+  /** Whether a window that is on screen can be resized by its client. GTK 4 can't. */
   protected boolean canResizeShownWindows() {
     return true;
   }
@@ -259,6 +266,10 @@ public abstract class WindowContractTest extends DisplayContractTest {
               WindowParameters.builder().title("lwjwae :: state").width(400).height(300).build());
       window.show();
       awaitTrue(window::isVisible, "the window must show");
+      // Whether this process may take the focus at all: Windows refuses it to one in the
+      // background, and the test runner may be one.
+      Thread.sleep(300);
+      boolean mayTakeFocus = this.canTakeFocus() && window.isFocused();
 
       window.maximize();
       awaitTrue(window::isMaximized, "maximize must maximize");
@@ -272,7 +283,7 @@ public abstract class WindowContractTest extends DisplayContractTest {
       }
       window.focus();
       awaitTrue(() -> !window.isMinimized(), "focus must bring a minimized window back");
-      if (this.canTakeFocus()) {
+      if (mayTakeFocus) {
         awaitTrue(window::isFocused, "focus must give the window the keyboard focus");
       }
     }
@@ -299,6 +310,96 @@ public abstract class WindowContractTest extends DisplayContractTest {
       awaitTrue(() -> !window.isFullscreen(), "full screen must end");
       awaitTrue(() -> window.width() < 500, "the window must come back to its size");
     }
+  }
+
+  @Test
+  void windowEventsReachJavaAndThePage() throws Exception {
+    try (Application application = Application.create()) {
+      Window window =
+          application.open(
+              WindowParameters.builder().title("lwjwae :: events").width(400).height(300).build());
+      BlockingQueue<WindowEvent> heard = new LinkedBlockingQueue<>();
+      window.onWindowEvent(heard::add);
+      final var loaded = Loads.expectFinished(window);
+      window.loadResource("test-app/index.html");
+      window.show();
+      loaded.get(30, TimeUnit.SECONDS);
+      Loads.eval(
+          window,
+          "window.__windowEvents = []; lwjwae.window.listen((event) =>"
+              + " window.__windowEvents.push(event.type)); undefined;");
+
+      window.maximize();
+      awaitEvent(heard, WindowEventType.MAXIMIZED);
+      window.restore();
+      awaitEvent(heard, WindowEventType.UNMAXIMIZED);
+      if (this.canResizeShownWindows()) {
+        window.size(500, 350);
+        WindowEvent resized = awaitEvent(heard, WindowEventType.RESIZED);
+        Assertions.assertSame(window, resized.window());
+      }
+      String page = "";
+      for (int attempt = 0; attempt < 50 && !page.contains("unmaximized"); attempt++) {
+        Thread.sleep(100);
+        page = Loads.eval(window, "window.__windowEvents.join()");
+      }
+      List<String> types = List.of(page.split(","));
+      Assertions.assertTrue(
+          types.indexOf("maximized") >= 0
+              && types.indexOf("maximized") < types.indexOf("unmaximized"),
+          "the page hears: " + page);
+    }
+  }
+
+  @Test
+  void windowOpensTheWayItClosed(@TempDir Path directory) throws Exception {
+    ApplicationParameters parameters =
+        ApplicationParameters.builder().dataDirectory(directory).build();
+    WindowParameters remembered =
+        WindowParameters.builder()
+            .title("lwjwae :: remembered")
+            .width(400)
+            .height(300)
+            .stateKey("main")
+            .build();
+    try (Application application = Application.create(parameters)) {
+      Window window = application.open(remembered);
+      window.show();
+      awaitTrue(window::isVisible, "the window must show");
+      if (this.canResizeShownWindows()) {
+        window.size(520, 360);
+        awaitTrue(() -> window.width() == 520, "the window must resize");
+      }
+      window.maximize();
+      awaitTrue(window::isMaximized, "maximize must maximize");
+      // The events that the state follows arrive on their own thread.
+      Thread.sleep(300);
+    }
+
+    try (Application application = Application.create(parameters)) {
+      Window window = application.open(remembered);
+      window.show();
+      awaitTrue(window::isMaximized, "a window that closed maximized must open maximized");
+      window.restore();
+      if (this.canResizeShownWindows()) {
+        awaitTrue(
+            () -> window.width() == 520 && window.height() == 360,
+            "restore must bring back the size from before: " + window.width());
+      }
+    }
+  }
+
+  /** Waits for an event of {@code type}, passing over the others, and returns it. */
+  private static WindowEvent awaitEvent(BlockingQueue<WindowEvent> heard, WindowEventType type)
+      throws InterruptedException {
+    long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+    while (System.nanoTime() < deadline) {
+      WindowEvent event = heard.poll(100, TimeUnit.MILLISECONDS);
+      if (event != null && event.type() == type) {
+        return event;
+      }
+    }
+    throw new AssertionError("No " + type + " event");
   }
 
   @Test

@@ -285,5 +285,12 @@
     const close = () => callText("${closeCall}", "").then(() => undefined);
 
     window.${channel} = { receive, bound };
-    window.${pageApi} = { listen, once, emit, open, close, call: callRpc, invoke: rpcInvoke, RpcError };
+    // The changes of the window: handler({ type, width, height, x, y }), where type is resized,
+    // moved, focused, blurred, minimized, unminimized, maximized, unmaximized, fullscreenEntered,
+    // or fullscreenExited.
+    const windowApi = {
+        listen: (handler) => listen("${windowEvent}", (event) => handler(JSON.parse(event.payload)))
+    };
+
+    window.${pageApi} = { listen, once, emit, open, close, call: callRpc, invoke: rpcInvoke, RpcError, window: windowApi };
 })();

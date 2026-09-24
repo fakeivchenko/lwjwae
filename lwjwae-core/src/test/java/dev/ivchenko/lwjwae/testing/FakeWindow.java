@@ -170,6 +170,16 @@ public class FakeWindow extends AbstractWindow {
     }
   }
 
+  /** Waits until the UI thread has run everything that was queued before. */
+  public void awaitUiThread() {
+    this.dispatcher().call(() -> null);
+  }
+
+  /** Plays the toolkit: reports that the window may have changed. */
+  public void reportChange() {
+    this.windowChanged();
+  }
+
   /** Exposes the protected hook, so that tests can play the part of the engine. */
   public void emit(LoadEvent event) {
     this.emitLoad(event);

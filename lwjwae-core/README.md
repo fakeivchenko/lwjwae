@@ -79,13 +79,40 @@ meaning no limit, and resize a window that is outside them; `WindowParameters` t
 and `alwaysOnTop` for a window from its start. A hidden window keeps a minimize or a maximize
 until it's shown.
 
+### Window events
+
+`window.onWindowEvent(listener)` hears every change of the window as a
+[`WindowEvent`](src/main/java/dev/ivchenko/lwjwae/event/WindowEvent.java): `RESIZED`, `MOVED`,
+`FOCUSED`, `BLURRED`, `MINIMIZED`, `UNMINIMIZED`, `MAXIMIZED`, `UNMAXIMIZED`, `FULLSCREEN_ENTERED`,
+`FULLSCREEN_EXITED`, each with the size and the position after it. The page hears the same through
+`window.lwjwae.window.listen((event) => ...)`, with `event.type` as `resized`, `fullscreenEntered`,
+and so on, and `width`, `height`, `x`, `y`.
+
+A backend doesn't work out what changed: from every toolkit callback that may mean a change, it
+calls `windowChanged()`, and [`WindowEvents`](src/main/java/dev/ivchenko/lwjwae/event/WindowEvents.java)
+reads the window on the UI thread, once the toolkit is done, and compares it with the last reading.
+The events are the same on every platform, a callback that changed nothing yields nothing, and a
+burst of callbacks, as a drag of the edge of a window makes, yields one reading. Java listeners run
+on a thread of the window, in order.
+
+### Remembering a window
+
+With `WindowParameters.stateKey("main")`, a window opens the way it last closed: the size and the
+position it had while it was neither maximized nor in full screen, and maximized if it was. The
+state follows the window events, and is written to `window-state.properties` in
+`ApplicationParameters.dataDirectory()` when the window closes, through a temporary file, so a crash
+leaves the old one. The data directory defaults to the one that the platform has for the data of an
+application named after `ApplicationParameters.name`; without a name and a directory, a state key
+does nothing. Where the platform never reports a position, on Wayland and GTK 4, none is saved, and
+the window opens where the desktop puts it.
+
 Where the platform can't, the call does what it can and the reads say so:
 
 | Platform      | What's missing                                                                                                   |
 |---------------|------------------------------------------------------------------------------------------------------------------|
 | Wayland       | `isMinimized()` is always `false`; `focus()` can't take the focus from another application; `alwaysOnTop` is up to the compositor. |
-| GTK 4         | No `maximumSize` and no `alwaysOnTop`: both do nothing and read back as none. On Wayland, `size()` doesn't resize a window on screen. |
-| Windows       | `focus()` from a process in the background may only flash the taskbar entry.                                      |
+| GTK 4         | No `maximumSize` and no `alwaysOnTop`: both do nothing and read back as none. `size()` sizes a window only before it's first shown. |
+| Windows       | A process in the background can't take the focus, only make the taskbar entry flash, nor put a window on top; `WindowParameters.alwaysOnTop` can, since the window is created on top. |
 
 Every method of `Application` and `Window` is safe to call from any thread. The backend forwards
 the call to its UI thread, and a getter blocks until the UI thread has answered.

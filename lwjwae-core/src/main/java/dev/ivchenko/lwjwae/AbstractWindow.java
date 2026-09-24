@@ -10,6 +10,8 @@ import dev.ivchenko.lwjwae.bridge.codec.BridgeCodec;
 import dev.ivchenko.lwjwae.event.Event;
 import dev.ivchenko.lwjwae.event.EventSubscription;
 import dev.ivchenko.lwjwae.event.LoadEvent;
+import dev.ivchenko.lwjwae.event.WindowEvent;
+import dev.ivchenko.lwjwae.event.WindowEvents;
 import dev.ivchenko.lwjwae.rpc.RpcCall;
 import dev.ivchenko.lwjwae.rpc.RpcException;
 import dev.ivchenko.lwjwae.rpc.RpcExchange;
@@ -69,6 +71,7 @@ public abstract class AbstractWindow implements Window {
   private final Map<String, RpcHandler> rpcHandlers = new ConcurrentHashMap<>();
   private final EventListeners listeners = new EventListeners("lwjwae-events");
   private final PageEvents pageEvents = new PageEvents();
+  private final WindowEvents windowEvents = new WindowEvents(this, this::sendToPage);
   private final String token = newToken();
 
   private volatile MessageRpcCalls messageCalls;
@@ -105,6 +108,33 @@ public abstract class AbstractWindow implements Window {
   @Override
   public final void onLoad(Consumer<LoadEvent> listener) {
     this.loadListeners.add(Objects.requireNonNull(listener, "listener"));
+  }
+
+  @Override
+  public final EventSubscription onWindowEvent(Consumer<WindowEvent> listener) {
+    return this.windowEvents.listen(Objects.requireNonNull(listener, "listener"));
+  }
+
+  /**
+   * Reports that the window may have changed: its size, its place, its state, or its focus. A
+   * backend calls this from every toolkit callback that may mean one of these, on any thread; the
+   * core reads the window and works out the events, see {@link WindowEvents}.
+   */
+  protected final void windowChanged() {
+    this.windowEvents.changed(this.dispatcher()::post);
+  }
+
+  /** Hands a window event to the page, as {@link BridgeProtocol#WINDOW_EVENT} with JSON. */
+  private void sendToPage(WindowEvent event) {
+    String json =
+        "{\"type\":\"%s\",\"width\":%d,\"height\":%d,\"x\":%d,\"y\":%d}"
+            .formatted(
+                event.type().pageName(),
+                event.size().width(),
+                event.size().height(),
+                event.position().x(),
+                event.position().y());
+    this.pageEvents.send(BridgeProtocol.WINDOW_EVENT, json, false);
   }
 
   @Override
@@ -327,6 +357,8 @@ public abstract class AbstractWindow implements Window {
    */
   protected final void installBridge() {
     this.messageCalls = new MessageRpcCalls(this, this.rpcMessageChannel(), this.token);
+    // Once the window is complete: what the first window event compares with.
+    this.dispatcher().post(this.windowEvents::start);
     BridgeCodec codec = this.application.parameters().codec();
     // Without a codec, the page has no encoder: an untyped call with a non-string payload sends
     // String(payload), and a typed call fails on the Java side before it reaches the page.
@@ -411,6 +443,7 @@ public abstract class AbstractWindow implements Window {
     // Straight after the flag: a thread that sees the window closed must not find it in the list.
     this.application.windowClosed(this);
     this.pageEvents.close();
+    this.windowEvents.shutdown();
     MessageRpcCalls calls = this.messageCalls;
     if (calls != null) {
       calls.cancelAll();

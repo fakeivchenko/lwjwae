@@ -1,6 +1,8 @@
 package dev.ivchenko.lwjwae;
 
 import dev.ivchenko.lwjwae.bridge.codec.BridgeCodec;
+import dev.ivchenko.lwjwae.util.PlatformUtil;
+import java.nio.file.Path;
 import lombok.Builder;
 
 /**
@@ -25,9 +27,15 @@ import lombok.Builder;
  *     calls fail with a message.
  * @param name The name of the application, as the desktop shows it next to its notifications.
  *     Default: none, and the desktop shows its own placeholder.
+ * @param dataDirectory Where the application keeps what it remembers from one run to the next, such
+ *     as the size and the place of its windows. Default: the directory that the platform has for
+ *     the data of an application, named after {@code name}: {@code $XDG_CONFIG_HOME/NAME} or {@code
+ *     ~/.config/NAME} on Linux, {@code ~/Library/Application Support/NAME} on macOS, {@code
+ *     %APPDATA%\NAME} on Windows. Without a name, none, and windows remember nothing.
  */
 @Builder(toBuilder = true)
-public record ApplicationParameters(String devServerUrl, BridgeCodec codec, String name) {
+public record ApplicationParameters(
+    String devServerUrl, BridgeCodec codec, String name, Path dataDirectory) {
   /** The system property that supplies {@link #devServerUrl()} when the builder leaves it unset. */
   public static final String DEV_SERVER_URL_PROPERTY = "lwjwae.devServerUrl";
 
@@ -50,6 +58,23 @@ public record ApplicationParameters(String devServerUrl, BridgeCodec codec, Stri
     if (isBlank(name)) {
       name = null;
     }
+    if (dataDirectory == null && name != null) {
+      dataDirectory = defaultDataDirectory(name);
+    }
+  }
+
+  /** The directory of the platform for the data of the application {@code name}. */
+  private static Path defaultDataDirectory(String name) {
+    String home = System.getProperty("user.home");
+    if (PlatformUtil.isWindows()) {
+      String appData = System.getenv("APPDATA");
+      return Path.of(isBlank(appData) ? home + "\\AppData\\Roaming" : appData, name);
+    }
+    if (PlatformUtil.isMacOs()) {
+      return Path.of(home, "Library", "Application Support", name);
+    }
+    String config = System.getenv("XDG_CONFIG_HOME");
+    return Path.of(isBlank(config) ? home + "/.config" : config, name);
   }
 
   /** Creates parameters with every default. */

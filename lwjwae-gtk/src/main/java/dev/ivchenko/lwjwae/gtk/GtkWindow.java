@@ -19,6 +19,7 @@ import dev.ivchenko.lwjwae.util.ThrowableUtil;
 import java.lang.foreign.MemorySegment;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
@@ -49,6 +50,14 @@ public class GtkWindow extends AbstractWindow {
           MethodHandles.lookup(),
           GtkWindow.class,
           "onDeleteEvent",
+          MethodType.methodType(
+              int.class, MemorySegment.class, MemorySegment.class, MemorySegment.class),
+          Signatures.DELETE_EVENT_CALLBACK);
+  private static final MemorySegment ON_WINDOW_EVENT =
+      NativeLibraries.upcall(
+          MethodHandles.lookup(),
+          GtkWindow.class,
+          "onWindowEvent",
           MethodType.methodType(
               int.class, MemorySegment.class, MemorySegment.class, MemorySegment.class),
           Signatures.DELETE_EVENT_CALLBACK);
@@ -159,6 +168,11 @@ public class GtkWindow extends AbstractWindow {
 
     Glib.signalConnect(newWindow, "delete-event", ON_DELETE_EVENT, userData);
     Glib.signalConnect(newWindow, "destroy", ON_DESTROY, userData);
+    // Every change that a window event reports comes through one of these.
+    for (String signal :
+        List.of("configure-event", "window-state-event", "focus-in-event", "focus-out-event")) {
+      Glib.signalConnect(newWindow, signal, ON_WINDOW_EVENT, userData);
+    }
     Glib.signalConnect(newWebView, "load-changed", ON_LOAD_CHANGED, userData);
     Glib.signalConnect(newWebView, "load-failed", ON_LOAD_FAILED, userData);
     Glib.signalConnect(newWebView, "context-menu", ON_CONTEXT_MENU, userData);
@@ -513,6 +527,30 @@ public class GtkWindow extends AbstractWindow {
       if (window != null && window.hidesOnCloseRequest()) {
         Gtk.widgetHide(widget);
         return 1;
+      }
+    } catch (Throwable t) {
+      ThrowableUtil.report(t);
+    }
+    return 0;
+  }
+
+  /**
+   * {@code configure-event}, {@code window-state-event}, {@code focus-in-event}, and {@code
+   * focus-out-event}: the window may have changed. {@code FALSE} lets GTK handle the event too.
+   *
+   * <p>Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
+   * binds it by name, so no Java code calls it and the compiler sees a dead private method. {@code
+   * resource}: the window is {@code AutoCloseable}, and a lookup that returns it looks like an
+   * unclosed resource. It is not: the application owns the window and closes it, this method only
+   * borrows it.
+   */
+  @SuppressWarnings({"unused", "resource"})
+  private static int onWindowEvent(
+      MemorySegment widget, MemorySegment event, MemorySegment userData) {
+    try {
+      GtkWindow window = WINDOWS.lookup(userData);
+      if (window != null) {
+        window.windowChanged();
       }
     } catch (Throwable t) {
       ThrowableUtil.report(t);
