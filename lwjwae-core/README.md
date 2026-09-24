@@ -113,7 +113,7 @@ the page-facing API).
 The runtime needs one thing from the backend: `bridgeTransportScript()`, a JavaScript expression
 that evaluates to a function of one string and delivers that string to the host. WebKit backends
 return `window.webkit.messageHandlers.NAME.postMessage`; WebView2 returns
-`window.chrome.webview.postMessage`. Answers come back through `postRpcMessage`, which evaluates
+`window.chrome.webview.postMessage`. Answers come back through `rpcMessageChannel()`, which evaluates
 `__lwjwaeBridge.receive(message)` by default and posts a web message on WebView2.
 
 ### Who may call
@@ -370,7 +370,7 @@ state, and the whole bridge except its transport. It provides:
    `RpcExchange.PATH_PREFIX` of the resource URL. The core checks the origin and the method, finds
    the handler, and runs it; the exchange only carries bytes. A backend that can't answer a request
    in parts overrides `rpcTransportScript()` to send those calls as messages too, as the Windows
-   one does, and `postRpcMessage` and `postRpcBuffer` where the engine can post to the page more
+   one does, and `rpcMessageChannel()` where the engine can post to the page more
    cheaply than through `eval`.
 7. A call to `markClosed()` when the native window is gone, last, after the native objects are
    released: it drops the window from the application, and the last window to go wakes every

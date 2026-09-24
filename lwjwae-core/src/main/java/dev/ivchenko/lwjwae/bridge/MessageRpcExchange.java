@@ -1,5 +1,6 @@
-package dev.ivchenko.lwjwae;
+package dev.ivchenko.lwjwae.bridge;
 
+import dev.ivchenko.lwjwae.Window;
 import dev.ivchenko.lwjwae.rpc.RpcExchange;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
@@ -14,17 +15,17 @@ import java.util.function.Supplier;
  * lwjwae.call} reaches Java, and on WebView2 that one too.
  *
  * <p>The page posts {@code \u0001rpc␟token␟doc␟id␟name␟type␟encoding␟body} through the channel that
- * the backend names in {@link AbstractWindow#bridgeTransportScript()}; the body is text, or bytes
+ * the backend names in {@code AbstractWindow.bridgeTransportScript()}; the body is text, or bytes
  * in Base64. {@code token} is a secret of the window that the bootstrap hands only to a document of
  * a trusted origin, and it stands in for the {@code Origin} header, which a message doesn't carry:
  * every frame of the window can post to the channel, but only a trusted one knows what to post.
  * {@code doc} is a token of the document, so the answers to a document that the window left don't
  * reach the next one.
  *
- * <p>The answer goes back through {@link AbstractWindow#postRpcMessage}: {@code
+ * <p>The answer goes back through {@link RpcMessageChannel#post}: {@code
  * \u0001rpc␟doc␟id␟r␟status␟type␟encoding␟body} when it is whole, the common case, which costs one
  * message; otherwise {@code h␟status␟type}, one message per part, and {@code e␟count}. A part of
- * {@value #BUFFER_THRESHOLD} bytes or more goes through {@link AbstractWindow#postRpcBuffer}, which
+ * {@value #BUFFER_THRESHOLD} bytes or more goes through {@link RpcMessageChannel#postBuffer}, which
  * WebView2 answers with a shared buffer and no encoding. Every part carries its number, because a
  * text message and a shared buffer arrive as different events. {@code
  * \u0001rpc-cancel␟token␟doc␟id} abandons a call.
@@ -32,14 +33,15 @@ import java.util.function.Supplier;
  * <p>At most {@value #IN_FLIGHT} messages of one call wait for the UI thread: backpressure without
  * a round trip per part.
  */
-final class MessageRpcExchange implements RpcExchange {
+public final class MessageRpcExchange implements RpcExchange {
   static final String TAG = "\u0001rpc";
-  static final String CANCEL_TAG = "\u0001rpc-cancel";
-  private static final String SEPARATOR = "\u001f";
+  private static final String SEPARATOR = BridgeProtocol.SEPARATOR;
   private static final int BUFFER_THRESHOLD = 16 * 1024;
   private static final int IN_FLIGHT = 16;
 
-  private final AbstractWindow window;
+  private final MessageRpcCalls calls;
+  private final RpcMessageChannel channel;
+  private final Window window;
   private final String doc;
   private final String id;
   private final String path;
@@ -52,10 +54,14 @@ final class MessageRpcExchange implements RpcExchange {
   private int parts;
 
   /**
+   * @param calls The running calls of the window, which this one leaves once it has answered.
    * @param fields The fields of a call message after the token: {@code doc}, {@code id}, the name,
    *     the media type, the encoding, and the body.
    */
-  MessageRpcExchange(AbstractWindow window, String[] fields) {
+  MessageRpcExchange(
+      MessageRpcCalls calls, RpcMessageChannel channel, Window window, String[] fields) {
+    this.calls = calls;
+    this.channel = channel;
     this.window = window;
     this.doc = fields[0];
     this.id = fields[1];
@@ -104,7 +110,7 @@ final class MessageRpcExchange implements RpcExchange {
 
   @Override
   public void reply(int status, Map<String, String> headers, byte[] body) {
-    this.window.forgetMessageCall(this);
+    this.calls.forget(this);
     String type = headers.getOrDefault("Content-Type", "");
     String encoded =
         isText(type)
@@ -123,7 +129,7 @@ final class MessageRpcExchange implements RpcExchange {
       String data = "{\"doc\":\"" + this.doc + "\",\"id\":\"" + this.id + "\",\"seq\":" + seq + "}";
       Supplier<String> fallback =
           () -> this.message("d", seq, Base64.getEncoder().encodeToString(part));
-      this.enqueue(() -> this.window.postRpcBuffer(part, data, fallback));
+      this.enqueue(() -> this.channel.postBuffer(part, data, fallback));
     } else {
       this.post(this.message("d", seq, Base64.getEncoder().encodeToString(part)));
     }
@@ -132,7 +138,7 @@ final class MessageRpcExchange implements RpcExchange {
 
   @Override
   public void end() {
-    this.window.forgetMessageCall(this);
+    this.calls.forget(this);
     this.post(this.message("e", String.valueOf(this.parts)));
   }
 
@@ -166,7 +172,7 @@ final class MessageRpcExchange implements RpcExchange {
   }
 
   private void post(String message) {
-    this.enqueue(() -> this.window.postRpcMessage(message));
+    this.enqueue(() -> this.channel.post(message));
   }
 
   /** Posts one message, waiting while {@value #IN_FLIGHT} of this call are on their way. */

@@ -1,6 +1,5 @@
-package dev.ivchenko.lwjwae;
+package dev.ivchenko.lwjwae.bridge;
 
-import dev.ivchenko.lwjwae.bridge.BridgeProtocol;
 import dev.ivchenko.lwjwae.rpc.RpcCall;
 import dev.ivchenko.lwjwae.rpc.RpcStream;
 import java.io.ByteArrayOutputStream;
@@ -29,7 +28,7 @@ import java.util.concurrent.LinkedBlockingDeque;
  * them pile up. An event that a stream failed to deliver, because its document went away, goes back
  * to the front of the line for the next one.
  */
-final class PageEvents {
+public final class PageEvents {
   private static final int PENDING_LIMIT = 1024;
   private static final int BATCH_LIMIT = 256 * 1024;
   private static final byte[] RETIRED = new byte[0];
@@ -40,7 +39,7 @@ final class PageEvents {
   private BlockingDeque<byte[]> current;
 
   /** Queues an event for the document that holds the stream, or the next one. */
-  void send(String name, String payload, boolean typed) {
+  public void send(String name, String payload, boolean typed) {
     byte[] frame = frame(name, payload, typed);
     synchronized (this.lock) {
       if (this.current != null) {
@@ -58,7 +57,7 @@ final class PageEvents {
    * Serves the event stream of a document: runs on the thread of the call until the document goes
    * away, the next one takes over, or the window closes.
    */
-  void serve(RpcCall call) {
+  public void serve(RpcCall call) {
     BlockingDeque<byte[]> queue = new LinkedBlockingDeque<>();
     synchronized (this.lock) {
       if (this.current != null) {
@@ -92,7 +91,7 @@ final class PageEvents {
   }
 
   /** Ends the stream that holds the events, if any: the window is gone. */
-  void close() {
+  public void close() {
     synchronized (this.lock) {
       if (this.current != null) {
         this.current.add(RETIRED);

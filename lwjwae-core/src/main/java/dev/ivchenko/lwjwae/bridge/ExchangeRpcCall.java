@@ -1,5 +1,7 @@
-package dev.ivchenko.lwjwae;
+package dev.ivchenko.lwjwae.bridge;
 
+import dev.ivchenko.lwjwae.Window;
+import dev.ivchenko.lwjwae.bridge.codec.BridgeCodec;
 import dev.ivchenko.lwjwae.rpc.RpcCall;
 import dev.ivchenko.lwjwae.rpc.RpcException;
 import dev.ivchenko.lwjwae.rpc.RpcExchange;
@@ -11,6 +13,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Supplier;
 
 /**
  * An {@link RpcCall} on top of the {@link RpcExchange} of a backend.
@@ -19,13 +22,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * without one, or an error when it throws. A cancellation from the engine marks the call and
  * interrupts the thread of the handler; a write after it answers {@code false}.
  */
-final class ExchangeRpcCall implements RpcCall {
-  /** The media type of a value that a codec encoded; the page half decodes it. */
-  static final String VALUE_TYPE = "application/x-lwjwae-value; charset=utf-8";
-
+public final class ExchangeRpcCall implements RpcCall {
   private final RpcExchange exchange;
   private final String name;
-  private final AbstractWindow window;
+  private final Window window;
+  private final Supplier<BridgeCodec> codec;
   private final Map<String, String> cors;
   private final AtomicBoolean answered = new AtomicBoolean();
   private final AtomicBoolean ended = new AtomicBoolean();
@@ -33,11 +34,24 @@ final class ExchangeRpcCall implements RpcCall {
   private volatile boolean cancelled;
   private volatile Thread thread;
 
-  ExchangeRpcCall(
-      RpcExchange exchange, String name, AbstractWindow window, Map<String, String> cors) {
+  /**
+   * @param exchange The request as the backend received it, and the way back.
+   * @param name The name that the page called.
+   * @param window The window whose page made the call.
+   * @param codec The codec of the application, asked only when the call needs one; it throws {@link
+   *     IllegalStateException} when there is none.
+   * @param cors The CORS headers that every answer carries, empty for a message call.
+   */
+  public ExchangeRpcCall(
+      RpcExchange exchange,
+      String name,
+      Window window,
+      Supplier<BridgeCodec> codec,
+      Map<String, String> cors) {
     this.exchange = exchange;
     this.name = name;
     this.window = window;
+    this.codec = codec;
     this.cors = cors;
   }
 
@@ -68,7 +82,7 @@ final class ExchangeRpcCall implements RpcCall {
 
   @Override
   public <T> T value(Class<T> type) {
-    return this.window.rpcCodec().decode(this.text(), type);
+    return this.codec.get().decode(this.text(), type);
   }
 
   @Override
@@ -83,8 +97,8 @@ final class ExchangeRpcCall implements RpcCall {
 
   @Override
   public void replyValue(Object value) {
-    String encoded = this.window.rpcCodec().encode(value);
-    this.reply(encoded.getBytes(StandardCharsets.UTF_8), VALUE_TYPE);
+    String encoded = this.codec.get().encode(value);
+    this.reply(encoded.getBytes(StandardCharsets.UTF_8), BridgeProtocol.VALUE_TYPE);
   }
 
   @Override
@@ -116,7 +130,7 @@ final class ExchangeRpcCall implements RpcCall {
   }
 
   /** Runs {@code handler} for this call on the calling thread. */
-  void run(RpcHandler handler) {
+  public void run(RpcHandler handler) {
     this.thread = Thread.currentThread();
     try {
       handler.handle(this);
@@ -134,7 +148,7 @@ final class ExchangeRpcCall implements RpcCall {
   }
 
   /** The page abandoned the call. */
-  void cancel() {
+  public void cancel() {
     this.cancelled = true;
     Thread running = this.thread;
     if (running != null) {
@@ -195,7 +209,7 @@ final class ExchangeRpcCall implements RpcCall {
   }
 
   /** The body of an error answer: {@code {"code": ..., "error": ...}}. */
-  static String errorJson(String code, String message) {
+  public static String errorJson(String code, String message) {
     return "{\"code\":" + ScriptUtil.quote(code) + ",\"error\":" + ScriptUtil.quote(message) + "}";
   }
 }

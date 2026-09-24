@@ -176,7 +176,7 @@ public abstract class AbstractApplication implements Application {
     return call -> {
       String result = handler.apply(call.window(), call.text());
       if (typed) {
-        call.reply(result.getBytes(StandardCharsets.UTF_8), ExchangeRpcCall.VALUE_TYPE);
+        call.reply(result.getBytes(StandardCharsets.UTF_8), BridgeProtocol.VALUE_TYPE);
       } else if (result != null) {
         call.reply(result);
       }
@@ -185,7 +185,7 @@ public abstract class AbstractApplication implements Application {
 
   @Override
   public final void handle(String name, RpcHandler handler) {
-    RpcNames.check(name);
+    BridgeProtocol.checkRpcName(name);
     this.rpcHandlers.put(name, Objects.requireNonNull(handler, "handler"));
   }
 

@@ -64,8 +64,19 @@ public class BridgeProtocol {
    */
   public final String CLOSE_CALL = "lwjwae:close";
 
+  /**
+   * The media type of a value that the codec encoded: what {@code lwjwae.invoke} and a typed
+   * binding send, and what {@code RpcCall.replyValue} answers with, so the page half decodes it.
+   */
+  public final String VALUE_TYPE = "application/x-lwjwae-value; charset=utf-8";
+
   /** What a bound name must look like. */
   private final Pattern IDENTIFIER = Pattern.compile("[A-Za-z_$][A-Za-z0-9_$]*");
+
+  /**
+   * What an RPC name must look like: it ends up in a URL path, so letters, digits, {@code . _ -}.
+   */
+  private final Pattern RPC_NAME = Pattern.compile("[A-Za-z0-9_.-]+");
 
   /**
    * The field separator inside a bridge message.
@@ -199,6 +210,18 @@ public class BridgeProtocol {
   public void checkIdentifier(String name) {
     if (!IDENTIFIER.matcher(name).matches()) {
       throw new IllegalArgumentException("Not a JavaScript identifier: " + name);
+    }
+  }
+
+  /**
+   * Checks that a name can take an RPC handler.
+   *
+   * @throws IllegalArgumentException If {@code name} has a character other than a letter, a digit,
+   *     or {@code . _ -}, or none.
+   */
+  public void checkRpcName(String name) {
+    if (name == null || !RPC_NAME.matcher(name).matches()) {
+      throw new IllegalArgumentException("Not an RPC name: " + name);
     }
   }
 

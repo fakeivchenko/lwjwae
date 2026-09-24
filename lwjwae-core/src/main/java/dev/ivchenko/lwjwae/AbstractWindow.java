@@ -1,6 +1,11 @@
 package dev.ivchenko.lwjwae;
 
 import dev.ivchenko.lwjwae.bridge.BridgeProtocol;
+import dev.ivchenko.lwjwae.bridge.ExchangeRpcCall;
+import dev.ivchenko.lwjwae.bridge.MessageRpcCalls;
+import dev.ivchenko.lwjwae.bridge.MessageRpcExchange;
+import dev.ivchenko.lwjwae.bridge.PageEvents;
+import dev.ivchenko.lwjwae.bridge.RpcMessageChannel;
 import dev.ivchenko.lwjwae.bridge.codec.BridgeCodec;
 import dev.ivchenko.lwjwae.event.Event;
 import dev.ivchenko.lwjwae.event.EventSubscription;
@@ -22,7 +27,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executor;
@@ -30,7 +34,6 @@ import java.util.concurrent.Executors;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
-import java.util.function.Supplier;
 
 /**
  * The toolkit-independent half of a window: listener bookkeeping, the closed state, and the whole
@@ -64,10 +67,11 @@ public abstract class AbstractWindow implements Window {
   private final List<Consumer<LoadEvent>> loadListeners = new CopyOnWriteArrayList<>();
   private final Map<String, String> bindingScripts = new ConcurrentHashMap<>();
   private final Map<String, RpcHandler> rpcHandlers = new ConcurrentHashMap<>();
-  private final Map<String, MessageRpcExchange> messageCalls = new ConcurrentHashMap<>();
   private final EventListeners listeners = new EventListeners("lwjwae-events");
   private final PageEvents pageEvents = new PageEvents();
   private final String token = newToken();
+
+  private volatile MessageRpcCalls messageCalls;
 
   private volatile boolean closed;
   private volatile CloseAction closeAction = CloseAction.CLOSE;
@@ -187,7 +191,7 @@ public abstract class AbstractWindow implements Window {
 
   @Override
   public final void handle(String name, RpcHandler handler) {
-    RpcNames.check(name);
+    BridgeProtocol.checkRpcName(name);
     this.rpcHandlers.put(name, Objects.requireNonNull(handler, "handler"));
   }
 
@@ -236,7 +240,8 @@ public abstract class AbstractWindow implements Window {
       this.refuse(exchange, 404, cors, "not-found", "No handler for " + name);
       return;
     }
-    ExchangeRpcCall call = new ExchangeRpcCall(exchange, name, this, cors);
+    ExchangeRpcCall call =
+        new ExchangeRpcCall(exchange, name, this, this.application::requireCodec, cors);
     exchange.onCancel(call::cancel);
     RpcHandler found = handler;
     HANDLER_EXECUTOR.execute(() -> call.run(found));
@@ -246,9 +251,9 @@ public abstract class AbstractWindow implements Window {
    * The page half of the RPC transport: a JavaScript object that the bootstrap reads. {@code base}
    * is where {@code lwjwae.call} sends its requests, {@code null} to send them as messages too, and
    * {@code webview2} tells the bootstrap to take answers from WebView2 events rather than from
-   * {@link #postRpcMessage}. The default is {@code fetch} on the resource origin, for the engines
-   * that serve a custom scheme with request bodies and streamed responses; an engine without that
-   * overrides it.
+   * {@link #rpcMessageChannel()}. The default is {@code fetch} on the resource origin, for the
+   * engines that serve a custom scheme with request bodies and streamed responses; an engine
+   * without that overrides it.
    */
   protected String rpcTransportScript() {
     return "{base:"
@@ -257,24 +262,14 @@ public abstract class AbstractWindow implements Window {
   }
 
   /**
-   * Hands one RPC message to the page, from any thread. The default evaluates {@code
-   * receive(message)} of the bootstrap; an engine that can post a message to the page overrides it.
-   *
-   * @return What completes once the message is on its way, which is what holds a busy call back.
+   * The way back of the message channel, see {@link RpcMessageChannel}. The default evaluates
+   * {@code receive(message)} of the bootstrap; an engine that can post to the page overrides it.
+   * Called once, from {@link #installBridge()}.
    */
-  protected CompletableFuture<?> postRpcMessage(String message) {
-    return this.eval(
-        "window." + BridgeProtocol.CHANNEL + ".receive(" + ScriptUtil.quote(message) + ")");
-  }
-
-  /**
-   * Hands one large part of an RPC answer to the page as bytes, with {@code additionalDataAsJson}
-   * that tells the page which call and part it is. The default posts {@code fallback}, the same
-   * part as a Base64 message; an engine that can share memory with the page overrides it.
-   */
-  protected CompletableFuture<?> postRpcBuffer(
-      byte[] data, String additionalDataAsJson, Supplier<String> fallback) {
-    return this.postRpcMessage(fallback.get());
+  protected RpcMessageChannel rpcMessageChannel() {
+    return message ->
+        this.eval(
+            "window." + BridgeProtocol.CHANNEL + ".receive(" + ScriptUtil.quote(message) + ")");
   }
 
   /**
@@ -297,11 +292,6 @@ public abstract class AbstractWindow implements Window {
       case BridgeProtocol.CLOSE_CALL -> _ -> this.close();
       default -> null;
     };
-  }
-
-  /** The codec of the application, for {@link dev.ivchenko.lwjwae.rpc.RpcCall#value}. */
-  final BridgeCodec rpcCodec() {
-    return this.application.requireCodec();
   }
 
   private boolean isTrustedOrigin(String origin) {
@@ -336,6 +326,7 @@ public abstract class AbstractWindow implements Window {
    * once its native view exists and before the first page loads.
    */
   protected final void installBridge() {
+    this.messageCalls = new MessageRpcCalls(this, this.rpcMessageChannel(), this.token);
     BridgeCodec codec = this.application.parameters().codec();
     // Without a codec, the page has no encoder: an untyped call with a non-string payload sends
     // String(payload), and a typed call fails on the Java side before it reaches the page.
@@ -351,39 +342,14 @@ public abstract class AbstractWindow implements Window {
 
   /**
    * Handles one message from the page: an RPC call or its cancellation, see {@link
-   * MessageRpcExchange}. A backend calls this from the callback that the engine delivers messages
-   * on, on the UI thread. A message without the token of the window is reported and dropped.
+   * MessageRpcCalls}. A backend calls this from the callback that the engine delivers messages on,
+   * on the UI thread. A message without the token of the window is reported and dropped.
    */
   protected final void handleBridgeMessage(String message) {
-    String[] fields = message.split(BridgeProtocol.SEPARATOR, 8);
-    boolean call = fields[0].equals(MessageRpcExchange.TAG) && fields.length == 8;
-    boolean cancel = fields[0].equals(MessageRpcExchange.CANCEL_TAG) && fields.length == 4;
-    if (!call && !cancel) {
-      ThrowableUtil.report(new IllegalStateException("Malformed bridge message"));
-      return;
+    MessageRpcExchange exchange = this.messageCalls.receive(message);
+    if (exchange != null) {
+      this.serveRpc(exchange);
     }
-    if (!fields[1].equals(this.token)) {
-      ThrowableUtil.report(new IllegalStateException("Bridge message without the window token"));
-      return;
-    }
-    if (cancel) {
-      MessageRpcExchange running =
-          this.messageCalls.remove(MessageRpcExchange.key(fields[2], fields[3]));
-      if (running != null) {
-        running.cancel();
-      }
-      return;
-    }
-    String[] callFields = new String[6];
-    System.arraycopy(fields, 2, callFields, 0, 6);
-    MessageRpcExchange exchange = new MessageRpcExchange(this, callFields);
-    this.messageCalls.put(exchange.key(), exchange);
-    this.serveRpc(exchange);
-  }
-
-  /** Drops a call that answered in full from the calls that the page can still cancel. */
-  final void forgetMessageCall(MessageRpcExchange exchange) {
-    this.messageCalls.remove(exchange.key(), exchange);
   }
 
   /** Whether this window has a binding of its own under {@code name}. */
@@ -443,8 +409,10 @@ public abstract class AbstractWindow implements Window {
   protected final void markClosed() {
     this.closed = true;
     this.pageEvents.close();
-    this.messageCalls.values().forEach(MessageRpcExchange::cancel);
-    this.messageCalls.clear();
+    MessageRpcCalls calls = this.messageCalls;
+    if (calls != null) {
+      calls.cancelAll();
+    }
     this.listeners.shutdown();
     this.application.windowClosed(this);
   }

@@ -3,6 +3,7 @@ package dev.ivchenko.lwjwae.windows;
 import dev.ivchenko.lwjwae.AbstractWindow;
 import dev.ivchenko.lwjwae.WindowParameters;
 import dev.ivchenko.lwjwae.WindowPosition;
+import dev.ivchenko.lwjwae.bridge.RpcMessageChannel;
 import dev.ivchenko.lwjwae.event.LoadEvent;
 import dev.ivchenko.lwjwae.event.LoadState;
 import dev.ivchenko.lwjwae.exception.ResourceNotFoundException;
@@ -428,8 +429,14 @@ public class WindowsWindow extends AbstractWindow {
     return "{base:null,webview2:true}";
   }
 
+  /** Web messages and shared buffers; see {@link WindowsMessageChannel}. */
   @Override
-  protected CompletableFuture<?> postRpcMessage(String message) {
+  protected RpcMessageChannel rpcMessageChannel() {
+    return new WindowsMessageChannel(this);
+  }
+
+  /** Posts {@code message} to the page with {@code PostWebMessageAsString}, on the UI thread. */
+  CompletableFuture<?> postWebMessage(String message) {
     CompletableFuture<Void> posted = new CompletableFuture<>();
     this.dispatcher()
         .post(
@@ -449,13 +456,13 @@ public class WindowsWindow extends AbstractWindow {
 
   /**
    * Posts {@code data} as a shared buffer, which reaches the page as an {@code ArrayBuffer} with no
-   * encoding, or {@code fallback} where the runtime has no shared buffers, older than 114.
+   * encoding, or {@code fallback} where the runtime has no shared buffers, older than 114. On the
+   * UI thread.
    */
-  @Override
-  protected CompletableFuture<?> postRpcBuffer(
+  CompletableFuture<?> postSharedBuffer(
       byte[] data, String additionalDataAsJson, Supplier<String> fallback) {
     if (!this.sharedBuffers) {
-      return this.postRpcMessage(fallback.get());
+      return this.postWebMessage(fallback.get());
     }
     CompletableFuture<Void> posted = new CompletableFuture<>();
     this.dispatcher()

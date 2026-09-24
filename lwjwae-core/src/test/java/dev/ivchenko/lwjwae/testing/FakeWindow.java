@@ -5,6 +5,7 @@ import dev.ivchenko.lwjwae.AbstractWindow;
 import dev.ivchenko.lwjwae.WindowParameters;
 import dev.ivchenko.lwjwae.WindowPosition;
 import dev.ivchenko.lwjwae.bridge.BridgeProtocol;
+import dev.ivchenko.lwjwae.bridge.RpcMessageChannel;
 import dev.ivchenko.lwjwae.event.LoadEvent;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -177,8 +178,13 @@ public class FakeWindow extends AbstractWindow {
     return "(message) => fakeHost.post(message)";
   }
 
+  /** Records what the base class posts to the page instead of evaluating it. */
   @Override
-  protected CompletableFuture<?> postRpcMessage(String message) {
+  protected RpcMessageChannel rpcMessageChannel() {
+    return this::record;
+  }
+
+  private CompletableFuture<?> record(String message) {
     this.evaluations.lock();
     try {
       this.posted.add(message);
