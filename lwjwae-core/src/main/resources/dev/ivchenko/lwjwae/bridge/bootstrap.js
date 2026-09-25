@@ -447,5 +447,13 @@
         });
     }
 
-    window.${pageApi} = { listen, once, emit, open, close, openExternal, call: callRpc, invoke: rpcInvoke, RpcError, window: windowApi, dialog };
+    // The clipboard of the desktop, without the permissions and the user gesture that
+    // navigator.clipboard asks for: readText resolves to the text or null, writeText to nothing.
+    const clipboard = {
+        readText: () => callText("${clipboardCall}", "read-text")
+            .then(({ text }) => text.startsWith("1") ? text.substring(1) : null),
+        writeText: (text) => callText("${clipboardCall}", "write-text" + separator + String(text)).then(done)
+    };
+
+    window.${pageApi} = { listen, once, emit, open, close, openExternal, call: callRpc, invoke: rpcInvoke, RpcError, window: windowApi, dialog, clipboard };
 })();

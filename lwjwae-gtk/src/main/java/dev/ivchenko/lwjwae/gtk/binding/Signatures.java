@@ -54,6 +54,10 @@ public class Signatures {
   /** {@code T* f(gint, gint)}: {@code gtk_box_new}. */
   public final FunctionDescriptor POINTER_INT_INT = FunctionDescriptor.of(C_POINTER, C_INT, C_INT);
 
+  /** {@code void f(T*, U*, int)}: {@code gtk_clipboard_set_text}. */
+  public final FunctionDescriptor VOID_POINTER_POINTER_INT =
+      FunctionDescriptor.ofVoid(C_POINTER, C_POINTER, C_INT);
+
   /** {@code T* f(U*, int)}: {@code gdk_display_get_monitor}. */
   public final FunctionDescriptor POINTER_POINTER_INT =
       FunctionDescriptor.of(C_POINTER, C_POINTER, C_INT);

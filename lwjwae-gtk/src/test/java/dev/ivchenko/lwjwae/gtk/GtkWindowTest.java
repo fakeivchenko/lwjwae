@@ -17,6 +17,12 @@ class GtkWindowTest extends WindowContractTest {
     return System.getenv("WAYLAND_DISPLAY") == null || "x11".equals(System.getenv("GDK_BACKEND"));
   }
 
+  /** Wayland gives the clipboard only to the client with the focus that a person gave it. */
+  @Override
+  protected boolean canUseClipboardUnattended() {
+    return this.canPlaceWindows();
+  }
+
   /** Wayland keeps the focus with the compositor. */
   @Override
   protected boolean canTakeFocus() {

@@ -7,6 +7,7 @@ import dev.ivchenko.lwjwae.bridge.MessageRpcExchange;
 import dev.ivchenko.lwjwae.bridge.PageEvents;
 import dev.ivchenko.lwjwae.bridge.RpcMessageChannel;
 import dev.ivchenko.lwjwae.bridge.codec.BridgeCodec;
+import dev.ivchenko.lwjwae.clipboard.Clipboard;
 import dev.ivchenko.lwjwae.dialog.DialogCompletion;
 import dev.ivchenko.lwjwae.dialog.MessageDialogParameters;
 import dev.ivchenko.lwjwae.dialog.OpenDialogParameters;
@@ -42,6 +43,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -73,6 +75,9 @@ import java.util.stream.Collectors;
 public abstract class AbstractWindow implements Window {
   private static final Executor HANDLER_EXECUTOR = Executors.newVirtualThreadPerTaskExecutor();
   private static final SecureRandom TOKENS = new SecureRandom();
+
+  /** How long a read of the clipboard for a page may take before the call fails. */
+  private static final long CLIPBOARD_TIMEOUT_SECONDS = 30;
 
   private final AbstractApplication application;
   private final long id;
@@ -339,6 +344,7 @@ public abstract class AbstractWindow implements Window {
       case BridgeProtocol.OPEN_CALL -> this::openFromPage;
       case BridgeProtocol.CLOSE_CALL -> _ -> this.close();
       case BridgeProtocol.CONTROL_CALL -> this::controlFromPage;
+      case BridgeProtocol.CLIPBOARD_CALL -> this::clipboardFromPage;
       case BridgeProtocol.DIALOG_CALL -> this::dialogFromPage;
       default -> null;
     };
@@ -458,6 +464,27 @@ public abstract class AbstractWindow implements Window {
       case "open-external" -> this.leave(argument);
       case "state" -> call.reply(this.dispatcher().call(this::stateJson));
       default -> throw RpcException.badRequest("malformed-control", "No such action: " + parts[0]);
+    }
+  }
+
+  /**
+   * {@code window.lwjwae.clipboard}: {@code read-text} answers {@code 1} and the text, or {@code
+   * 0}; {@code write-text} puts the text after the separator on the clipboard.
+   */
+  private void clipboardFromPage(RpcCall call) throws Exception {
+    String[] parts = call.text().split(BridgeProtocol.SEPARATOR, 2);
+    Clipboard clipboard = this.application.clipboard();
+    switch (parts[0]) {
+      case "read-text" ->
+          call.reply(
+              clipboard
+                  .readText()
+                  .get(CLIPBOARD_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                  .map(text -> "1" + text)
+                  .orElse("0"));
+      case "write-text" -> clipboard.writeText(parts.length > 1 ? parts[1] : "");
+      default ->
+          throw RpcException.badRequest("malformed-clipboard", "No such action: " + parts[0]);
     }
   }
 

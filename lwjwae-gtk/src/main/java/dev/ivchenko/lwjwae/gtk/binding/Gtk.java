@@ -28,6 +28,16 @@ public class Gtk {
   /** {@code GTK_WIN_POS_CENTER}: the window opens in the middle of the screen. */
   public final int WIN_POS_CENTER = 1;
 
+  private final MethodHandle CLIPBOARD_GET =
+      NativeLibraries.downcall(GTK, "gtk_clipboard_get", Signatures.POINTER_POINTER);
+  private final MethodHandle CLIPBOARD_SET_TEXT =
+      NativeLibraries.downcall(GTK, "gtk_clipboard_set_text", Signatures.VOID_POINTER_POINTER_INT);
+  private final MethodHandle CLIPBOARD_WAIT_FOR_TEXT =
+      NativeLibraries.downcall(GTK, "gtk_clipboard_wait_for_text", Signatures.POINTER_POINTER);
+
+  /** {@code GDK_SELECTION_CLIPBOARD}: the atom of the clipboard that Ctrl+C fills, a constant. */
+  private final MemorySegment SELECTION_CLIPBOARD = MemorySegment.ofAddress(69);
+
   private final MethodHandle INIT_CHECK =
       NativeLibraries.downcall(GTK, "gtk_init_check", Signatures.INT_POINTER_POINTER);
   private final MethodHandle MAIN = NativeLibraries.downcall(GTK, "gtk_main", Signatures.VOID_VOID);
@@ -751,5 +761,24 @@ public class Gtk {
   @SneakyThrows
   public void statusIconSetVisible(MemorySegment icon, boolean visible) {
     STATUS_ICON_SET_VISIBLE.invokeExact(icon, visible ? 1 : 0);
+  }
+
+  /** Puts {@code text} on the clipboard that Ctrl+C fills. */
+  @SneakyThrows
+  public void clipboardSetText(String text) {
+    MemorySegment clipboard = (MemorySegment) CLIPBOARD_GET.invokeExact(SELECTION_CLIPBOARD);
+    try (Arena arena = Arena.ofConfined()) {
+      CLIPBOARD_SET_TEXT.invokeExact(clipboard, arena.allocateFrom(text), -1);
+    }
+  }
+
+  /**
+   * The text on the clipboard, or {@code null} for none: {@code gtk_clipboard_wait_for_text}, which
+   * runs the main loop until the owner of the clipboard answered.
+   */
+  @SneakyThrows
+  public String clipboardWaitForText() {
+    MemorySegment clipboard = (MemorySegment) CLIPBOARD_GET.invokeExact(SELECTION_CLIPBOARD);
+    return Glib.takeString((MemorySegment) CLIPBOARD_WAIT_FOR_TEXT.invokeExact(clipboard));
   }
 }

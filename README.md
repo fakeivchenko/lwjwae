@@ -154,6 +154,9 @@ dependencies {
 - **Windows under control.** Minimize, maximize, full screen, on top, focus, size limits, and events
   for every change of a window in Java and on the page. With a state key, a window opens the way it
   last closed.
+- **Clipboard.** `application.clipboard()` reads and writes the text of the desktop clipboard from
+  Java, and `lwjwae.clipboard` does the same on the page, without the prompts of
+  `navigator.clipboard`.
 - **Screens.** `application.screens()` and `window.screen()` tell where the screens are, their work
   areas and scales; a window that remembers its place doesn't open on a monitor that is gone.
 - **Native dialogs.** `showOpenDialog`, `showSaveDialog`, and `showMessageDialog` on a window, and

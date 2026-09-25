@@ -5,6 +5,8 @@ import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.SymbolLookup;
 import java.lang.invoke.MethodHandle;
+import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.Optional;
 import lombok.SneakyThrows;
 import lombok.experimental.UtilityClass;
@@ -27,6 +29,17 @@ public class Kernel32 {
       NativeLibraries.downcall(KERNEL32, "LoadLibraryExW", Signatures.POINTER_POINTER_POINTER_INT);
   private final MethodHandle GET_PROC_ADDRESS =
       NativeLibraries.downcall(KERNEL32, "GetProcAddress", Signatures.POINTER_POINTER_POINTER);
+  private final MethodHandle GLOBAL_ALLOC =
+      NativeLibraries.downcall(KERNEL32, "GlobalAlloc", Signatures.POINTER_INT_LONG);
+  private final MethodHandle GLOBAL_LOCK =
+      NativeLibraries.downcall(KERNEL32, "GlobalLock", Signatures.POINTER_POINTER);
+  private final MethodHandle GLOBAL_UNLOCK =
+      NativeLibraries.downcall(KERNEL32, "GlobalUnlock", Signatures.INT_POINTER);
+  private final MethodHandle GLOBAL_FREE =
+      NativeLibraries.downcall(KERNEL32, "GlobalFree", Signatures.POINTER_POINTER);
+
+  /** {@code GMEM_MOVEABLE}: the kind of memory that the clipboard takes. */
+  private final int GMEM_MOVEABLE = 0x0002;
 
   /** {@code GetModuleHandleW(NULL)}: the instance handle of the executable. */
   @SneakyThrows
@@ -76,5 +89,48 @@ public class Kernel32 {
         throw new IllegalStateException(t);
       }
     };
+  }
+
+  /**
+   * A copy of {@code text} as NUL-terminated UTF-16 in movable global memory, the form that {@code
+   * SetClipboardData} takes; the caller hands it over or frees it with {@link #globalFree}.
+   *
+   * @throws IllegalStateException If Windows has no memory for it.
+   */
+  @SneakyThrows
+  public MemorySegment globalText(String text) {
+    byte[] characters = text.getBytes(StandardCharsets.UTF_16LE);
+    // Two zero bytes more: the NUL that ends a UTF-16 string.
+    byte[] bytes = Arrays.copyOf(characters, characters.length + 2);
+    MemorySegment memory =
+        (MemorySegment) GLOBAL_ALLOC.invokeExact(GMEM_MOVEABLE, (long) bytes.length);
+    if (memory.equals(MemorySegment.NULL)) {
+      throw new IllegalStateException("GlobalAlloc failed: " + Kernel32.lastError());
+    }
+    MemorySegment locked = (MemorySegment) GLOBAL_LOCK.invokeExact(memory);
+    MemorySegment.copy(
+        MemorySegment.ofArray(bytes), 0, locked.reinterpret(bytes.length), 0, bytes.length);
+    int _ = (int) GLOBAL_UNLOCK.invokeExact(memory);
+    return memory;
+  }
+
+  /** The NUL-terminated UTF-16 text in global memory that another owner holds. */
+  @SneakyThrows
+  public String readGlobalText(MemorySegment memory) {
+    MemorySegment locked = (MemorySegment) GLOBAL_LOCK.invokeExact(memory);
+    if (locked.equals(MemorySegment.NULL)) {
+      return null;
+    }
+    try {
+      return Wide.read(locked);
+    } finally {
+      int _ = (int) GLOBAL_UNLOCK.invokeExact(memory);
+    }
+  }
+
+  /** Calls {@code GlobalFree}. */
+  @SneakyThrows
+  public void globalFree(MemorySegment memory) {
+    MemorySegment _ = (MemorySegment) GLOBAL_FREE.invokeExact(memory);
   }
 }

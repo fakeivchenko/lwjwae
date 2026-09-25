@@ -138,6 +138,15 @@ public class Gtk {
       NativeLibraries.downcall(GTK, "gtk_settings_get_default", Signatures.POINTER_VOID);
   private final MethodHandle DISPLAY_GET_DEFAULT =
       NativeLibraries.downcall(GTK, "gdk_display_get_default", Signatures.POINTER_VOID);
+  private final MethodHandle DISPLAY_GET_CLIPBOARD =
+      NativeLibraries.downcall(GTK, "gdk_display_get_clipboard", Signatures.POINTER_POINTER);
+  private final MethodHandle CLIPBOARD_SET_TEXT =
+      NativeLibraries.downcall(GTK, "gdk_clipboard_set_text", Signatures.VOID_POINTER_POINTER);
+  private final MethodHandle CLIPBOARD_READ_TEXT_ASYNC =
+      NativeLibraries.downcall(GTK, "gdk_clipboard_read_text_async", Signatures.VOID_POINTER_X4);
+  private final MethodHandle CLIPBOARD_READ_TEXT_FINISH =
+      NativeLibraries.downcall(
+          GTK, "gdk_clipboard_read_text_finish", Signatures.POINTER_POINTER_POINTER_POINTER);
   private final MethodHandle DISPLAY_GET_MONITORS =
       NativeLibraries.downcall(GTK, "gdk_display_get_monitors", Signatures.POINTER_POINTER);
   private final MethodHandle DISPLAY_GET_MONITOR_AT_SURFACE =
@@ -399,6 +408,41 @@ public class Gtk {
     return new int[] {
       (int) WIDGET_GET_WIDTH.invokeExact(widget), (int) WIDGET_GET_HEIGHT.invokeExact(widget)
     };
+  }
+
+  /** The clipboard of the default display, which GDK owns. */
+  @SneakyThrows
+  public MemorySegment clipboard() {
+    return (MemorySegment)
+        DISPLAY_GET_CLIPBOARD.invokeExact((MemorySegment) DISPLAY_GET_DEFAULT.invokeExact());
+  }
+
+  /** Puts {@code text} on {@code clipboard}. */
+  @SneakyThrows
+  public void clipboardSetText(MemorySegment clipboard, String text) {
+    try (Arena arena = Arena.ofConfined()) {
+      CLIPBOARD_SET_TEXT.invokeExact(clipboard, arena.allocateFrom(text));
+    }
+  }
+
+  /** Asks for the text of {@code clipboard}; {@code callback} gets the answer later. */
+  @SneakyThrows
+  public void clipboardReadTextAsync(
+      MemorySegment clipboard, MemorySegment callback, MemorySegment userData) {
+    CLIPBOARD_READ_TEXT_ASYNC.invokeExact(clipboard, MemorySegment.NULL, callback, userData);
+  }
+
+  /** The text that a read of {@code clipboard} found, or {@code null} for none. */
+  @SneakyThrows
+  public String clipboardReadTextFinish(MemorySegment clipboard, MemorySegment result) {
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment error = arena.allocate(Signatures.C_POINTER);
+      error.set(Signatures.C_POINTER, 0, MemorySegment.NULL);
+      MemorySegment text =
+          (MemorySegment) CLIPBOARD_READ_TEXT_FINISH.invokeExact(clipboard, result, error);
+      String _ = Glib.takeErrorMessage(error.get(Signatures.C_POINTER, 0));
+      return Glib.takeString(text);
+    }
   }
 
   /**

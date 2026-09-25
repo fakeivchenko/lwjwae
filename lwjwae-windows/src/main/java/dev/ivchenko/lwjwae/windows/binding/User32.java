@@ -230,6 +230,16 @@ public class User32 {
       NativeLibraries.downcall(USER32, "MonitorFromWindow", Signatures.POINTER_POINTER_INT);
   private final MethodHandle GET_MONITOR_INFO =
       NativeLibraries.downcall(USER32, "GetMonitorInfoW", Signatures.INT_POINTER_POINTER);
+  private final MethodHandle OPEN_CLIPBOARD =
+      NativeLibraries.downcall(USER32, "OpenClipboard", Signatures.INT_POINTER);
+  private final MethodHandle CLOSE_CLIPBOARD =
+      NativeLibraries.downcall(USER32, "CloseClipboard", Signatures.INT_VOID);
+  private final MethodHandle EMPTY_CLIPBOARD =
+      NativeLibraries.downcall(USER32, "EmptyClipboard", Signatures.INT_VOID);
+  private final MethodHandle SET_CLIPBOARD_DATA =
+      NativeLibraries.downcall(USER32, "SetClipboardData", Signatures.POINTER_INT_POINTER);
+  private final MethodHandle GET_CLIPBOARD_DATA =
+      NativeLibraries.downcall(USER32, "GetClipboardData", Signatures.POINTER_INT);
   private final MethodHandle ENUM_DISPLAY_MONITORS =
       NativeLibraries.downcall(USER32, "EnumDisplayMonitors", Signatures.INT_POINTER_X3_LONG);
   private final MethodHandle SET_WINDOW_POS =
@@ -760,6 +770,51 @@ public class User32 {
         (int)
             SET_WINDOW_POS.invokeExact(
                 hwnd, MemorySegment.NULL, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+  }
+
+  /** {@code CF_UNICODETEXT}: text in UTF-16, the one text format that every application reads. */
+  public final int CF_UNICODETEXT = 13;
+
+  /**
+   * Opens the clipboard for {@code owner}, trying a few times over 100 milliseconds, since another
+   * application may hold it for a moment.
+   *
+   * @return Whether it's open; {@link #closeClipboard()} closes it.
+   */
+  @SneakyThrows
+  public boolean openClipboard(MemorySegment owner) {
+    for (int attempt = 0; attempt < 10; attempt++) {
+      if ((int) OPEN_CLIPBOARD.invokeExact(owner) != 0) {
+        return true;
+      }
+      Thread.sleep(10);
+    }
+    return false;
+  }
+
+  /** Calls {@code CloseClipboard}. */
+  @SneakyThrows
+  public void closeClipboard() {
+    int _ = (int) CLOSE_CLIPBOARD.invokeExact();
+  }
+
+  /**
+   * Replaces what the open clipboard has with {@code memory} in {@code format}, which the clipboard
+   * owns from then on.
+   *
+   * @return Whether the clipboard took it; the caller frees the memory when it didn't.
+   */
+  @SneakyThrows
+  public boolean setClipboardData(int format, MemorySegment memory) {
+    int _ = (int) EMPTY_CLIPBOARD.invokeExact();
+    return !((MemorySegment) SET_CLIPBOARD_DATA.invokeExact(format, memory))
+        .equals(MemorySegment.NULL);
+  }
+
+  /** What the open clipboard has in {@code format}, which it keeps owning, or {@code NULL}. */
+  @SneakyThrows
+  public MemorySegment clipboardData(int format) {
+    return (MemorySegment) GET_CLIPBOARD_DATA.invokeExact(format);
   }
 
   /**

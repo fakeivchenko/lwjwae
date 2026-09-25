@@ -5,6 +5,7 @@ import dev.ivchenko.lwjwae.AbstractWindow;
 import dev.ivchenko.lwjwae.ApplicationParameters;
 import dev.ivchenko.lwjwae.Screen;
 import dev.ivchenko.lwjwae.WindowParameters;
+import dev.ivchenko.lwjwae.clipboard.Clipboard;
 import dev.ivchenko.lwjwae.exception.ResourceNotFoundException;
 import dev.ivchenko.lwjwae.foreign.NativeLibraries;
 import dev.ivchenko.lwjwae.glib.FreedesktopNotifier;
@@ -74,6 +75,11 @@ public class Gtk4Application extends AbstractApplication {
   @Override
   public String engine() {
     return "WebKitGTK " + WebKit.version();
+  }
+
+  @Override
+  protected Clipboard createClipboard() {
+    return new Gtk4Clipboard(this.dispatcher());
   }
 
   @Override

@@ -8,6 +8,7 @@ import dev.ivchenko.lwjwae.Window;
 import dev.ivchenko.lwjwae.WindowParameters;
 import dev.ivchenko.lwjwae.WindowPosition;
 import dev.ivchenko.lwjwae.WindowSize;
+import dev.ivchenko.lwjwae.clipboard.Clipboard;
 import dev.ivchenko.lwjwae.dialog.FileType;
 import dev.ivchenko.lwjwae.dialog.MessageButtons;
 import dev.ivchenko.lwjwae.dialog.MessageDialogParameters;
@@ -36,6 +37,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BooleanSupplier;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -214,6 +216,14 @@ public abstract class WindowContractTest extends DisplayContractTest {
    * compositor decide that.
    */
   protected boolean canTakeFocus() {
+    return true;
+  }
+
+  /**
+   * Whether a test may use the clipboard without a person at the keyboard. Wayland gives it only to
+   * the client that the user gave the focus to with an input of theirs.
+   */
+  protected boolean canUseClipboardUnattended() {
     return true;
   }
 
@@ -643,6 +653,43 @@ public abstract class WindowContractTest extends DisplayContractTest {
 
     try (Application next = Application.createSingleInstance(parameters).orElseThrow()) {
       Assertions.assertFalse(next.isClosed(), "a closed instance gives the name up");
+    }
+  }
+
+  @Test
+  void textGoesThroughTheClipboardBetweenJavaAndThePage() throws Exception {
+    Assumptions.assumeTrue(
+        this.canUseClipboardUnattended(), "Wayland gives the clipboard to the focused client");
+    try (Application application = Application.create()) {
+      Window window =
+          application.open(
+              WindowParameters.builder().title("lwjwae :: clipboard").size(400, 300).build());
+      final var loaded = Loads.expectFinished(window);
+      window.loadResource("test-app/index.html");
+      window.show();
+      loaded.get(30, TimeUnit.SECONDS);
+      window.focus();
+      WindowContractTest.awaitTrue(window::isVisible, "the window must show");
+      Clipboard clipboard = application.clipboard();
+
+      String fromJava = "lwjwae from Java " + System.nanoTime();
+      clipboard.writeText(fromJava);
+      Assertions.assertEquals(
+          Optional.of(fromJava), clipboard.readText().get(10, TimeUnit.SECONDS));
+      Loads.eval(
+          window,
+          "lwjwae.clipboard.readText().then(text => { window.__read = text; }); undefined;");
+      Assertions.assertEquals(fromJava, Loads.awaitValue(window, "window.__read"));
+
+      String fromPage = "lwjwae from the page " + System.nanoTime();
+      Loads.eval(
+          window,
+          "lwjwae.clipboard.writeText('"
+              + fromPage
+              + "').then(() => { window.__written = true; }); undefined;");
+      Assertions.assertEquals("true", Loads.awaitValue(window, "window.__written"));
+      Assertions.assertEquals(
+          Optional.of(fromPage), clipboard.readText().get(10, TimeUnit.SECONDS));
     }
   }
 

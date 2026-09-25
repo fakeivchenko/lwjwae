@@ -95,6 +95,14 @@ public class BridgeProtocol {
   public final String DIALOG_CALL = "lwjwae:dialog";
 
   /**
+   * The name under which a page reads and writes the clipboard of the desktop, through {@code
+   * window.lwjwae.clipboard}. Reserved like {@link #EVENT_CALL}. The body is {@code read-text}, or
+   * {@code write-text} and the text after {@link #SEPARATOR}; a read answers {@code 1} and the
+   * text, or {@code 0} when there is none.
+   */
+  public final String CLIPBOARD_CALL = "lwjwae:clipboard";
+
+  /**
    * The separator between the kinds of file of a dialog in a {@link #DIALOG_CALL}: the ASCII record
    * separator.
    */
@@ -184,6 +192,7 @@ public class BridgeProtocol {
         .replace("${closeCall}", CLOSE_CALL)
         .replace("${controlCall}", CONTROL_CALL)
         .replace("${dialogCall}", DIALOG_CALL)
+        .replace("${clipboardCall}", CLIPBOARD_CALL)
         .replace("${resizeEdges}", edges)
         .replace("${separator}", "\u001f")
         .replace("${post}", postMessage)

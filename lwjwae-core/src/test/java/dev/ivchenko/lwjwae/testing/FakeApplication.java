@@ -6,6 +6,7 @@ import dev.ivchenko.lwjwae.ApplicationParameters;
 import dev.ivchenko.lwjwae.Screen;
 import dev.ivchenko.lwjwae.ScreenArea;
 import dev.ivchenko.lwjwae.WindowParameters;
+import dev.ivchenko.lwjwae.clipboard.Clipboard;
 import dev.ivchenko.lwjwae.notification.Notification;
 import dev.ivchenko.lwjwae.notification.NotificationHandle;
 import dev.ivchenko.lwjwae.tray.Tray;
@@ -53,6 +54,11 @@ public class FakeApplication extends AbstractApplication {
 
   /** Every notification that was shown, in order. */
   public final List<Notification> shownNotifications = new CopyOnWriteArrayList<>();
+
+  @Override
+  protected Clipboard createClipboard() {
+    return new FakeClipboard();
+  }
 
   @Override
   protected Tray createTray(TrayIcon icon, Consumer<Tray> closed) {

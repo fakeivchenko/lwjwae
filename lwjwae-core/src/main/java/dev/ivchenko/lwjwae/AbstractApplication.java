@@ -2,6 +2,7 @@ package dev.ivchenko.lwjwae;
 
 import dev.ivchenko.lwjwae.bridge.BridgeProtocol;
 import dev.ivchenko.lwjwae.bridge.codec.BridgeCodec;
+import dev.ivchenko.lwjwae.clipboard.Clipboard;
 import dev.ivchenko.lwjwae.event.Event;
 import dev.ivchenko.lwjwae.event.EventSubscription;
 import dev.ivchenko.lwjwae.event.SecondInstanceEvent;
@@ -77,6 +78,8 @@ public abstract class AbstractApplication implements Application {
   private final Condition idle = this.lifecycle.newCondition();
 
   private final AtomicBoolean closed = new AtomicBoolean();
+
+  private volatile Clipboard clipboard;
 
   // --- single instance, under the lock of the listener list ---
   private final List<Consumer<SecondInstanceEvent>> secondInstanceListeners = new ArrayList<>();
@@ -354,6 +357,32 @@ public abstract class AbstractApplication implements Application {
       throw new IllegalStateException("The application is closed");
     }
     return tray;
+  }
+
+  @Override
+  public final Clipboard clipboard() {
+    this.checkOpen();
+    Clipboard current = this.clipboard;
+    if (current == null) {
+      synchronized (this) {
+        if (this.clipboard == null) {
+          this.clipboard = this.createClipboard();
+        }
+        current = this.clipboard;
+      }
+    }
+    return current;
+  }
+
+  /**
+   * The clipboard of the backend, created on the first {@link #clipboard()}. The default throws,
+   * for a backend without one.
+   *
+   * @throws UnsupportedOperationException If the backend has no clipboard.
+   */
+  protected Clipboard createClipboard() {
+    throw new UnsupportedOperationException(
+        "The " + this.engine() + " backend has no clipboard yet");
   }
 
   /**

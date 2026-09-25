@@ -118,6 +118,19 @@
           ]
         }
       ]
+    },
+    {
+      "type": "dev.ivchenko.lwjwae.gtk4.Gtk4Clipboard",
+      "methods": [
+        {
+          "name": "onTextRead",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
+        }
+      ]
     }
   ],
   "resources": [
@@ -261,6 +274,15 @@
         "parameterTypes": [
           "void*"
         ]
+      },
+      {
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "void*",
+          "void*"
+        ]
       }
     ],
     "directUpcalls": [
@@ -391,6 +413,16 @@
         "parameterTypes": [
           "void*",
           "jint",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.gtk4.Gtk4Clipboard",
+        "method": "onTextRead",
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "void*",
           "void*"
         ]
       }

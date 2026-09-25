@@ -257,6 +257,25 @@ class AbstractWindowTest {
   }
 
   @Test
+  void thePageWritesAndReadsTheClipboard() throws Exception {
+    try (FakeApplication application = new FakeApplication()) {
+      FakeWindow window = application.openFake();
+
+      window.call(1, BridgeProtocol.CLIPBOARD_CALL, "read-text");
+      Assertions.assertEquals("0", window.awaitReply(1).body(), "nothing copied yet");
+
+      window.call(2, BridgeProtocol.CLIPBOARD_CALL, "write-text" + SEP + "copied " + SEP + " text");
+      Assertions.assertEquals(204, window.awaitReply(2).status());
+      Assertions.assertEquals(
+          Optional.of("copied " + SEP + " text"),
+          application.clipboard().readText().get(5, TimeUnit.SECONDS));
+
+      window.call(3, BridgeProtocol.CLIPBOARD_CALL, "read-text");
+      Assertions.assertEquals("1copied " + SEP + " text", window.awaitReply(3).body());
+    }
+  }
+
+  @Test
   void anUnknownNameIsRejectedOnThePageSide() throws Exception {
     try (FakeApplication application = new FakeApplication()) {
       FakeWindow window = application.openFake();

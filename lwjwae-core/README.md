@@ -231,6 +231,31 @@ only when the user answers.
 | Windows | `IFileOpenDialog` and `IFileSaveDialog`; the first extension of the chosen kind completes a name without one | `MessageBoxW`; the title of the window as its caption when there's none |
 | macOS | `NSOpenPanel` and `NSSavePanel` as sheets of the window; an open panel has no menu of kinds, so it shows the files of every kind | `NSAlert` as a sheet, which has no title |
 
+### Clipboard
+
+`application.clipboard()` is the clipboard of the desktop, the one of Ctrl+C or Command-C. A read
+returns a future, since the application that copied may answer later; a write takes the clipboard
+at once:
+
+```java
+Clipboard clipboard = application.clipboard();
+clipboard.writeText("https://example.com");
+Optional<String> text = clipboard.readText().get();
+```
+
+The page has the same through `window.lwjwae.clipboard`, without the permission prompts and the
+user gesture that `navigator.clipboard` asks for in a web view:
+
+```js
+await lwjwae.clipboard.writeText("copied");
+const text = await lwjwae.clipboard.readText(); // null when there is no text
+```
+
+Windows keeps what was written after the application exits, and so does macOS; on Linux, a
+clipboard manager of the desktop takes a copy, as most desktops have one. Wayland gives the
+clipboard only to the application whose window has the focus that the user gave it: a write or a
+read from a background thread, with no window in front, finds nothing.
+
 ### Links that leave the application
 
 A click in a page of the application on a link to another origin or a `mailto:` link,

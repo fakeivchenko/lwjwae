@@ -48,6 +48,7 @@ class Gtk4NativeImageMetadataTest extends NativeImageMetadataContractTest {
         Gtk4Dispatcher.class,
         Gtk4Window.class,
         Gtk4Dialogs.class,
-        Gtk4Application.class);
+        Gtk4Application.class,
+        Gtk4Clipboard.class);
   }
 }

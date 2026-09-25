@@ -5,6 +5,7 @@ import dev.ivchenko.lwjwae.AbstractWindow;
 import dev.ivchenko.lwjwae.ApplicationParameters;
 import dev.ivchenko.lwjwae.Screen;
 import dev.ivchenko.lwjwae.WindowParameters;
+import dev.ivchenko.lwjwae.clipboard.Clipboard;
 import dev.ivchenko.lwjwae.notification.Notification;
 import dev.ivchenko.lwjwae.notification.NotificationHandle;
 import dev.ivchenko.lwjwae.tray.Tray;
@@ -101,6 +102,11 @@ public class WindowsApplication extends AbstractApplication {
   @Override
   public String engine() {
     return this.dispatcher().call(() -> "WebView2 " + WebView2.browserVersion(this.environment()));
+  }
+
+  @Override
+  protected Clipboard createClipboard() {
+    return new WindowsClipboard(WindowsDispatcher.instance());
   }
 
   @Override

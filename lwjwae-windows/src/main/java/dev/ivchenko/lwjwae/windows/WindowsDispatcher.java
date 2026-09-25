@@ -66,6 +66,14 @@ public class WindowsDispatcher extends EventLoopDispatcher {
     return INSTANCE;
   }
 
+  /**
+   * The message-only window of the UI thread, which also owns what the application puts on the
+   * clipboard: {@code SetClipboardData} takes nothing from a clipboard opened without a window.
+   */
+  MemorySegment messageWindow() {
+    return this.messageWindow;
+  }
+
   @Override
   protected void initialize() {
     int hresult = Ole32.coInitializeApartment();

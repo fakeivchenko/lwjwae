@@ -1,6 +1,7 @@
 package dev.ivchenko.lwjwae;
 
 import dev.ivchenko.lwjwae.bridge.codec.BridgeCodec;
+import dev.ivchenko.lwjwae.clipboard.Clipboard;
 import dev.ivchenko.lwjwae.event.Event;
 import dev.ivchenko.lwjwae.event.EventSubscription;
 import dev.ivchenko.lwjwae.event.SecondInstanceEvent;
@@ -455,6 +456,14 @@ public interface Application extends AutoCloseable {
   default Tray tray(String icon, TrayMenuItem... menu) {
     return this.tray(TrayIcon.builder().icon(icon).menu(menu).build());
   }
+
+  /**
+   * The clipboard of the desktop.
+   *
+   * @throws UnsupportedOperationException If this backend has no clipboard yet.
+   * @throws IllegalStateException If the application is closed.
+   */
+  Clipboard clipboard();
 
   /**
    * Shows a desktop notification and returns the handle that takes it back.

@@ -5,6 +5,7 @@ import dev.ivchenko.lwjwae.AbstractWindow;
 import dev.ivchenko.lwjwae.ApplicationParameters;
 import dev.ivchenko.lwjwae.Screen;
 import dev.ivchenko.lwjwae.WindowParameters;
+import dev.ivchenko.lwjwae.clipboard.Clipboard;
 import dev.ivchenko.lwjwae.macos.binding.AppKit;
 import dev.ivchenko.lwjwae.macos.binding.WebKit;
 import dev.ivchenko.lwjwae.notification.Notification;
@@ -46,6 +47,11 @@ public class MacApplication extends AbstractApplication {
   @Override
   public String engine() {
     return this.dispatcher().call(() -> "WKWebView " + WebKit.version());
+  }
+
+  @Override
+  protected Clipboard createClipboard() {
+    return new MacClipboard(this.dispatcher());
   }
 
   @Override

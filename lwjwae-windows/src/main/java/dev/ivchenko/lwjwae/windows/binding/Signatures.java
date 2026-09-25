@@ -184,6 +184,17 @@ public class Signatures {
   /** {@code T* f(void)}: {@code CreatePopupMenu}. */
   public final FunctionDescriptor POINTER_VOID = FunctionDescriptor.of(C_POINTER);
 
+  /** {@code HANDLE f(UINT)}: {@code GetClipboardData}. */
+  public final FunctionDescriptor POINTER_INT = FunctionDescriptor.of(C_POINTER, C_INT);
+
+  /** {@code HANDLE f(UINT, HANDLE)}: {@code SetClipboardData}. */
+  public final FunctionDescriptor POINTER_INT_POINTER =
+      FunctionDescriptor.of(C_POINTER, C_INT, C_POINTER);
+
+  /** {@code HGLOBAL f(UINT, SIZE_T)}: {@code GlobalAlloc}. */
+  public final FunctionDescriptor POINTER_INT_LONG =
+      FunctionDescriptor.of(C_POINTER, C_INT, C_LONG_PTR);
+
   /** {@code T* f(U*, V*, W*, X*, Y*, int)}: {@code ShellExecuteW}. */
   public final FunctionDescriptor POINTER_POINTER_X5_INT =
       FunctionDescriptor.of(

@@ -23,6 +23,12 @@ class Gtk4WindowTest extends WindowContractTest {
     return Gtk4WindowTest.isX11();
   }
 
+  /** Wayland gives the clipboard only to the client with the focus that a person gave it. */
+  @Override
+  protected boolean canUseClipboardUnattended() {
+    return Gtk4WindowTest.isX11();
+  }
+
   /** Wayland keeps the focus with the compositor. */
   @Override
   protected boolean canTakeFocus() {

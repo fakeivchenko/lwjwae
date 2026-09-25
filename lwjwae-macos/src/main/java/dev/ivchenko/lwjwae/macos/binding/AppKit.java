@@ -619,4 +619,31 @@ public class AppKit {
   public void setApplicationDelegate(MemorySegment delegate) {
     ObjC.sendVoid(AppKit.application(), "setDelegate:", delegate);
   }
+
+  // --- the pasteboard ---
+
+  /** {@code NSPasteboardTypeString}: plain text in UTF-8, as every application reads it. */
+  private final String PASTEBOARD_TYPE_STRING = "public.utf8-plain-text";
+
+  /**
+   * Replaces what the general pasteboard, the one of Command-C, has with {@code text}. {@code
+   * setString:forType:} answers whether it took the text, which is left unread: an integer result
+   * in its register, as for {@code sendActionOn:}.
+   */
+  public void setPasteboardText(String text) {
+    MemorySegment pasteboard = ObjC.send(ObjC.cls("NSPasteboard"), "generalPasteboard");
+    long _ = ObjC.sendLong(pasteboard, "clearContents");
+    ObjC.sendVoid(
+        pasteboard,
+        "setString:forType:",
+        Foundation.string(text),
+        Foundation.string(PASTEBOARD_TYPE_STRING));
+  }
+
+  /** The text on the general pasteboard, or {@code null} for none. */
+  public String pasteboardText() {
+    MemorySegment pasteboard = ObjC.send(ObjC.cls("NSPasteboard"), "generalPasteboard");
+    return Foundation.string(
+        ObjC.send(pasteboard, "stringForType:", Foundation.string(PASTEBOARD_TYPE_STRING)));
+  }
 }

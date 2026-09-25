@@ -136,6 +136,10 @@ public class Signatures {
   public final FunctionDescriptor POINTER_POINTER_POINTER_POINTER =
       FunctionDescriptor.of(C_POINTER, C_POINTER, C_POINTER, C_POINTER);
 
+  /** {@code void f(T*, U*, V*, W*)}: {@code gdk_clipboard_read_text_async}. */
+  public final FunctionDescriptor VOID_POINTER_X4 =
+      FunctionDescriptor.ofVoid(C_POINTER, C_POINTER, C_POINTER, C_POINTER);
+
   /** {@code void f(T*, U*, V*, W*, X*)}: {@code webkit_web_context_register_uri_scheme}. */
   public final FunctionDescriptor VOID_POINTER_X5 =
       FunctionDescriptor.ofVoid(C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER);
