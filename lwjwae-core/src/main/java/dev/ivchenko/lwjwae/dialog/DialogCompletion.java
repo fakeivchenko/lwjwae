@@ -39,7 +39,7 @@ public final class DialogCompletion<T> {
 
   /**
    * Registers how to close the dialog, once it's shown: it runs on the UI thread if the future is
-   * cancelled, at once if it already was.
+   * canceled, at once if it already was.
    */
   public void onCancel(Runnable closer) {
     if (!this.closer.compareAndSet(null, closer)) {
@@ -58,7 +58,7 @@ public final class DialogCompletion<T> {
     this.future.completeExceptionally(failure);
   }
 
-  /** Whether the application no longer waits: answered, failed, or cancelled. */
+  /** Whether the application no longer waits: answered, failed, or canceled. */
   public boolean isDone() {
     return this.future.isDone();
   }

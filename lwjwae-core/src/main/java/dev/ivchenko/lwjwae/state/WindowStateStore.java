@@ -27,6 +27,8 @@ public final class WindowStateStore {
   private final Path file;
 
   /**
+   * A store in {@code directory}.
+   *
    * @param directory The data directory of the application, created when a state is saved.
    */
   public WindowStateStore(Path directory) {

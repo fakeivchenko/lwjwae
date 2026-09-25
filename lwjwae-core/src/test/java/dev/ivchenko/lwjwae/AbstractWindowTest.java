@@ -364,7 +364,7 @@ class AbstractWindowTest {
   }
 
   @Test
-  void cancellingACallInterruptsItsHandler() throws Exception {
+  void cancelingCallInterruptsItsHandler() throws Exception {
     try (FakeApplication application = new FakeApplication()) {
       FakeWindow window = application.openFake();
       CountDownLatch started = new CountDownLatch(1);
@@ -472,7 +472,7 @@ class AbstractWindowTest {
   }
 
   @Test
-  void aDoubleClickOnADragRegionMaximizesOnlyAMaximizableWindow() throws Exception {
+  void doubleClickOnDragRegionMaximizesOnlyMaximizableWindow() throws Exception {
     try (FakeApplication application = new FakeApplication()) {
       FakeWindow window = application.openFake();
       window.call(1, BridgeProtocol.CONTROL_CALL, "title-bar-double-click");
@@ -490,7 +490,7 @@ class AbstractWindowTest {
   }
 
   @Test
-  void aWindowThatIsNotClosableRefusesTheUserButNotJava() {
+  void windowThatIsNotClosableRefusesTheUserButNotJava() {
     try (FakeApplication application = new FakeApplication()) {
       FakeWindow window = application.openFake(WindowParameters.builder().closable(false).build());
       window.requestClose();
@@ -522,7 +522,7 @@ class AbstractWindowTest {
   }
 
   @Test
-  void aNewWindowOfTheApplicationOpensInPlaceAndOneFromElsewhereLeaves() throws Exception {
+  void newWindowOfTheApplicationOpensInPlaceAndOneFromElsewhereLeaves() throws Exception {
     try (FakeApplication application = new FakeApplication()) {
       FakeWindow window = application.openFake();
       BlockingQueue<String> handled = new LinkedBlockingQueue<>();
@@ -556,7 +556,7 @@ class AbstractWindowTest {
   void dialogsAnswerJavaAndCancellingOneClosesIt() throws Exception {
     try (FakeApplication application = new FakeApplication()) {
       FakeWindow window = application.openFake();
-      CompletableFuture<List<Path>> opened =
+      final CompletableFuture<List<Path>> opened =
           window.showOpenDialog(OpenDialogParameters.builder().multiple(true).build());
       PresentedDialog open = window.dialogs.poll(5, TimeUnit.SECONDS);
       Assertions.assertNotNull(open);
@@ -574,7 +574,7 @@ class AbstractWindowTest {
 
       CompletableFuture<Optional<Path>> saved =
           window.showSaveDialog(SaveDialogParameters.createDefault());
-      PresentedDialog save = window.dialogs.poll(5, TimeUnit.SECONDS);
+      final PresentedDialog save = window.dialogs.poll(5, TimeUnit.SECONDS);
       window.close();
       window.awaitUiThread();
       Assertions.assertTrue(saved.isCancelled(), "a closed window cancels its dialogs");
@@ -596,7 +596,15 @@ class AbstractWindowTest {
               "/home",
               "1",
               "",
-              "Images\u001dpng\u001d.JPG\u001eText\u001dtxt"));
+              "Images"
+                  + BridgeProtocol.GROUP_SEPARATOR
+                  + "png"
+                  + BridgeProtocol.GROUP_SEPARATOR
+                  + ".JPG"
+                  + BridgeProtocol.RECORD_SEPARATOR
+                  + "Text"
+                  + BridgeProtocol.GROUP_SEPARATOR
+                  + "txt"));
       PresentedDialog open = window.dialogs.poll(5, TimeUnit.SECONDS);
       OpenDialogParameters parameters = (OpenDialogParameters) open.parameters();
       Assertions.assertEquals("Pick", parameters.title());

@@ -54,6 +54,8 @@ public final class MessageRpcExchange implements RpcExchange {
   private int parts;
 
   /**
+   * Takes a call from its message.
+   *
    * @param calls The running calls of the window, which this one leaves once it has answered.
    * @param fields The fields of a call message after the token: {@code doc}, {@code id}, the name,
    *     the media type, the encoding, and the body.

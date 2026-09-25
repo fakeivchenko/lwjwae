@@ -125,18 +125,20 @@ class WindowsDialogs {
       MemorySegment owner,
       MessageDialogParameters parameters,
       DialogCompletion<Boolean> completion) {
-    int type =
+    int buttons =
         switch (parameters.buttons()) {
-              case OK -> User32.MB_OK;
-              case OK_CANCEL -> User32.MB_OKCANCEL;
-              case YES_NO -> User32.MB_YESNO;
-            }
-            | switch (parameters.level()) {
-              case INFO -> User32.MB_ICONINFORMATION;
-              case WARNING -> User32.MB_ICONWARNING;
-              case ERROR -> User32.MB_ICONERROR;
-              case QUESTION -> User32.MB_ICONQUESTION;
-            };
+          case OK -> User32.MB_OK;
+          case OK_CANCEL -> User32.MB_OKCANCEL;
+          case YES_NO -> User32.MB_YESNO;
+        };
+    int icon =
+        switch (parameters.level()) {
+          case INFO -> User32.MB_ICONINFORMATION;
+          case WARNING -> User32.MB_ICONWARNING;
+          case ERROR -> User32.MB_ICONERROR;
+          case QUESTION -> User32.MB_ICONQUESTION;
+        };
+    int type = buttons | icon;
     String text =
         parameters.detail() == null
             ? parameters.message()

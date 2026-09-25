@@ -660,6 +660,11 @@ public class Gtk4Window extends AbstractWindow {
     Gtk4Window.changed(userData);
   }
 
+  /**
+   * Tells the window found by {@code userData}, if it's still open, that it may have changed.
+   *
+   * <p>Suppressed warnings: {@code resource}: the window is only borrowed.
+   */
   @SuppressWarnings("resource")
   private static void changed(MemorySegment userData) {
     try {

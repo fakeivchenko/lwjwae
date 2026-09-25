@@ -39,6 +39,8 @@ public final class WindowEvents {
   private volatile WindowSnapshot last;
 
   /**
+   * Starts from the window as it is now.
+   *
    * @param window The window whose events these are.
    * @param page Where the events go for the page, on the UI thread.
    */

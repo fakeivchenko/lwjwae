@@ -283,7 +283,7 @@ public abstract class WindowContractTest extends DisplayContractTest {
       // Whether this process may take the focus at all: Windows refuses it to one in the
       // background, and the test runner may be one.
       Thread.sleep(300);
-      boolean mayTakeFocus = this.canTakeFocus() && window.isFocused();
+      final boolean mayTakeFocus = this.canTakeFocus() && window.isFocused();
 
       window.maximize();
       WindowContractTest.awaitTrue(window::isMaximized, "maximize must maximize");
@@ -409,7 +409,7 @@ public abstract class WindowContractTest extends DisplayContractTest {
   }
 
   @Test
-  void windowWithoutATitleBarIsControlledFromThePage() throws Exception {
+  void windowWithoutTitleBarIsControlledFromThePage() throws Exception {
     try (Application application = Application.create()) {
       Window window =
           application.open(
@@ -494,7 +494,7 @@ public abstract class WindowContractTest extends DisplayContractTest {
       window.loadResource("test-app/index.html");
       window.show();
       loaded.get(30, TimeUnit.SECONDS);
-      String page = window.url();
+      final String page = window.url();
 
       Loads.eval(
           window,

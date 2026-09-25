@@ -14,8 +14,8 @@ public final class WindowStateTracker {
   private final String key;
   private int width;
   private int height;
-  private Integer x;
-  private Integer y;
+  private Integer left;
+  private Integer top;
   private boolean maximized;
   private boolean minimized;
   private boolean fullscreen;
@@ -31,8 +31,8 @@ public final class WindowStateTracker {
     this.width = saved != null ? saved.width() : window.width();
     this.height = saved != null ? saved.height() : window.height();
     if (saved != null && saved.hasPosition()) {
-      this.x = saved.x();
-      this.y = saved.y();
+      this.left = saved.x();
+      this.top = saved.y();
     }
     this.maximized = saved != null && saved.maximized();
   }
@@ -46,7 +46,9 @@ public final class WindowStateTracker {
       case UNMINIMIZED -> this.minimized = false;
       case FULLSCREEN_ENTERED -> this.fullscreen = true;
       case FULLSCREEN_EXITED -> this.fullscreen = false;
-      case RESIZED, MOVED, FOCUSED, BLURRED -> {}
+      default -> {
+        // A change of size or place is taken below, and the focus isn't part of the state.
+      }
     }
     if (this.maximized || this.minimized || this.fullscreen) {
       return;
@@ -56,8 +58,8 @@ public final class WindowStateTracker {
       this.height = event.size().height();
     }
     if (event.type() == WindowEventType.MOVED) {
-      this.x = event.position().x();
-      this.y = event.position().y();
+      this.left = event.position().x();
+      this.top = event.position().y();
     }
   }
 
@@ -68,6 +70,6 @@ public final class WindowStateTracker {
 
   /** What the window remembers now. */
   public synchronized SavedWindowState state() {
-    return new SavedWindowState(this.width, this.height, this.x, this.y, this.maximized);
+    return new SavedWindowState(this.width, this.height, this.left, this.top, this.maximized);
   }
 }

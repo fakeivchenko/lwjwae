@@ -24,7 +24,7 @@ class WindowStateStoreTest {
   }
 
   @Test
-  void aDamagedFileIsNoState() throws Exception {
+  void damagedFileIsNoState() throws Exception {
     Files.writeString(this.directory.resolve("window-state.properties"), "main.width=wide\n");
     WindowStateStore store = new WindowStateStore(this.directory);
     Assertions.assertTrue(store.load("main").isEmpty());
