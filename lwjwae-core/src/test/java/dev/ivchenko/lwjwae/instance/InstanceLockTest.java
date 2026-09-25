@@ -1,6 +1,7 @@
 package dev.ivchenko.lwjwae.instance;
 
 import dev.ivchenko.lwjwae.event.SecondInstanceEvent;
+import dev.ivchenko.lwjwae.testing.ShortTemporaryDirectories;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -20,7 +21,8 @@ class InstanceLockTest {
   private static final SecondInstanceEvent SECOND =
       new SecondInstanceEvent(List.of("open", "ünïcode file.txt", ""), Path.of("/second"));
 
-  @TempDir Path directory;
+  @TempDir(factory = ShortTemporaryDirectories.class)
+  Path directory;
 
   @Test
   void firstClaimHoldsTheNameAndLaterOneHandsItsStartOver() throws Exception {

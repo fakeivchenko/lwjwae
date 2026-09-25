@@ -12,6 +12,7 @@ import dev.ivchenko.lwjwae.testing.FakeWindow;
 import dev.ivchenko.lwjwae.testing.Point;
 import dev.ivchenko.lwjwae.testing.PointCodec;
 import dev.ivchenko.lwjwae.testing.RpcReply;
+import dev.ivchenko.lwjwae.testing.ShortTemporaryDirectories;
 import dev.ivchenko.lwjwae.tray.Tray;
 import dev.ivchenko.lwjwae.tray.TrayIcon;
 import java.nio.file.Path;
@@ -460,8 +461,8 @@ class AbstractApplicationTest {
   }
 
   @Test
-  void secondInstanceBringsTheOldestWindowForwardAndReachesTheListeners(@TempDir Path directory)
-      throws Exception {
+  void secondInstanceBringsTheOldestWindowForwardAndReachesTheListeners(
+      @TempDir(factory = ShortTemporaryDirectories.class) Path directory) throws Exception {
     try (FakeApplication application = new FakeApplication()) {
       final FakeWindow oldest = application.openFake();
       final FakeWindow newer = application.openFake();
@@ -480,7 +481,8 @@ class AbstractApplicationTest {
   }
 
   @Test
-  void startBeforeAnyListenerReachesTheFirstOne(@TempDir Path directory) {
+  void startBeforeAnyListenerReachesTheFirstOne(
+      @TempDir(factory = ShortTemporaryDirectories.class) Path directory) {
     try (FakeApplication application = new FakeApplication()) {
       AbstractApplicationTest.serveInstances(application, directory);
       SecondInstanceEvent early = new SecondInstanceEvent(List.of("early"), Path.of("/"));
@@ -494,7 +496,7 @@ class AbstractApplicationTest {
   }
 
   @Test
-  void quitGivesTheNameUp(@TempDir Path directory) {
+  void quitGivesTheNameUp(@TempDir(factory = ShortTemporaryDirectories.class) Path directory) {
     try (FakeApplication application = new FakeApplication()) {
       AbstractApplicationTest.serveInstances(application, directory);
       application.quit();

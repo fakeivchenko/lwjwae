@@ -56,6 +56,12 @@ public final class InstanceLock implements AutoCloseable {
   private static final int TEXT_LIMIT = 1024 * 1024;
   private static final Duration ANSWER_TIMEOUT = Duration.ofSeconds(30);
 
+  /** The longest socket path that every platform takes: macOS stops at 104 bytes, NUL included. */
+  private static final int PATH_LIMIT = 100;
+
+  /** The bytes that the name of the socket adds to its directory, the separator included. */
+  private static final int NAME_LENGTH = "/lwjwae-0123456789abcdef.sock".length();
+
   private final ServerSocketChannel server;
 
   private InstanceLock(ServerSocketChannel server) {
@@ -266,7 +272,13 @@ public final class InstanceLock implements AutoCloseable {
     if (PlatformUtil.isLinux() && runtime != null && !runtime.isBlank()) {
       return Path.of(runtime);
     }
-    return Path.of(System.getProperty("java.io.tmpdir"));
+    Path temporary = Path.of(System.getProperty("java.io.tmpdir"));
+    if (!PlatformUtil.isWindows()
+        && temporary.toString().getBytes(StandardCharsets.UTF_8).length + NAME_LENGTH
+            > PATH_LIMIT) {
+      return Path.of("/tmp");
+    }
+    return temporary;
   }
 
   /** The first 16 hex digits of the SHA-256 of {@code text}. */
