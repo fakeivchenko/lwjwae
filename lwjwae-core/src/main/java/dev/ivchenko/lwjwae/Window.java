@@ -264,6 +264,22 @@ public interface Window extends AutoCloseable {
    */
   EventSubscription onWindowEvent(Consumer<WindowEvent> listener);
 
+  /**
+   * Decides where a link that leaves the application goes: a click in a page of the application on
+   * a link to another origin, a {@code mailto:} link, {@code window.open} of such a URL, a link
+   * with {@code target="_blank"} or another request for a new window, and {@code
+   * window.lwjwae.openExternal(url)}. By default, {@link Application#openExternal} opens it in the
+   * browser or the mail client of the system, and the window stays where it is.
+   *
+   * <p>A new window of the application's own origin opens in this window instead, since a web view
+   * has no tabs; a link inside the application, or a navigation of a page from elsewhere, stays in
+   * the window, as does a navigation from Java.
+   *
+   * @param handler Receives the absolute URL on a virtual thread, and may open it anywhere, {@link
+   *     #navigate} to it, or drop it; {@code null} brings the default back.
+   */
+  void externalLinkHandler(Consumer<String> handler);
+
   /** Puts the window on screen, or back on it after {@link #hide()}, and brings it to the front. */
   void show();
 

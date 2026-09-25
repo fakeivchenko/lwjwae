@@ -10,6 +10,7 @@ import dev.ivchenko.lwjwae.tray.Tray;
 import dev.ivchenko.lwjwae.tray.TrayIcon;
 import dev.ivchenko.lwjwae.windows.binding.Com;
 import dev.ivchenko.lwjwae.windows.binding.ComCallback;
+import dev.ivchenko.lwjwae.windows.binding.Shell32;
 import dev.ivchenko.lwjwae.windows.binding.WebView2;
 import dev.ivchenko.lwjwae.windows.exception.ComCallFailedException;
 import java.io.IOException;
@@ -107,6 +108,11 @@ public class WindowsApplication extends AbstractApplication {
   @Override
   protected Tray createTray(TrayIcon icon, Consumer<Tray> closed) {
     return new WindowsTray(this.dispatcher(), icon, closed);
+  }
+
+  @Override
+  protected void launchExternal(String url) {
+    this.dispatcher().run(() -> Shell32.open(url));
   }
 
   @Override

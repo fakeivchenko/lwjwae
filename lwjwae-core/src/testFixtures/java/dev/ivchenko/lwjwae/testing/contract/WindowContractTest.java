@@ -463,6 +463,44 @@ public abstract class WindowContractTest extends DisplayContractTest {
     }
   }
 
+  @Test
+  void linksThatLeaveTheApplicationGoToTheHandler() throws Exception {
+    try (Application application = Application.create()) {
+      Window window = application.open(WindowParameters.builder().title("lwjwae :: links").build());
+      BlockingQueue<String> left = new LinkedBlockingQueue<>();
+      window.externalLinkHandler(left::add);
+      final var loaded = Loads.expectFinished(window);
+      window.loadResource("test-app/index.html");
+      window.show();
+      loaded.get(30, TimeUnit.SECONDS);
+      String page = window.url();
+
+      Loads.eval(
+          window,
+          "const link = document.createElement('a'); link.href = 'https://example.com/away';"
+              + " document.body.append(link); link.click(); undefined;");
+      Assertions.assertEquals("https://example.com/away", left.poll(10, TimeUnit.SECONDS));
+      Loads.eval(window, "window.open('mailto:someone@example.com'); undefined;");
+      Assertions.assertEquals("mailto:someone@example.com", left.poll(10, TimeUnit.SECONDS));
+      Loads.eval(
+          window,
+          "lwjwae.openExternal('https://example.com/asked').then(() => window.__asked = 'done');"
+              + " undefined;");
+      Assertions.assertEquals("https://example.com/asked", left.poll(10, TimeUnit.SECONDS));
+      Assertions.assertEquals("done", Loads.awaitValue(window, "window.__asked"));
+
+      Assertions.assertEquals(page, window.url(), "the window stays on its page");
+
+      // A new window of the application itself: a web view has no tabs, so it opens in place.
+      Loads.eval(
+          window,
+          "const blank = document.createElement('a'); blank.href = 'index.html?blank';"
+              + " blank.target = '_blank'; document.body.append(blank); blank.click(); undefined;");
+      awaitTrue(() -> window.url().endsWith("?blank"), "the new window must open in place");
+      Assertions.assertEquals(List.of(window), application.windows(), "and no other opens");
+    }
+  }
+
   /** Waits for an event of {@code type}, passing over the others, and returns it. */
   private static WindowEvent awaitEvent(BlockingQueue<WindowEvent> heard, WindowEventType type)
       throws InterruptedException {

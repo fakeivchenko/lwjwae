@@ -51,6 +51,11 @@ public class MacApplication extends AbstractApplication {
   }
 
   @Override
+  protected void launchExternal(String url) {
+    this.dispatcher().run(() -> AppKit.openUrl(url));
+  }
+
+  @Override
   protected NotificationHandle createNotification(
       Notification notification, Consumer<NotificationHandle> closed) {
     return this.notifier().show(notification, closed);

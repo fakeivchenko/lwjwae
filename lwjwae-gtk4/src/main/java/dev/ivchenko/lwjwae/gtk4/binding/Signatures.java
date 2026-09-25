@@ -252,6 +252,12 @@ public class Signatures {
   /** {@code void (*WebKitURISchemeRequestCallback)(WebKitURISchemeRequest*, gpointer)}. */
   public final FunctionDescriptor URI_SCHEME_REQUEST_CALLBACK = VOID_POINTER_POINTER;
 
+  /**
+   * {@code WebKitWebView* (*)(WebKitWebView*, WebKitNavigationAction*, gpointer)}: {@code create},
+   * the request for a new window, which a {@code NULL} answer declines.
+   */
+  public final FunctionDescriptor CREATE_CALLBACK = POINTER_POINTER_POINTER_POINTER;
+
   /** {@code void (*)(WebKitWebView*, WebKitLoadEvent, gpointer)}: {@code load-changed}. */
   public final FunctionDescriptor LOAD_CHANGED_CALLBACK =
       FunctionDescriptor.ofVoid(C_POINTER, C_INT, C_POINTER);

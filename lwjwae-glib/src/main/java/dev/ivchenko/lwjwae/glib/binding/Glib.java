@@ -70,6 +70,9 @@ public class Glib {
       NativeLibraries.downcall(GLIB, "g_quark_from_string", Signatures.INT_POINTER);
   private final MethodHandle ERROR_NEW_LITERAL =
       NativeLibraries.downcall(GLIB, "g_error_new_literal", Signatures.POINTER_INT_INT_POINTER);
+  private final MethodHandle APP_INFO_LAUNCH_DEFAULT_FOR_URI =
+      NativeLibraries.downcall(
+          GIO, "g_app_info_launch_default_for_uri", Signatures.INT_POINTER_POINTER_POINTER);
   private final MethodHandle MEMORY_INPUT_STREAM_NEW_FROM_DATA =
       NativeLibraries.downcall(
           GIO, "g_memory_input_stream_new_from_data", Signatures.POINTER_POINTER_LONG_POINTER);
@@ -152,6 +155,27 @@ public class Glib {
         return NativeLibraries.string((MemorySegment) VALUE_GET_STRING.invokeExact(value));
       } finally {
         VALUE_UNSET.invokeExact(value);
+      }
+    }
+  }
+
+  /**
+   * Opens {@code uri} in the application that the desktop chose for its scheme, through {@code
+   * g_app_info_launch_default_for_uri}, which goes through the OpenURI portal inside a sandbox.
+   *
+   * @throws IllegalStateException If nothing opens it.
+   */
+  @SneakyThrows
+  public void launchDefaultForUri(String uri) {
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment error = arena.allocate(Signatures.C_POINTER);
+      int launched =
+          (int)
+              APP_INFO_LAUNCH_DEFAULT_FOR_URI.invokeExact(
+                  arena.allocateFrom(uri), MemorySegment.NULL, error);
+      if (launched == 0) {
+        throw new IllegalStateException(
+            "Could not open " + uri + ": " + takeErrorMessage(error.get(Signatures.C_POINTER, 0)));
       }
     }
   }

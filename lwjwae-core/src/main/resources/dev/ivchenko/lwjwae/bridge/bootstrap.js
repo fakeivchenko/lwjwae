@@ -10,7 +10,8 @@
     const resizeEdges = ${resizeEdges};
     // Only a document of an origin that the window trusts learns the token, which is what lets a
     // message through on the Java side. The check runs before any script of the document does.
-    const trusted = ${trusted}.includes(location.origin)
+    const trustedOrigins = ${trusted};
+    const trusted = trustedOrigins.includes(location.origin)
         || (window.top === window && location.href === "about:blank");
     const token = trusted ? ${token} : null;
     // Answers name the document they're meant for, so the answers to a document that the window
@@ -312,6 +313,39 @@
     };
     const reportFailure = (error) => console.error("lwjwae window:", error);
 
+    // Links that leave the application: a web page of another origin, or mailto:. Java decides
+    // where they go, by default the browser of the system, and the window stays on the page. A
+    // link that the page already handled, a download, and one inside the application stay with
+    // the page, as does a navigation of a script, which the application meant.
+    const openExternal = (url) => control("open-external", new URL(String(url), location.href).href).then(done);
+    const leavesApplication = (href) => {
+        let url;
+        try { url = new URL(href, location.href); } catch (_) { return false; }
+        if (url.protocol === "mailto:") return true;
+        return (url.protocol === "http:" || url.protocol === "https:") && !trustedOrigins.includes(url.origin);
+    };
+    if (token !== null && window.top === window) {
+        const follow = (event) => {
+            if (event.defaultPrevented || event.button > 1 || !(event.target instanceof Element)) return;
+            const link = event.target.closest("a[href], area[href]");
+            if (!link || link.hasAttribute("download")) return;
+            const href = typeof link.href === "string" ? link.href : link.href.baseVal;
+            if (!leavesApplication(href)) return;
+            event.preventDefault();
+            openExternal(href).catch(reportFailure);
+        };
+        window.addEventListener("click", follow);
+        window.addEventListener("auxclick", follow);
+        const openWindow = window.open;
+        window.open = function (url, ...rest) {
+            if (url !== undefined && url !== null && leavesApplication(String(url))) {
+                openExternal(url).catch(reportFailure);
+                return null;
+            }
+            return openWindow.call(window, url, ...rest);
+        };
+    }
+
     // Drag regions stand in for the title bar of a window without one: a press on an element with
     // data-lwjwae-drag, or inside one, moves the window once the pointer moves a few pixels with
     // the button down, and a double click maximizes it, as on a title bar. A click alone stays with
@@ -391,5 +425,5 @@
         });
     }
 
-    window.${pageApi} = { listen, once, emit, open, close, call: callRpc, invoke: rpcInvoke, RpcError, window: windowApi };
+    window.${pageApi} = { listen, once, emit, open, close, openExternal, call: callRpc, invoke: rpcInvoke, RpcError, window: windowApi };
 })();

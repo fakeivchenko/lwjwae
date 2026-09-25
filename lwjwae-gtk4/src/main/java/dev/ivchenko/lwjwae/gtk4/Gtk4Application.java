@@ -85,6 +85,11 @@ public class Gtk4Application extends AbstractApplication {
   }
 
   @Override
+  protected void launchExternal(String url) {
+    this.dispatcher().run(() -> Glib.launchDefaultForUri(url));
+  }
+
+  @Override
   protected NotificationHandle createNotification(
       Notification notification, Consumer<NotificationHandle> closed) {
     return this.notifier().show(notification, closed);

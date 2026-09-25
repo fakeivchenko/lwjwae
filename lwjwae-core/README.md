@@ -146,6 +146,24 @@ itself, `startMove()` and `startResize(edge)`, called while the button is down, 
 | Windows | `WM_NCCALCSIZE` gives the whole window to the client area except the resize edges on the left, the right, and at the bottom; the style stays, and with it snapping and the animations. The top edge is a strip that the page lays over itself and resizes from. |
 | macOS | A titled window with its content under a transparent title bar, and no buttons: rounded corners, a shadow, resize edges, and the keyboard, which a borderless window can't take. `startResize` does nothing: AppKit resizes only from the edges. |
 
+### Links that leave the application
+
+A click in a page of the application on a link to another origin or a `mailto:` link,
+`window.open` of such a URL, and `window.lwjwae.openExternal(url)` open the URL where the system
+opens it, the browser or the mail client, and the window stays on its page. So does a request for
+a new window, `target="_blank"` or `window.open`, of a URL from elsewhere; one of the application's
+own origin opens in the window itself, since a web view has no tabs, and no engine opens a window
+of its own. A link that the page already handled with `preventDefault()`, a download, a link inside
+the application, and a navigation that a script or Java starts stay in the window, as does
+everything in a page from elsewhere that the window shows.
+
+`window.externalLinkHandler(url -> ...)` decides instead, for example to open a sign-in page in a
+window of the application; `Application.openExternal(url)` is what the default does, and takes
+only `http`, `https`, and `mailto`: a `file:` URL or the scheme of another application would run
+whatever the system associates with it. It goes through `g_app_info_launch_default_for_uri` on
+Linux, the OpenURI portal inside a sandbox included, `ShellExecuteW` on Windows, and `NSWorkspace`
+on macOS.
+
 Where the platform can't, the call does what it can and the reads say so:
 
 | Platform      | What's missing                                                                                                   |

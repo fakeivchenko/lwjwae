@@ -29,15 +29,15 @@ class BridgeProtocolTest {
     Assertions.assertTrue(script.contains("const rpc = {base:\"app://local/__lwjwae/rpc/\"};"));
     Assertions.assertTrue(script.contains("const token = trusted ? \"secret\" : null;"));
     Assertions.assertTrue(
-        script.contains("[\"app://local\",\"http://localhost:5173\"].includes(location.origin)"));
+        script.contains("const trustedOrigins = [\"app://local\",\"http://localhost:5173\"];"));
     Assertions.assertTrue(
         script.contains("window." + BridgeProtocol.CHANNEL + " = { receive, bound };"));
     Assertions.assertTrue(
         script.contains(
             "window."
                 + BridgeProtocol.PAGE_API
-                + " = { listen, once, emit, open, close, call: callRpc, invoke: rpcInvoke,"
-                + " RpcError, window: windowApi };"));
+                + " = { listen, once, emit, open, close, openExternal, call: callRpc, invoke:"
+                + " rpcInvoke, RpcError, window: windowApi };"));
     for (String reserved :
         List.of(
             BridgeProtocol.EVENT_CALL,

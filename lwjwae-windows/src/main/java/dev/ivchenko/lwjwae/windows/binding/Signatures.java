@@ -163,6 +163,11 @@ public class Signatures {
   /** {@code T* f(void)}: {@code CreatePopupMenu}. */
   public final FunctionDescriptor POINTER_VOID = FunctionDescriptor.of(C_POINTER);
 
+  /** {@code T* f(U*, V*, W*, X*, Y*, int)}: {@code ShellExecuteW}. */
+  public final FunctionDescriptor POINTER_POINTER_X5_INT =
+      FunctionDescriptor.of(
+          C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_INT);
+
   /** {@code T* f(U*, int, int, int, int, int, int)}: {@code CreateIconFromResourceEx}. */
   public final FunctionDescriptor POINTER_POINTER_INT_X6 =
       FunctionDescriptor.of(C_POINTER, C_POINTER, C_INT, C_INT, C_INT, C_INT, C_INT, C_INT);

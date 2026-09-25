@@ -492,6 +492,58 @@ class AbstractWindowTest {
   }
 
   @Test
+  void linksThatLeaveTheApplicationGoToTheSystemOrToTheHandler() throws Exception {
+    try (FakeApplication application = new FakeApplication()) {
+      FakeWindow window = application.openFake();
+      window.call(1, BridgeProtocol.CONTROL_CALL, "open-external" + SEP + "https://example.com/a");
+      Assertions.assertEquals(204, window.awaitReply(1).status());
+      Assertions.assertEquals(List.of("https://example.com/a"), application.launched);
+
+      window.call(2, BridgeProtocol.CONTROL_CALL, "open-external" + SEP + "file:///etc/passwd");
+      Assertions.assertEquals(500, window.awaitReply(2).status() / 100 * 100);
+      Assertions.assertEquals(1, application.launched.size(), "no file: URL leaves");
+
+      BlockingQueue<String> handled = new LinkedBlockingQueue<>();
+      window.externalLinkHandler(handled::add);
+      window.call(3, BridgeProtocol.CONTROL_CALL, "open-external" + SEP + "mailto:a@b.c");
+      window.awaitReply(3);
+      Assertions.assertEquals("mailto:a@b.c", handled.poll(5, TimeUnit.SECONDS));
+      Assertions.assertEquals(1, application.launched.size(), "the handler decides instead");
+    }
+  }
+
+  @Test
+  void aNewWindowOfTheApplicationOpensInPlaceAndOneFromElsewhereLeaves() throws Exception {
+    try (FakeApplication application = new FakeApplication()) {
+      FakeWindow window = application.openFake();
+      BlockingQueue<String> handled = new LinkedBlockingQueue<>();
+      window.externalLinkHandler(handled::add);
+
+      window.requestNewWindow("app://local/page.html");
+      window.requestNewWindow("about:blank");
+      window.requestNewWindow("https://example.com/");
+      Assertions.assertEquals("https://example.com/", handled.poll(5, TimeUnit.SECONDS));
+      window.awaitUiThread();
+      Assertions.assertEquals(List.of("app://local/page.html"), window.navigated);
+      Assertions.assertNull(handled.poll(200, TimeUnit.MILLISECONDS), "about:blank is dropped");
+    }
+  }
+
+  @Test
+  void onlyWebAndMailLinksOpenOutside() {
+    try (FakeApplication application = new FakeApplication()) {
+      application.openExternal("HTTPS://example.com");
+      application.openExternal("mailto:someone@example.com");
+      for (String url : List.of("file:///etc/passwd", "javascript:alert(1)", "relative", "a b")) {
+        Assertions.assertThrows(
+            IllegalArgumentException.class, () -> application.openExternal(url), url);
+      }
+      Assertions.assertEquals(
+          List.of("HTTPS://example.com", "mailto:someone@example.com"), application.launched);
+    }
+  }
+
+  @Test
   void loadResourceServesFromTheJarByDefault() {
     try (FakeApplication application = new FakeApplication()) {
       FakeWindow window = application.openFake();

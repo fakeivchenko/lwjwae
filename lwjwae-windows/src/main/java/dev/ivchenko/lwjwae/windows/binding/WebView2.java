@@ -33,6 +33,8 @@ public class WebView2 {
   public final MemorySegment IID_CONTENT_LOADING = Com.guid("364471e7-f2be-4910-bdba-d72077d51c4b");
   public final MemorySegment IID_WEB_RESOURCE_REQUESTED =
       Com.guid("ab00b74c-15f1-4646-80e8-e76341d25d71");
+  public final MemorySegment IID_NEW_WINDOW_REQUESTED =
+      Com.guid("d4c185fe-c81c-4989-97af-2d3fa7ab5651");
   public final MemorySegment IID_EXECUTE_SCRIPT_COMPLETED =
       Com.guid("49511172-cc67-4bca-9923-137112f4c4cc");
   public final MemorySegment IID_ADD_SCRIPT_COMPLETED =
@@ -88,6 +90,7 @@ public class WebView2 {
   private final int WEBVIEW_EXECUTE_SCRIPT = 29;
   private final int WEBVIEW_POST_WEB_MESSAGE_AS_STRING = 33;
   private final int WEBVIEW_ADD_WEB_MESSAGE_RECEIVED = 34;
+  private final int WEBVIEW_ADD_NEW_WINDOW_REQUESTED = 44;
   private final int WEBVIEW_ADD_WEB_RESOURCE_REQUESTED = 55;
   private final int WEBVIEW_ADD_WEB_RESOURCE_REQUESTED_FILTER = 57;
   // ICoreWebView2Settings
@@ -99,6 +102,8 @@ public class WebView2 {
   private final int NAVIGATION_COMPLETED_GET_IS_SUCCESS = 3;
   private final int NAVIGATION_COMPLETED_GET_ERROR_STATUS = 4;
   private final int WEB_MESSAGE_TRY_GET_AS_STRING = 5;
+  private final int NEW_WINDOW_GET_URI = 3;
+  private final int NEW_WINDOW_PUT_HANDLED = 6;
   private final int RESOURCE_REQUESTED_GET_REQUEST = 3;
   private final int RESOURCE_REQUESTED_PUT_RESPONSE = 5;
   private final int RESOURCE_REQUESTED_GET_CONTEXT = 7;
@@ -313,6 +318,11 @@ public class WebView2 {
     addEvent(webView, WEBVIEW_ADD_WEB_MESSAGE_RECEIVED, handler, "add_WebMessageReceived");
   }
 
+  /** Calls {@code ICoreWebView2::add_NewWindowRequested}. */
+  public void onNewWindowRequested(MemorySegment webView, MemorySegment handler) {
+    addEvent(webView, WEBVIEW_ADD_NEW_WINDOW_REQUESTED, handler, "add_NewWindowRequested");
+  }
+
   /** Calls {@code ICoreWebView2::add_WebResourceRequested}. */
   public void onWebResourceRequested(MemorySegment webView, MemorySegment handler) {
     addEvent(webView, WEBVIEW_ADD_WEB_RESOURCE_REQUESTED, handler, "add_WebResourceRequested");
@@ -362,6 +372,15 @@ public class WebView2 {
   /** Returns the URI of a {@code NavigationStarting} event. */
   public String navigationStartingUri(MemorySegment arguments) {
     return uri(arguments, NAVIGATION_STARTING_GET_URI);
+  }
+
+  /**
+   * Takes over a {@code NewWindowRequested} event: {@code put_Handled(TRUE)} keeps WebView2 from
+   * opening a window of its own, and the URL it was for is returned.
+   */
+  public String takeNewWindowRequest(MemorySegment arguments) {
+    Com.check("put_Handled", Com.call(arguments, NEW_WINDOW_PUT_HANDLED, 1));
+    return uri(arguments, NEW_WINDOW_GET_URI);
   }
 
   /** Reads {@code IsSuccess} from a {@code NavigationCompleted} event. */

@@ -338,6 +338,20 @@ public class AppKit {
         ObjC.send(defaults, "stringForKey:", Foundation.string("AppleActionOnDoubleClick")));
   }
 
+  /**
+   * Opens {@code url} in the application that the system chose for its scheme, through {@code
+   * -[NSWorkspace openURL:]}.
+   *
+   * @throws IllegalStateException If nothing opens it.
+   */
+  public void openUrl(String url) {
+    MemorySegment workspace = ObjC.send(ObjC.cls("NSWorkspace"), "sharedWorkspace");
+    MemorySegment nsUrl = Foundation.url(url);
+    if (ObjC.isNull(nsUrl) || !ObjC.sendBool(workspace, "openURL:", nsUrl)) {
+      throw new IllegalStateException("NSWorkspace could not open " + url);
+    }
+  }
+
   /** Calls {@code -[NSWindow makeKeyAndOrderFront:]}: shows the window and gives it focus. */
   public void show(MemorySegment window) {
     ObjC.sendVoid(window, "makeKeyAndOrderFront:", MemorySegment.NULL);

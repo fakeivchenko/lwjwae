@@ -138,6 +138,10 @@ public class Signatures {
   /** {@code BOOL -[receiver selector]}. */
   public final FunctionDescriptor MSG_BOOL = FunctionDescriptor.of(C_BOOL, C_POINTER, C_POINTER);
 
+  /** {@code BOOL -[receiver selector:id]}. */
+  public final FunctionDescriptor MSG_BOOL_ID =
+      FunctionDescriptor.of(C_BOOL, C_POINTER, C_POINTER, C_POINTER);
+
   /** {@code BOOL -[receiver selector:NSInteger]}. */
   public final FunctionDescriptor MSG_BOOL_LONG =
       FunctionDescriptor.of(C_BOOL, C_POINTER, C_POINTER, C_LONG);
@@ -261,6 +265,14 @@ public class Signatures {
   /** A delegate method with three arguments. */
   public final FunctionDescriptor DELEGATE_3 =
       FunctionDescriptor.ofVoid(C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER);
+
+  /**
+   * A delegate method with four arguments that answers an object, such as {@code
+   * webView:createWebViewWithConfiguration:forNavigationAction:windowFeatures:}.
+   */
+  public final FunctionDescriptor DELEGATE_4_ID =
+      FunctionDescriptor.of(
+          C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER);
 
   /** {@code void (^)(id result, NSError* error)}. It receives the block itself first. */
   public final FunctionDescriptor COMPLETION_BLOCK = VOID_POINTER_POINTER_POINTER;

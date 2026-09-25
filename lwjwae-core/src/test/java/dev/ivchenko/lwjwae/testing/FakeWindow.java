@@ -69,6 +69,11 @@ public class FakeWindow extends AbstractWindow {
     this.installBridge();
   }
 
+  /** Plays the engine: the page asked for a new window of {@code url}. */
+  public void requestNewWindow(String url) {
+    this.newWindowRequested(url);
+  }
+
   /** Exposes the protected hook, so that tests can play the part of the engine. */
   public void receive(String message) {
     this.handleBridgeMessage(message);

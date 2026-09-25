@@ -87,6 +87,16 @@ public class WebKit {
     ObjC.sendVoid(webView, "setNavigationDelegate:", delegate);
   }
 
+  /** Calls {@code -[WKWebView setUIDelegate:]}. {@code NULL} detaches the delegate. */
+  public void setUiDelegate(MemorySegment webView, MemorySegment delegate) {
+    ObjC.sendVoid(webView, "setUIDelegate:", delegate);
+  }
+
+  /** The URL that a {@code WKNavigationAction} goes to. */
+  public String navigationActionUrl(MemorySegment action) {
+    return Foundation.urlString(ObjC.send(ObjC.send(action, "request"), "URL"));
+  }
+
   /**
    * Opens the {@code name} message channel: {@code
    * window.webkit.messageHandlers.NAME.postMessage()}.

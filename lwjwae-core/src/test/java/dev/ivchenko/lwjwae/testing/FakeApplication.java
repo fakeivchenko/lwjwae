@@ -8,6 +8,8 @@ import dev.ivchenko.lwjwae.notification.Notification;
 import dev.ivchenko.lwjwae.notification.NotificationHandle;
 import dev.ivchenko.lwjwae.tray.Tray;
 import dev.ivchenko.lwjwae.tray.TrayIcon;
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Consumer;
 
 /**
@@ -53,6 +55,14 @@ public class FakeApplication extends AbstractApplication {
   protected NotificationHandle createNotification(
       Notification notification, Consumer<NotificationHandle> closed) {
     return new FakeNotification(closed);
+  }
+
+  /** Every URL that went to the system, in order. */
+  public final List<String> launched = new CopyOnWriteArrayList<>();
+
+  @Override
+  protected void launchExternal(String url) {
+    this.launched.add(url);
   }
 
   @Override

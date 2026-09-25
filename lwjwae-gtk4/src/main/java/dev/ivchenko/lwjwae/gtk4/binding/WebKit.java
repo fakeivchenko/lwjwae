@@ -56,6 +56,11 @@ public class WebKit {
           WEBKIT, "webkit_web_view_load_html", Signatures.VOID_POINTER_POINTER_POINTER);
   private final MethodHandle WEB_VIEW_GET_URI =
       NativeLibraries.downcall(WEBKIT, "webkit_web_view_get_uri", Signatures.POINTER_POINTER);
+  private final MethodHandle NAVIGATION_ACTION_GET_REQUEST =
+      NativeLibraries.downcall(
+          WEBKIT, "webkit_navigation_action_get_request", Signatures.POINTER_POINTER);
+  private final MethodHandle URI_REQUEST_GET_URI =
+      NativeLibraries.downcall(WEBKIT, "webkit_uri_request_get_uri", Signatures.POINTER_POINTER);
   private final MethodHandle WEB_VIEW_GET_SETTINGS =
       NativeLibraries.downcall(WEBKIT, "webkit_web_view_get_settings", Signatures.POINTER_POINTER);
   private final MethodHandle SETTINGS_SET_ENABLE_DEVELOPER_EXTRAS =
@@ -281,6 +286,13 @@ public class WebKit {
   @SneakyThrows
   public String uri(MemorySegment webView) {
     return NativeLibraries.string((MemorySegment) WEB_VIEW_GET_URI.invokeExact(webView));
+  }
+
+  /** The URL that a {@code WebKitNavigationAction}, the argument of {@code create}, goes to. */
+  @SneakyThrows
+  public String navigationActionUri(MemorySegment action) {
+    MemorySegment request = (MemorySegment) NAVIGATION_ACTION_GET_REQUEST.invokeExact(action);
+    return NativeLibraries.string((MemorySegment) URI_REQUEST_GET_URI.invokeExact(request));
   }
 
   /**

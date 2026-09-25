@@ -27,6 +27,7 @@ import java.security.SecureRandom;
 import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
@@ -80,6 +81,7 @@ public abstract class AbstractWindow implements Window {
 
   private volatile boolean closed;
   private volatile CloseAction closeAction = CloseAction.CLOSE;
+  private volatile Consumer<String> externalLinkHandler;
 
   /**
    * Records the owner and the ID. The subclass creates the native window afterwards.
@@ -442,8 +444,58 @@ public abstract class AbstractWindow implements Window {
         this.beginResize(edge);
       }
       case "title-bar-double-click" -> this.titleBarDoubleClicked();
+      case "open-external" -> this.leave(argument);
       case "state" -> call.reply(this.dispatcher().call(this::stateJson));
       default -> throw RpcException.badRequest("malformed-control", "No such action: " + parts[0]);
+    }
+  }
+
+  @Override
+  public final void externalLinkHandler(Consumer<String> handler) {
+    this.externalLinkHandler = handler;
+  }
+
+  /**
+   * The page asked for a new window, with {@code target="_blank"} or {@code window.open}, and the
+   * engine left the decision to the host. A backend calls this from the callback of that request,
+   * on the UI thread, and opens no window itself: a URL of the application's own origin opens in
+   * this window, since a web view has no tabs, one of the web or {@code mailto:} goes to {@link
+   * #externalLinkHandler}, and anything else, {@code about:blank} of an empty {@code window.open}
+   * included, is dropped.
+   */
+  protected final void newWindowRequested(String url) {
+    if (url == null || url.isEmpty()) {
+      return;
+    }
+    URI uri;
+    try {
+      uri = URI.create(url);
+    } catch (IllegalArgumentException _) {
+      return;
+    }
+    String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase(Locale.ROOT);
+    if (uri.getRawAuthority() != null && this.isTrustedOrigin(originOf(url))) {
+      this.dispatcher().post(() -> this.navigate(url));
+    } else if (scheme.equals("http") || scheme.equals("https") || scheme.equals("mailto")) {
+      HANDLER_EXECUTOR.execute(() -> this.leaveReporting(url));
+    }
+  }
+
+  /** Hands a link that leaves the application to the handler of the window, or to the system. */
+  private void leave(String url) {
+    Consumer<String> handler = this.externalLinkHandler;
+    if (handler != null) {
+      handler.accept(url);
+    } else {
+      this.application.openExternal(url);
+    }
+  }
+
+  private void leaveReporting(String url) {
+    try {
+      this.leave(url);
+    } catch (Throwable t) {
+      ThrowableUtil.report(t);
     }
   }
 

@@ -11,7 +11,8 @@ import lombok.SneakyThrows;
 import lombok.experimental.UtilityClass;
 
 /**
- * The notification area of the taskbar, through {@code Shell_NotifyIconW}.
+ * The notification area of the taskbar, through {@code Shell_NotifyIconW}, and URLs opened where
+ * the system opens them, through {@code ShellExecuteW}.
  *
  * <p>An icon there belongs to a window: the shell reports clicks as a message to it, and removes
  * the icon when it goes. Every call builds a full {@code NOTIFYICONDATAW} with the fields that
@@ -42,6 +43,14 @@ public class Shell32 {
   /** The characters of {@code szTip}, the terminating zero included. */
   private final int TIP_LENGTH = 128;
 
+  /** {@code SW_SHOWNORMAL}. */
+  private final int SHOW_NORMAL = 1;
+
+  /** The highest {@code HINSTANCE} of {@code ShellExecuteW} that stands for an error. */
+  private final long SHELL_EXECUTE_ERROR = 32;
+
+  private final MethodHandle SHELL_EXECUTE =
+      NativeLibraries.downcall(SHELL32, "ShellExecuteW", Signatures.POINTER_POINTER_X5_INT);
   private final MethodHandle SHELL_NOTIFY_ICON =
       NativeLibraries.downcall(SHELL32, "Shell_NotifyIconW", Signatures.INT_INT_POINTER);
 
@@ -53,6 +62,31 @@ public class Shell32 {
   private final VarHandle ICON = field("hIcon");
   private final long TIP_OFFSET =
       Signatures.NOTIFYICONDATAW.byteOffset(MemoryLayout.PathElement.groupElement("szTip"));
+
+  /**
+   * Opens {@code url} with the {@code open} verb: in the browser, or the mail client for {@code
+   * mailto:}. Call it on a thread that initialized COM, which the shell may use for the handler.
+   *
+   * @throws IllegalStateException If the shell refuses, with the error code that it answers.
+   */
+  @SneakyThrows
+  public void open(String url) {
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment result =
+          (MemorySegment)
+              SHELL_EXECUTE.invokeExact(
+                  MemorySegment.NULL,
+                  Wide.allocate(arena, "open"),
+                  Wide.allocate(arena, url),
+                  MemorySegment.NULL,
+                  MemorySegment.NULL,
+                  SHOW_NORMAL);
+      if (result.address() <= SHELL_EXECUTE_ERROR) {
+        throw new IllegalStateException(
+            "ShellExecuteW could not open " + url + ", error " + result.address());
+      }
+    }
+  }
 
   /**
    * Adds the icon {@code id} of {@code hwnd}, which receives {@code callbackMessage} with the mouse

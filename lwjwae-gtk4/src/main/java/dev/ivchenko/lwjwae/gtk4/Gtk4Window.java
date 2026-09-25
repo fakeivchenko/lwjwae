@@ -100,6 +100,14 @@ public class Gtk4Window extends AbstractWindow {
               MemorySegment.class,
               MemorySegment.class),
           Signatures.LOAD_FAILED_CALLBACK);
+  private static final MemorySegment ON_CREATE =
+      NativeLibraries.upcall(
+          MethodHandles.lookup(),
+          Gtk4Window.class,
+          "onCreate",
+          MethodType.methodType(
+              MemorySegment.class, MemorySegment.class, MemorySegment.class, MemorySegment.class),
+          Signatures.CREATE_CALLBACK);
   private static final MemorySegment ON_CONTEXT_MENU =
       NativeLibraries.upcall(
           MethodHandles.lookup(),
@@ -194,6 +202,7 @@ public class Gtk4Window extends AbstractWindow {
     Glib.signalConnect(newWebView, "load-changed", ON_LOAD_CHANGED, userData);
     Glib.signalConnect(newWebView, "load-failed", ON_LOAD_FAILED, userData);
     Glib.signalConnect(newWebView, "context-menu", ON_CONTEXT_MENU, userData);
+    Glib.signalConnect(newWebView, "create", ON_CREATE, userData);
 
     this.window = newWindow;
     this.webView = newWebView;
@@ -712,6 +721,30 @@ public class Gtk4Window extends AbstractWindow {
       ThrowableUtil.report(t);
     }
     return 0; // FALSE: let WebKit render its own error page
+  }
+
+  /**
+   * The page asked for a new window, with {@code target="_blank"} or {@code window.open}. No web
+   * view opens: the window decides where the URL goes, and {@code NULL} declines the request.
+   *
+   * <p>Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
+   * binds it by name, so no Java code calls it and the compiler sees a dead private method. {@code
+   * resource}: the window is {@code AutoCloseable}, and a lookup that returns it looks like an
+   * unclosed resource. It is not: the application owns the window and closes it, this method only
+   * borrows it.
+   */
+  @SuppressWarnings({"unused", "resource"})
+  private static MemorySegment onCreate(
+      MemorySegment webView, MemorySegment action, MemorySegment userData) {
+    try {
+      Gtk4Window window = WINDOWS.lookup(userData);
+      if (window != null) {
+        window.newWindowRequested(WebKit.navigationActionUri(action));
+      }
+    } catch (Throwable t) {
+      ThrowableUtil.report(t);
+    }
+    return MemorySegment.NULL;
   }
 
   /**

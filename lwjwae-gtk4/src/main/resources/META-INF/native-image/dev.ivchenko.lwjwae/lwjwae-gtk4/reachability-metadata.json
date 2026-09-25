@@ -28,6 +28,14 @@
           ]
         },
         {
+          "name": "onCreate",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
+        },
+        {
           "name": "onDestroy",
           "parameterTypes": [
             "java.lang.foreign.MemorySegment",
@@ -322,6 +330,16 @@
           "void*",
           "jint",
           "jint",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.gtk4.Gtk4Window",
+        "method": "onCreate",
+        "returnType": "void*",
+        "parameterTypes": [
+          "void*",
+          "void*",
           "void*"
         ]
       }

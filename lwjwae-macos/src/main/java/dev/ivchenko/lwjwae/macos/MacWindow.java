@@ -76,6 +76,20 @@ public class MacWindow extends AbstractWindow {
       delegateStub("onDidReceiveScriptMessage", 2);
   private static final MemorySegment ON_START_TASK = delegateStub("onStartUrlSchemeTask", 2);
   private static final MemorySegment ON_STOP_TASK = delegateStub("onStopUrlSchemeTask", 2);
+  private static final MemorySegment ON_CREATE_WEB_VIEW =
+      NativeLibraries.upcall(
+          MethodHandles.lookup(),
+          MacWindow.class,
+          "onCreateWebView",
+          MethodType.methodType(
+              MemorySegment.class,
+              MemorySegment.class,
+              MemorySegment.class,
+              MemorySegment.class,
+              MemorySegment.class,
+              MemorySegment.class,
+              MemorySegment.class),
+          Signatures.DELEGATE_4_ID);
   private static final MemorySegment ON_EVALUATION_COMPLETE =
       NativeLibraries.upcall(
           MethodHandles.lookup(),
@@ -106,6 +120,9 @@ public class MacWindow extends AbstractWindow {
                   new MethodStub(ON_DID_RECEIVE_MESSAGE, "v@:@@")),
               Map.entry("webView:startURLSchemeTask:", new MethodStub(ON_START_TASK, "v@:@@")),
               Map.entry("webView:stopURLSchemeTask:", new MethodStub(ON_STOP_TASK, "v@:@@")),
+              Map.entry(
+                  "webView:createWebViewWithConfiguration:forNavigationAction:windowFeatures:",
+                  new MethodStub(ON_CREATE_WEB_VIEW, "@@:@@@@")),
               Map.entry("windowDidResize:", new MethodStub(ON_WINDOW_CHANGED, "v@:@")),
               Map.entry("windowDidMove:", new MethodStub(ON_WINDOW_CHANGED, "v@:@")),
               Map.entry("windowDidBecomeKey:", new MethodStub(ON_WINDOW_CHANGED, "v@:@")),
@@ -149,6 +166,7 @@ public class MacWindow extends AbstractWindow {
         WebKit.webView(parameters.width(), parameters.height(), configuration);
     Foundation.release(configuration);
     WebKit.setNavigationDelegate(newWebView, newDelegate);
+    WebKit.setUiDelegate(newWebView, newDelegate);
 
     MemorySegment newWindow =
         AppKit.window(
@@ -647,6 +665,35 @@ public class MacWindow extends AbstractWindow {
 
   // --- LwjwaeDelegate methods; every one receives self and _cmd first, as Objective-C passes them
   // ---
+
+  /**
+   * The page asked for a new window, with {@code target="_blank"} or {@code window.open}. No web
+   * view opens: the window decides where the URL goes, and {@code nil} declines the request.
+   *
+   * <p>Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
+   * binds it by name, so no Java code calls it and the compiler sees a dead private method. {@code
+   * resource}: the window is {@code AutoCloseable}, and a lookup that returns it looks like an
+   * unclosed resource. It is not: the application owns the window and closes it, this method only
+   * borrows it.
+   */
+  @SuppressWarnings({"unused", "resource"})
+  private static MemorySegment onCreateWebView(
+      MemorySegment self,
+      MemorySegment command,
+      MemorySegment webView,
+      MemorySegment configuration,
+      MemorySegment action,
+      MemorySegment features) {
+    try {
+      MacWindow window = windowOf(self);
+      if (window != null) {
+        window.newWindowRequested(WebKit.navigationActionUrl(action));
+      }
+    } catch (Throwable t) {
+      ThrowableUtil.report(t);
+    }
+    return MemorySegment.NULL;
+  }
 
   /**
    * The user asked to close the window. {@code NO} cancels the close: a window that isn't closable

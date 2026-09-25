@@ -653,6 +653,10 @@ public class WindowsWindow extends AbstractWindow {
               this.handleBridgeMessage(message);
             }
           });
+      this.subscribe(
+          WebView2::onNewWindowRequested,
+          WebView2.IID_NEW_WINDOW_REQUESTED,
+          (_, arguments) -> this.newWindowRequested(WebView2.takeNewWindowRequest(arguments)));
       WebView2.addWebResourceRequestedFilter(this.webView, RESOURCE_ORIGIN + "*");
       this.subscribe(
           WebView2::onWebResourceRequested,

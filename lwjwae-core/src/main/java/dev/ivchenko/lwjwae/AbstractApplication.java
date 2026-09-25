@@ -14,10 +14,13 @@ import dev.ivchenko.lwjwae.tray.Tray;
 import dev.ivchenko.lwjwae.tray.TrayIcon;
 import dev.ivchenko.lwjwae.ui.UiDispatcher;
 import dev.ivchenko.lwjwae.util.ThrowableUtil;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -49,6 +52,8 @@ import java.util.function.Function;
  * #rpcHandler} before it answers {@code 404}.
  */
 public abstract class AbstractApplication implements Application {
+  private static final Set<String> EXTERNAL_SCHEMES = Set.of("http", "https", "mailto");
+
   private final UiDispatcher dispatcher;
   private final ApplicationParameters parameters;
   private final Map<Long, AbstractWindow> windows = new ConcurrentHashMap<>();
@@ -326,6 +331,31 @@ public abstract class AbstractApplication implements Application {
   protected Tray createTray(TrayIcon icon, Consumer<Tray> closed) {
     throw new UnsupportedOperationException("The " + this.engine() + " backend has no tray yet");
   }
+
+  @Override
+  public final void openExternal(String url) {
+    Objects.requireNonNull(url, "url");
+    this.checkOpen();
+    URI uri;
+    try {
+      uri = new URI(url);
+    } catch (URISyntaxException e) {
+      throw new IllegalArgumentException("Not a URL: " + url, e);
+    }
+    String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase(Locale.ROOT);
+    if (!EXTERNAL_SCHEMES.contains(scheme)) {
+      throw new IllegalArgumentException("Only http, https, and mailto open outside: " + url);
+    }
+    this.launchExternal(uri.toString());
+  }
+
+  /**
+   * Hands a URL, checked to be {@code http}, {@code https}, or {@code mailto}, to the system, which
+   * opens it in the application it chose for it.
+   *
+   * @throws IllegalStateException If the system refused it.
+   */
+  protected abstract void launchExternal(String url);
 
   @Override
   public final NotificationHandle showNotification(Notification notification) {

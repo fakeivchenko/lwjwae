@@ -267,6 +267,19 @@ public interface Application extends AutoCloseable {
   NotificationHandle showNotification(Notification notification);
 
   /**
+   * Opens {@code url} where the system opens it: a web page in the default browser, a {@code
+   * mailto:} link in the mail client. Returns once the system has taken the URL, not when it shows.
+   *
+   * <p>Only {@code http}, {@code https}, and {@code mailto} go through: a {@code file:} URL or the
+   * scheme of another application would run whatever the system associates with it, which a page
+   * must never be able to ask for.
+   *
+   * @throws IllegalArgumentException If {@code url} isn't an absolute URL of one of those schemes.
+   * @throws IllegalStateException If the system couldn't open it, or the application is closed.
+   */
+  void openExternal(String url);
+
+  /**
    * Blocks the calling thread while any window is open or any tray icon is up, or until {@link
    * #quit()}. Returns at once when there is neither. A window opened from another thread, or from a
    * page, in the meantime keeps the application running.
