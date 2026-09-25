@@ -252,7 +252,8 @@ a sheet has no title bar.
 On macOS, the shortcuts of editing belong to the menu bar: Command-C is the key equivalent of an
 item that sends `copy:` to the first responder, and a `WKWebView` hands back to the menu every key
 that the page leaves. Without a menu bar, a text field takes no Command-C, V, X, A, or Z. The first
-application installs the menu bar of every Mac application, unless one is already set: the
+application installs the menu bar of every Mac application, in place of the bare one that AppKit
+makes up when `run` starts without one: the
 application menu (About, Hide, Hide Others, Show All, Quit), File (Close Window), Edit (Undo, Redo,
 Cut, Copy, Paste, Paste and Match Style, Delete, Select All), and Window (Minimize, Zoom, Bring All
 to Front, and the list of windows). The items have no target, so each goes along the responder

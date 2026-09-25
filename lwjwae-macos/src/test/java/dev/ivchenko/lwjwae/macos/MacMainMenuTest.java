@@ -8,7 +8,9 @@ import dev.ivchenko.lwjwae.macos.binding.Foundation;
 import dev.ivchenko.lwjwae.macos.binding.ObjC;
 import dev.ivchenko.lwjwae.util.PlatformUtil;
 import java.lang.foreign.MemorySegment;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Assertions;
@@ -25,7 +27,9 @@ class MacMainMenuTest {
   @Test
   void theMenuBarCarriesTheShortcutsOfEditingAndQuitting() {
     try (Application _ = Application.create()) {
-      Map<Long, String> shortcuts = MacDispatcher.instance().call(MacMainMenuTest::shortcuts);
+      List<String> titles = new ArrayList<>();
+      Map<Long, String> shortcuts =
+          MacDispatcher.instance().call(() -> MacMainMenuTest.shortcuts(titles));
       long command = AppKit.MODIFIER_COMMAND;
       Map<String, String> expected =
           Map.of(
@@ -44,7 +48,7 @@ class MacMainMenuTest {
         Assertions.assertEquals(
             entry.getValue() + "/" + command,
             shortcuts.get(ObjC.sel(action).address()),
-            "the shortcut of " + action);
+            "the shortcut of " + action + " in " + titles);
       }
       MemorySegment windowsMenu =
           MacDispatcher.instance().call(() -> ObjC.send(AppKit.application(), "windowsMenu"));
@@ -71,21 +75,23 @@ class MacMainMenuTest {
 
   /**
    * The key equivalent and its modifiers, as {@code key/modifiers}, of every item of the menu bar
-   * that has one, by the address of its action.
+   * that has one, by the address of its action. {@code titles} receives the title of every item.
    */
-  private static Map<Long, String> shortcuts() {
+  private static Map<Long, String> shortcuts(List<String> titles) {
     Map<Long, String> shortcuts = new HashMap<>();
-    MacMainMenuTest.collect(AppKit.mainMenu(), shortcuts);
+    MacMainMenuTest.collect(AppKit.mainMenu(), shortcuts, titles);
     return shortcuts;
   }
 
-  private static void collect(MemorySegment menu, Map<Long, String> shortcuts) {
+  private static void collect(
+      MemorySegment menu, Map<Long, String> shortcuts, List<String> titles) {
     long count = ObjC.sendLong(menu, "numberOfItems");
     for (long i = 0; i < count; i++) {
       MemorySegment item = ObjC.send(menu, "itemAtIndex:", i);
+      titles.add(Foundation.string(ObjC.send(item, "title")));
       MemorySegment submenu = ObjC.send(item, "submenu");
       if (!ObjC.isNull(submenu)) {
-        MacMainMenuTest.collect(submenu, shortcuts);
+        MacMainMenuTest.collect(submenu, shortcuts, titles);
         continue;
       }
       String key = Foundation.string(ObjC.send(item, "keyEquivalent"));

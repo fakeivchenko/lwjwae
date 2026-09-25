@@ -34,7 +34,8 @@ import lombok.experimental.UtilityClass;
  * program ends as it ends when the last window closes. With no application open, it lets AppKit
  * terminate: there is nothing left to close.
  *
- * <p>A menu bar that something else set first stays as it is; so does a delegate.
+ * <p>The menu bar replaces the one that AppKit makes up when {@code run} starts without one, which
+ * holds nothing but the application menu. A delegate that something else set first stays.
  */
 @UtilityClass
 class MacMainMenu {
@@ -53,9 +54,12 @@ class MacMainMenu {
   /** The delegate of {@code NSApplication}, which holds it weakly. Main thread only. */
   private MemorySegment delegate;
 
+  /** Whether the menu bar is in place. Main thread only. */
+  private boolean menuBarInstalled;
+
   /**
-   * Installs the menu bar, with {@code name} in the titles of the application menu, and the
-   * delegate, unless something set them before. Runs on the main thread.
+   * Installs the menu bar, with {@code name} in the titles of the application menu, once, and the
+   * delegate, unless something set one before. Runs on the main thread.
    *
    * @param name The name of the application, or {@code null} for the name of the process.
    */
@@ -74,7 +78,8 @@ class MacMainMenu {
               "init");
       AppKit.setApplicationDelegate(delegate);
     }
-    if (ObjC.isNull(AppKit.mainMenu())) {
+    if (!menuBarInstalled) {
+      menuBarInstalled = true;
       MacMainMenu.installMenuBar(name != null ? name : Foundation.processName());
     }
   }
