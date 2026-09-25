@@ -215,6 +215,19 @@
           ]
         }
       ]
+    },
+    {
+      "type": "dev.ivchenko.lwjwae.macos.MacMainMenu",
+      "methods": [
+        {
+          "name": "onShouldTerminate",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
+        }
+      ]
     }
   ],
   "resources": [
@@ -789,6 +802,16 @@
         "class": "dev.ivchenko.lwjwae.macos.MacWindow",
         "method": "onFullScreenSettled",
         "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.macos.MacMainMenu",
+        "method": "onShouldTerminate",
+        "returnType": "jlong",
         "parameterTypes": [
           "void*",
           "void*",

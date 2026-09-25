@@ -258,6 +258,13 @@ public class Signatures {
   public final FunctionDescriptor DELEGATE_1_BOOL =
       FunctionDescriptor.of(C_BOOL, C_POINTER, C_POINTER, C_POINTER);
 
+  /**
+   * A delegate method with one argument that answers {@code NSUInteger}, such as {@code
+   * applicationShouldTerminate:}.
+   */
+  public final FunctionDescriptor DELEGATE_1_LONG =
+      FunctionDescriptor.of(C_LONG, C_POINTER, C_POINTER, C_POINTER);
+
   /** A delegate method with two arguments. */
   public final FunctionDescriptor DELEGATE_2 =
       FunctionDescriptor.ofVoid(C_POINTER, C_POINTER, C_POINTER, C_POINTER);

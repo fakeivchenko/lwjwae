@@ -20,6 +20,7 @@ import java.util.function.Consumer;
  * is already on the main thread, as the {@code main} method of a native image is, {@link #run()}
  * runs the loop itself and stops it once the last window closed. Each window is a {@link
  * MacWindow}, each tray icon a {@link MacTray}, and each notification a {@link MacNotification}.
+ * {@link MacMainMenu} gives the process its menu bar, and turns Quit into {@link #quit()}.
  */
 public class MacApplication extends AbstractApplication {
   private volatile boolean runningApplication;
@@ -30,9 +31,14 @@ public class MacApplication extends AbstractApplication {
     this(ApplicationParameters.createDefault());
   }
 
-  /** Makes sure that {@code NSApplication} exists and has launched. Opens no window. */
+  /**
+   * Makes sure that {@code NSApplication} exists and has launched, with a menu bar. Opens no
+   * window.
+   */
   public MacApplication(ApplicationParameters parameters) {
     super(MacDispatcher.instance(), parameters);
+    MacMainMenu.register(this);
+    this.dispatcher().run(() -> MacMainMenu.install(parameters.name()));
   }
 
   @Override
@@ -71,6 +77,7 @@ public class MacApplication extends AbstractApplication {
 
   @Override
   protected void onClose() {
+    MacMainMenu.unregister(this);
     MacNotifier current;
     synchronized (this) {
       current = this.notifier;

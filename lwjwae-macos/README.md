@@ -17,6 +17,7 @@ The provider [`MacBackendProvider`](src/main/java/dev/ivchenko/lwjwae/macos/MacB
 | [`MacWindow`](src/main/java/dev/ivchenko/lwjwae/macos/MacWindow.java)                   | The window. Forwards every call to the main thread.                           |
 | [`MacRpcExchange`](src/main/java/dev/ivchenko/lwjwae/macos/MacRpcExchange.java) | One RPC call over a `WKURLSchemeTask`. |
 | [`MacDispatcher`](src/main/java/dev/ivchenko/lwjwae/macos/MacDispatcher.java)           | The main thread of the process, and how work reaches it.                      |
+| [`MacMainMenu`](src/main/java/dev/ivchenko/lwjwae/macos/MacMainMenu.java) | The menu bar, with the shortcuts of editing, and Quit as `Application.quit()`. |
 | [`MacTray`](src/main/java/dev/ivchenko/lwjwae/macos/MacTray.java)                       | A tray icon: an `NSStatusItem` in the menu bar.                               |
 | [`MacNotifier`](src/main/java/dev/ivchenko/lwjwae/macos/MacNotifier.java), [`MacNotification`](src/main/java/dev/ivchenko/lwjwae/macos/MacNotification.java) | Notifications, through `UNUserNotificationCenter`. |
 | [`PendingEvaluation`](src/main/java/dev/ivchenko/lwjwae/macos/PendingEvaluation.java)   | A future and the arena of its completion block.                               |
@@ -245,6 +246,24 @@ global literal like the one of `evaluateJavaScript:`, and a cancellation ends th
 `endSheet:`, which calls it too. A panel has no menu of kinds of file, so it takes the extensions of
 every kind through `setAllowedFileTypes:`, and the title of the dialog goes to `setMessage:`, since
 a sheet has no title bar.
+
+## The menu bar
+
+On macOS, the shortcuts of editing belong to the menu bar: Command-C is the key equivalent of an
+item that sends `copy:` to the first responder, and a `WKWebView` hands back to the menu every key
+that the page leaves. Without a menu bar, a text field takes no Command-C, V, X, A, or Z. The first
+application installs the menu bar of every Mac application, unless one is already set: the
+application menu (About, Hide, Hide Others, Show All, Quit), File (Close Window), Edit (Undo, Redo,
+Cut, Copy, Paste, Paste and Match Style, Delete, Select All), and Window (Minimize, Zoom, Bring All
+to Front, and the list of windows). The items have no target, so each goes along the responder
+chain, which also enables it. The titles take `ApplicationParameters.name()`, or the name of the
+process without one.
+
+Quit, from the menu, the Dock, or a logout, is `terminate:`, which asks the delegate of
+`NSApplication` `applicationShouldTerminate:` and then calls `exit` under the JVM. The delegate
+answers `NSTerminateCancel` and quits every open application instead, so their windows close as on
+`Application.quit()`, `run()` returns, and the program ends on its own terms. With no application
+open, it lets AppKit terminate.
 
 ## Closing
 

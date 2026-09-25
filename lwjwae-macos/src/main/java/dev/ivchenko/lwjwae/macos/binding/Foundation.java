@@ -173,4 +173,13 @@ public class Foundation {
         ObjC.send(
             ObjC.send(ObjC.cls("NSProcessInfo"), "processInfo"), "operatingSystemVersionString"));
   }
+
+  /**
+   * {@code -[NSProcessInfo processName]}: the name of the executable, {@code java} under the
+   * launcher.
+   */
+  public String processName() {
+    return Foundation.string(
+        ObjC.send(ObjC.send(ObjC.cls("NSProcessInfo"), "processInfo"), "processName"));
+  }
 }

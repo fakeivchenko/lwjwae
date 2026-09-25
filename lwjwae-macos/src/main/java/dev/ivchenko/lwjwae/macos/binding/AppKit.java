@@ -29,6 +29,12 @@ public class AppKit {
   /** {@code NSWindowStyleMaskFullSizeContentView}: the content reaches under the title bar. */
   public final long STYLE_FULL_SIZE_CONTENT_VIEW = 1 << 15;
 
+  /** {@code NSEventModifierFlagOption}. */
+  public final long MODIFIER_OPTION = 1 << 19;
+
+  /** {@code NSEventModifierFlagCommand}. */
+  public final long MODIFIER_COMMAND = 1 << 20;
+
   private final long WINDOW_TITLE_HIDDEN = 1;
   private final long ZOOM_BUTTON = 2;
   private final long EVENT_TYPE_LEFT_MOUSE_DOWN = 1;
@@ -508,5 +514,63 @@ public class AppKit {
   /** {@code -[NSMenuItem tag]}. */
   public long menuItemTag(MemorySegment item) {
     return ObjC.sendLong(item, "tag");
+  }
+
+  // --- the menu bar ---
+
+  /** {@code -[NSApplication mainMenu]}: the menu bar, or {@code NULL} while nothing set one. */
+  public MemorySegment mainMenu() {
+    return ObjC.send(AppKit.application(), "mainMenu");
+  }
+
+  /**
+   * A new, owned {@code NSMenu} titled {@code title} whose items AppKit enables and disables along
+   * the responder chain, as the menus of a menu bar do.
+   */
+  public MemorySegment autoenabledMenu(String title) {
+    return ObjC.send(
+        ObjC.send(ObjC.cls("NSMenu"), "alloc"), "initWithTitle:", Foundation.string(title));
+  }
+
+  /**
+   * Adds an item without a target, which sends {@code action} to the first responder that takes it,
+   * with {@code key} and {@code modifiers} as its shortcut. An empty {@code key} gives no shortcut;
+   * an uppercase one implies Shift.
+   */
+  public void addResponderItem(
+      MemorySegment menu, String title, String action, String key, long modifiers) {
+    MemorySegment item = ObjC.send(ObjC.send(ObjC.cls("NSMenuItem"), "alloc"), "init");
+    ObjC.sendVoid(item, "setTitle:", Foundation.string(title));
+    ObjC.sendVoid(item, "setAction:", ObjC.sel(action));
+    ObjC.sendVoid(item, "setKeyEquivalent:", Foundation.string(key));
+    ObjC.sendVoid(item, "setKeyEquivalentModifierMask:", modifiers);
+    ObjC.sendVoid(menu, "addItem:", item);
+    Foundation.release(item);
+  }
+
+  /** Adds {@code submenu} to {@code bar} under its own title, and gives it up: the bar holds it. */
+  public void addSubmenu(MemorySegment bar, MemorySegment submenu) {
+    MemorySegment item = ObjC.send(ObjC.send(ObjC.cls("NSMenuItem"), "alloc"), "init");
+    ObjC.sendVoid(item, "setTitle:", ObjC.send(submenu, "title"));
+    ObjC.sendVoid(item, "setSubmenu:", submenu);
+    ObjC.sendVoid(bar, "addItem:", item);
+    Foundation.release(item);
+    Foundation.release(submenu);
+  }
+
+  /**
+   * Makes {@code bar} the menu bar and gives it up, with {@code windowsMenu}, one of its menus, as
+   * the one where AppKit lists the windows.
+   */
+  public void setMainMenu(MemorySegment bar, MemorySegment windowsMenu) {
+    MemorySegment application = AppKit.application();
+    ObjC.sendVoid(application, "setMainMenu:", bar);
+    ObjC.sendVoid(application, "setWindowsMenu:", windowsMenu);
+    Foundation.release(bar);
+  }
+
+  /** {@code -[NSApplication setDelegate:]}. The application holds its delegate weakly. */
+  public void setApplicationDelegate(MemorySegment delegate) {
+    ObjC.sendVoid(AppKit.application(), "setDelegate:", delegate);
   }
 }
