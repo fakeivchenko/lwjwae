@@ -464,15 +464,29 @@ public class MacWindow extends AbstractWindow {
             });
   }
 
-  /** A transition to full screen or back ended: the request that waited for it goes now. */
+  /** A transition to full screen or back ended: the request that waited for it goes next. */
   private void fullScreenSettled() {
     this.fullScreenChanging = false;
     Boolean wanted = this.fullScreenWanted;
     this.fullScreenWanted = null;
-    if (wanted != null && !this.isClosed()) {
-      this.toggleFullScreen(wanted);
+    if (wanted != null) {
+      // Sent from the notification that ends a transition, a toggle finds the window not yet in
+      // its new state, and AppKit drops it: it goes on a later turn of the loop.
+      this.dispatcher().post(() -> this.requestFullScreen(wanted));
     }
     this.windowChanged();
+  }
+
+  /** Toggles now, or after the transition that started in the meantime. Main thread only. */
+  private void requestFullScreen(boolean fullscreen) {
+    if (this.isClosed()) {
+      return;
+    }
+    if (this.fullScreenChanging) {
+      this.fullScreenWanted = fullscreen;
+      return;
+    }
+    this.toggleFullScreen(fullscreen);
   }
 
   /**
