@@ -25,7 +25,13 @@ the window; a codec module supplies JSON when you use the typed bridge methods.
 | [`notification.Notification`](src/main/java/dev/ivchenko/lwjwae/notification/Notification.java), [`notification.NotificationAction`](src/main/java/dev/ivchenko/lwjwae/notification/NotificationAction.java), [`notification.NotificationHandle`](src/main/java/dev/ivchenko/lwjwae/notification/NotificationHandle.java) | A desktop notification: its title, body, image, buttons, and click handler, and the handle that takes it back. `Notification.of(title, body)` is the plain one; the image is PNG bytes or a resource path. `Application.showNotification(Notification)` shows one; it doesn't keep `run()` going, and `quit()` takes it back. A backend without notifications, or a desktop without a notification server, throws `UnsupportedOperationException`. |
 | `exception.*`                                                                                                                                                                                                                                                                                                             | [`BackendNotAvailableException`](src/main/java/dev/ivchenko/lwjwae/exception/BackendNotAvailableException.java), [`ResourceNotFoundException`](src/main/java/dev/ivchenko/lwjwae/exception/ResourceNotFoundException.java), [`ScriptEvaluationFailedException`](src/main/java/dev/ivchenko/lwjwae/exception/ScriptEvaluationFailedException.java).     |
 
-A minimal application:
+A minimal application, in one line:
+
+```java
+Application.launch("Docs", "app/index.html");
+```
+
+The same, step by step:
 
 ```java
 try (Application application = Application.create()) {
@@ -34,11 +40,32 @@ try (Application application = Application.create()) {
       .size(1280, 800)
       .build());
   window.bind("reverse", text -> new StringBuilder(text).reverse().toString());
-  window.loadResource("app/index.html");
+  window.load("app/index.html");
   window.show();
   application.run();
 }
 ```
+
+### Short paths and the detailed API
+
+Every short path is a call of the detailed API that states the common choice, so the two mix
+freely:
+
+| Short path                                        | Stands for                                                                                     |
+|---------------------------------------------------|------------------------------------------------------------------------------------------------|
+| `Application.launch(title, target)`               | `create`, `open`, `load`, `show`, `run`, and `close`, for one window                           |
+| `Application.launch(parameters, setup)`           | The same with `WindowParameters`, and `setup` to bind before the page loads                    |
+| `application.show(target)`, `show(parameters)`    | `open`, `load`, and `show`                                                                     |
+| `window.load(target)`                             | `navigate` for a URL, which has a scheme such as `https:`, `loadResource` for a path          |
+| `WindowParameters.of(title, target)`, `of(title, width, height)` | The builder with a title and a page, or a title and a size                      |
+| `window.alert(message)`, `confirm(message)`       | `showMessageDialog` with OK, or with OK and Cancel as a question                              |
+| `window.pickFile(types...)`, `pickFiles(types...)`, `pickFolder()`, `pickSaveFile(name, types...)` | `showOpenDialog` and `showSaveDialog` with one file, many, a folder, or a file to save |
+| `application.tray(icon, items...)`                | `tray(TrayIcon)` with an image among the resources and a menu                                 |
+| `application.showNotification(title, body)`       | `showNotification(Notification.of(title, body))`                                              |
+| `call.replyResource(path)`                        | `reply` with a file of the application and the type of its extension                          |
+| `size(WindowSize)`, `position(WindowPosition)`, `minimumSize(WindowSize)`, `maximumSize(WindowSize)` | The same as the two numbers                                            |
+
+A canceled short dialog closes its dialog, as the detailed one does.
 
 ### Application and windows
 

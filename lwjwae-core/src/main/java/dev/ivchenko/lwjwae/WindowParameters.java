@@ -1,5 +1,6 @@
 package dev.ivchenko.lwjwae;
 
+import dev.ivchenko.lwjwae.util.ResourceUtil;
 import lombok.Builder;
 
 /**
@@ -126,6 +127,21 @@ public record WindowParameters(
    */
   public static WindowParameters createDefault() {
     return builder().build();
+  }
+
+  /** A window titled {@code title} of {@code width} by {@code height}, blank. */
+  public static WindowParameters of(String title, int width, int height) {
+    return WindowParameters.builder().title(title).size(width, height).build();
+  }
+
+  /**
+   * A window titled {@code title} that loads {@code target}: a URL, such as {@code
+   * https://example.com}, or a file of the application, such as {@code app/index.html}, as {@link
+   * Window#load} tells them apart.
+   */
+  public static WindowParameters of(String title, String target) {
+    WindowParametersBuilder builder = WindowParameters.builder().title(title);
+    return (ResourceUtil.isUrl(target) ? builder.url(target) : builder.resource(target)).build();
   }
 
   /**

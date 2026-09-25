@@ -11,6 +11,7 @@ import dev.ivchenko.lwjwae.notification.NotificationHandle;
 import dev.ivchenko.lwjwae.rpc.RpcHandler;
 import dev.ivchenko.lwjwae.tray.Tray;
 import dev.ivchenko.lwjwae.tray.TrayIcon;
+import dev.ivchenko.lwjwae.tray.TrayMenuItem;
 import dev.ivchenko.lwjwae.util.PlatformUtil;
 import java.io.UncheckedIOException;
 import java.nio.file.Path;
@@ -79,6 +80,54 @@ public interface Application extends AutoCloseable {
         Application.provider()
             .orElseThrow(() -> new BackendNotAvailableException(Application.noBackendMessage()));
     return provider.create(parameters);
+  }
+
+  /**
+   * Runs an application of one window titled {@code title} that shows {@code target}, a URL or a
+   * file of the application such as {@code app/index.html}, and returns when the window closes.
+   *
+   * <pre>{@code
+   * public static void main(String[] args) {
+   *   Application.launch("Notes", "app/index.html");
+   * }
+   * }</pre>
+   *
+   * @throws BackendNotAvailableException If no backend on the classpath supports this machine.
+   */
+  static void launch(String title, String target) {
+    Application.launch(WindowParameters.of(title, target), _ -> {});
+  }
+
+  /** The same as {@link #launch(WindowParameters, Consumer)}, with nothing to set up. */
+  static void launch(WindowParameters parameters) {
+    Application.launch(parameters, _ -> {});
+  }
+
+  /**
+   * Runs an application of one window that opens with {@code parameters}, and returns when every
+   * window closed. {@code setup} gets the window before it loads its page and shows, to bind what
+   * the page calls; {@link Window#application()} reaches the rest.
+   *
+   * <pre>{@code
+   * Application.launch(
+   *     WindowParameters.of("Notes", "app/index.html"),
+   *     window -> window.bind("save", text -> store.save(text)));
+   * }</pre>
+   *
+   * @throws BackendNotAvailableException If no backend on the classpath supports this machine.
+   */
+  static void launch(WindowParameters parameters, Consumer<Window> setup) {
+    try (Application application = Application.create()) {
+      Window window = application.open(parameters.toBuilder().url(null).resource(null).build());
+      setup.accept(window);
+      if (parameters.resource() != null) {
+        window.loadResource(parameters.resource());
+      } else if (parameters.url() != null) {
+        window.navigate(parameters.url());
+      }
+      window.show();
+      application.run();
+    }
   }
 
   /**
@@ -205,6 +254,24 @@ public interface Application extends AutoCloseable {
    */
   Window open(WindowParameters parameters);
 
+  /**
+   * Opens a window that loads {@code target}, a URL or a file of the application such as {@code
+   * app/index.html}, and shows it: {@link #open()}, {@link Window#load}, and {@link Window#show()}.
+   */
+  default Window show(String target) {
+    Window window = this.open();
+    window.load(target);
+    window.show();
+    return window;
+  }
+
+  /** Opens a window with {@code parameters} and shows it. */
+  default Window show(WindowParameters parameters) {
+    Window window = this.open(parameters);
+    window.show();
+    return window;
+  }
+
   /** The windows that are open right now, oldest first. */
   List<Window> windows();
 
@@ -313,6 +380,14 @@ public interface Application extends AutoCloseable {
   Tray tray(TrayIcon icon);
 
   /**
+   * Puts an icon in the system tray: a PNG among the resources of the application, such as {@code
+   * app/tray.png}, with {@code menu}.
+   */
+  default Tray tray(String icon, TrayMenuItem... menu) {
+    return this.tray(TrayIcon.builder().icon(icon).menu(menu).build());
+  }
+
+  /**
    * Shows a desktop notification and returns the handle that takes it back.
    *
    * <p>The notification belongs to the application. It stays when every window is closed, but it
@@ -324,6 +399,11 @@ public interface Application extends AutoCloseable {
    * @throws IllegalStateException If the application is closed.
    */
   NotificationHandle showNotification(Notification notification);
+
+  /** Shows a notification of {@code title} and {@code body}, and nothing else. */
+  default NotificationHandle showNotification(String title, String body) {
+    return this.showNotification(Notification.of(title, body));
+  }
 
   /**
    * Listens to the starts of other processes of the application, when it was created by {@link

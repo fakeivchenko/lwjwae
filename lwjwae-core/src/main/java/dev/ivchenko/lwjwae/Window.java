@@ -1,6 +1,9 @@
 package dev.ivchenko.lwjwae;
 
+import dev.ivchenko.lwjwae.dialog.FileType;
+import dev.ivchenko.lwjwae.dialog.MessageButtons;
 import dev.ivchenko.lwjwae.dialog.MessageDialogParameters;
+import dev.ivchenko.lwjwae.dialog.MessageLevel;
 import dev.ivchenko.lwjwae.dialog.OpenDialogParameters;
 import dev.ivchenko.lwjwae.dialog.SaveDialogParameters;
 import dev.ivchenko.lwjwae.event.Event;
@@ -8,6 +11,7 @@ import dev.ivchenko.lwjwae.event.EventSubscription;
 import dev.ivchenko.lwjwae.event.LoadEvent;
 import dev.ivchenko.lwjwae.event.WindowEvent;
 import dev.ivchenko.lwjwae.rpc.RpcHandler;
+import dev.ivchenko.lwjwae.util.ResourceUtil;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
@@ -195,6 +199,18 @@ public interface Window extends AutoCloseable {
   void loadResource(String path);
 
   /**
+   * Loads {@code target}: a URL, such as {@code https://example.com}, with {@link #navigate}, or a
+   * file of the application, such as {@code app/index.html}, with {@link #loadResource}.
+   */
+  default void load(String target) {
+    if (ResourceUtil.isUrl(target)) {
+      this.navigate(target);
+    } else {
+      this.loadResource(target);
+    }
+  }
+
+  /**
    * Evaluates a script in the current document.
    *
    * @return The result, converted to a string the way the engine converts it. The future fails with
@@ -330,6 +346,72 @@ public interface Window extends AutoCloseable {
    */
   CompletableFuture<Boolean> showMessageDialog(MessageDialogParameters parameters);
 
+  /**
+   * Shows {@code message} with an OK button, the way {@code alert} does on a page, and returns
+   * without waiting for the user. The future completes when the user closed the message.
+   */
+  default CompletableFuture<Void> alert(String message) {
+    return Window.following(
+        this.showMessageDialog(MessageDialogParameters.of(message)), _ -> (Void) null);
+  }
+
+  /**
+   * Asks {@code message} with OK and Cancel, the way {@code confirm} does on a page, and returns
+   * without waiting for the user.
+   *
+   * @return {@code true} for OK. Canceling the future closes the dialog.
+   */
+  default CompletableFuture<Boolean> confirm(String message) {
+    return this.showMessageDialog(
+        MessageDialogParameters.builder()
+            .message(message)
+            .level(MessageLevel.QUESTION)
+            .buttons(MessageButtons.OK_CANCEL)
+            .build());
+  }
+
+  /**
+   * Lets the user pick one file to open, of one of {@code types}, or of any type without them.
+   *
+   * @return The file, or empty if the user canceled. Canceling the future closes the dialog.
+   */
+  default CompletableFuture<Optional<Path>> pickFile(FileType... types) {
+    return Window.following(
+        this.showOpenDialog(OpenDialogParameters.builder().fileTypes(List.of(types)).build()),
+        files -> files.stream().findFirst());
+  }
+
+  /**
+   * Lets the user pick files to open, of {@code types}, or of any type without them.
+   *
+   * @return The files, or none if the user canceled. Canceling the future closes the dialog.
+   */
+  default CompletableFuture<List<Path>> pickFiles(FileType... types) {
+    return this.showOpenDialog(
+        OpenDialogParameters.builder().fileTypes(List.of(types)).multiple(true).build());
+  }
+
+  /**
+   * Lets the user pick a folder.
+   *
+   * @return The folder, or empty if the user canceled. Canceling the future closes the dialog.
+   */
+  default CompletableFuture<Optional<Path>> pickFolder() {
+    return Window.following(
+        this.showOpenDialog(OpenDialogParameters.builder().directories(true).build()),
+        folders -> folders.stream().findFirst());
+  }
+
+  /**
+   * Lets the user pick where to save a file, suggesting {@code fileName}, of one of {@code types}.
+   *
+   * @return The file, or empty if the user canceled. Canceling the future closes the dialog.
+   */
+  default CompletableFuture<Optional<Path>> pickSaveFile(String fileName, FileType... types) {
+    return this.showSaveDialog(
+        SaveDialogParameters.builder().fileName(fileName).fileTypes(List.of(types)).build());
+  }
+
   /** Puts the window on screen, or back on it after {@link #hide()}, and brings it to the front. */
   void show();
 
@@ -369,4 +451,20 @@ public interface Window extends AutoCloseable {
    */
   @Override
   void close();
+
+  /**
+   * {@code dialog} with its answer turned by {@code answer}, where canceling the result cancels
+   * {@code dialog} too, which closes it, as canceling {@code dialog} itself does.
+   */
+  private static <T, R> CompletableFuture<R> following(
+      CompletableFuture<T> dialog, Function<T, R> answer) {
+    CompletableFuture<R> result = dialog.thenApply(answer);
+    result.whenComplete(
+        (_, _) -> {
+          if (result.isCancelled()) {
+            dialog.cancel(true);
+          }
+        });
+    return result;
+  }
 }

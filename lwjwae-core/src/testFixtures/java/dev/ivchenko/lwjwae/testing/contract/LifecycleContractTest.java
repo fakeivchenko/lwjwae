@@ -277,4 +277,32 @@ public abstract class LifecycleContractTest extends DisplayContractTest {
       Assertions.assertEquals(List.of(first), application.windows());
     }
   }
+
+  @Test
+  void launchShowsThePageAndReturnsWhenTheWindowCloses() throws Exception {
+    CompletableFuture<Window> opened = new CompletableFuture<>();
+    Thread runner =
+        new Thread(
+            () ->
+                Application.launch(
+                    WindowParameters.of("lwjwae :: launch", "test-app/index.html"),
+                    window -> {
+                      window.bind("launched", text -> "yes " + text);
+                      opened.complete(window);
+                    }),
+            "launch-caller");
+    runner.start();
+
+    Window window = opened.get(30, TimeUnit.SECONDS);
+    Assertions.assertEquals(
+        "bridge test", Loads.awaitValue(window, "document.querySelector('h1')?.textContent"));
+    Loads.eval(
+        window, "window.launched('bound').then(text => { window.__launched = text; }); undefined;");
+    Assertions.assertEquals("yes bound", Loads.awaitValue(window, "window.__launched"));
+    Assertions.assertTrue(window.isVisible());
+
+    window.close();
+    runner.join(TimeUnit.SECONDS.toMillis(30));
+    Assertions.assertFalse(runner.isAlive(), "launch must return once its window closed");
+  }
 }

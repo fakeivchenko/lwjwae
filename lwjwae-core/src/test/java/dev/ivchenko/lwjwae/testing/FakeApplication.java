@@ -46,14 +46,22 @@ public class FakeApplication extends AbstractApplication {
     return new FakeWindow(this, id, parameters);
   }
 
+  /** Every tray icon that went up, in order. */
+  public final List<TrayIcon> trayIcons = new CopyOnWriteArrayList<>();
+
+  /** Every notification that was shown, in order. */
+  public final List<Notification> shownNotifications = new CopyOnWriteArrayList<>();
+
   @Override
   protected Tray createTray(TrayIcon icon, Consumer<Tray> closed) {
+    this.trayIcons.add(icon);
     return new FakeTray(closed);
   }
 
   @Override
   protected NotificationHandle createNotification(
       Notification notification, Consumer<NotificationHandle> closed) {
+    this.shownNotifications.add(notification);
     return new FakeNotification(closed);
   }
 

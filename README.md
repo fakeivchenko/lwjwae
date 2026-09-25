@@ -35,6 +35,23 @@ GraalVM to one executable and captured on Windows 11.
 
 ## A first window
 
+One line opens a window on a page of the application and returns when it closes:
+
+```java
+Application.launch("Docs", "app/index.html");
+```
+
+With a Java function for the page:
+
+```java
+Application.launch(
+    WindowParameters.of("Docs", "app/index.html"),
+    window -> window.bind("reverse", text -> new StringBuilder(text).reverse().toString()));
+```
+
+Every step on its own, for an application with more than one window, a tray icon, or a life
+beyond its first window:
+
 ```java
 try (Application application = Application.create()) {
   Window window = application.open(WindowParameters.builder()
@@ -42,7 +59,7 @@ try (Application application = Application.create()) {
       .size(1280, 800)
       .build());
   window.bind("reverse", text -> new StringBuilder(text).reverse().toString());
-  window.loadResource("app/index.html");
+  window.load("app/index.html");
   window.show();
   application.run();
 }
@@ -114,6 +131,10 @@ dependencies {
 
 ## What you get
 
+- **Short when it can be, detailed when it must.** `Application.launch("Docs", "app/index.html")`
+  is a whole application; `window.alert`, `confirm`, `pickFile`, `application.tray(icon, items)`,
+  and `showNotification(title, body)` state the common choice. Under them is the detailed API
+  with every option.
 - **One API for three engines.** Title, size, resizing, navigation, inline HTML, script evaluation,
   load events, the developer tools. Every method works from any thread; the backend forwards it to
   the UI thread of the toolkit.
