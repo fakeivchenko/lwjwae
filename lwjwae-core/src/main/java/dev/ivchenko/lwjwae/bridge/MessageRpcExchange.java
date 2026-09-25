@@ -133,7 +133,7 @@ public final class MessageRpcExchange implements RpcExchange {
     } else {
       this.post(this.message("d", seq, Base64.getEncoder().encodeToString(part)));
     }
-    return !this.cancelled;
+    return true;
   }
 
   @Override
