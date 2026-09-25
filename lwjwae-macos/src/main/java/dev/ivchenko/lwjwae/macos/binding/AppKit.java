@@ -245,11 +245,15 @@ public class AppKit {
   /**
    * Enters or leaves full screen with {@code -[NSWindow toggleFullScreen:]}, which toggles, so it's
    * sent only when the state differs.
+   *
+   * @return Whether it was sent, so that a transition begins.
    */
-  public void setFullScreen(MemorySegment window, boolean fullScreen) {
-    if (((AppKit.styleMask(window) & STYLE_FULL_SCREEN) != 0) != fullScreen) {
-      ObjC.sendVoid(window, "toggleFullScreen:", MemorySegment.NULL);
+  public boolean setFullScreen(MemorySegment window, boolean fullScreen) {
+    if (((AppKit.styleMask(window) & STYLE_FULL_SCREEN) != 0) == fullScreen) {
+      return false;
     }
+    ObjC.sendVoid(window, "toggleFullScreen:", MemorySegment.NULL);
+    return true;
   }
 
   /** Puts the window on the floating level, above normal windows, or back on the normal one. */

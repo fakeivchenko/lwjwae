@@ -460,7 +460,7 @@ public class MacWindow extends AbstractWindow {
                 this.fullScreenWanted = fullscreen;
                 return;
               }
-              AppKit.setFullScreen(this.window(), fullscreen);
+              this.toggleFullScreen(fullscreen);
             });
   }
 
@@ -470,9 +470,21 @@ public class MacWindow extends AbstractWindow {
     Boolean wanted = this.fullScreenWanted;
     this.fullScreenWanted = null;
     if (wanted != null && !this.isClosed()) {
-      AppKit.setFullScreen(this.window(), wanted);
+      this.toggleFullScreen(wanted);
     }
     this.windowChanged();
+  }
+
+  /**
+   * Starts a transition, and counts it as running from here: the style mask can change before
+   * {@code windowWillEnterFullScreen:} arrives, and a toggle sent in between is lost. A hidden
+   * window may get no notification at all, so only a visible one waits for one.
+   */
+  private void toggleFullScreen(boolean fullscreen) {
+    MemorySegment nsWindow = this.window();
+    if (AppKit.setFullScreen(nsWindow, fullscreen) && AppKit.isVisible(nsWindow)) {
+      this.fullScreenChanging = true;
+    }
   }
 
   @Override
