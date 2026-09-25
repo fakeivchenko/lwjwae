@@ -199,8 +199,14 @@ public class AppKit {
   /** The content size that stands for no maximum: {@code FLT_MAX}, AppKit's own default. */
   private final double UNLIMITED = Float.MAX_VALUE;
 
-  /** Calls {@code -[NSWindow miniaturize:]} or {@code -[NSWindow deminiaturize:]}. */
+  /**
+   * Calls {@code -[NSWindow miniaturize:]} or {@code -[NSWindow deminiaturize:]}, only when the
+   * state differs, as the other state changes are sent.
+   */
   public void setMiniaturized(MemorySegment window, boolean miniaturized) {
+    if (isMiniaturized(window) == miniaturized) {
+      return;
+    }
     ObjC.sendVoid(window, miniaturized ? "miniaturize:" : "deminiaturize:", MemorySegment.NULL);
   }
 

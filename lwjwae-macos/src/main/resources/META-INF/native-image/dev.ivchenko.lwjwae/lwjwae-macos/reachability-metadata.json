@@ -81,6 +81,22 @@
           ]
         },
         {
+          "name": "onFullScreenSettled",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
+        },
+        {
+          "name": "onFullScreenStarting",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
+        },
+        {
           "name": "onStartUrlSchemeTask",
           "parameterTypes": [
             "java.lang.foreign.MemorySegment",
@@ -757,6 +773,26 @@
         "parameterTypes": [
           "void*",
           "jlong"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.macos.MacWindow",
+        "method": "onFullScreenStarting",
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.macos.MacWindow",
+        "method": "onFullScreenSettled",
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "void*"
         ]
       }
     ]

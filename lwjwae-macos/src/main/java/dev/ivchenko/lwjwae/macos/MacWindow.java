@@ -74,6 +74,10 @@ public class MacWindow extends AbstractWindow {
           Signatures.DELEGATE_1_BOOL);
   private static final MemorySegment ON_WINDOW_WILL_CLOSE = delegateStub("onWindowWillClose", 1);
   private static final MemorySegment ON_WINDOW_CHANGED = delegateStub("onWindowChanged", 1);
+  private static final MemorySegment ON_FULL_SCREEN_STARTING =
+      delegateStub("onFullScreenStarting", 1);
+  private static final MemorySegment ON_FULL_SCREEN_SETTLED =
+      delegateStub("onFullScreenSettled", 1);
   private static final MemorySegment ON_DID_START =
       delegateStub("onDidStartProvisionalNavigation", 2);
   private static final MemorySegment ON_DID_COMMIT = delegateStub("onDidCommitNavigation", 2);
@@ -136,8 +140,19 @@ public class MacWindow extends AbstractWindow {
               Map.entry("windowDidResignKey:", new MethodStub(ON_WINDOW_CHANGED, "v@:@")),
               Map.entry("windowDidMiniaturize:", new MethodStub(ON_WINDOW_CHANGED, "v@:@")),
               Map.entry("windowDidDeminiaturize:", new MethodStub(ON_WINDOW_CHANGED, "v@:@")),
-              Map.entry("windowDidEnterFullScreen:", new MethodStub(ON_WINDOW_CHANGED, "v@:@")),
-              Map.entry("windowDidExitFullScreen:", new MethodStub(ON_WINDOW_CHANGED, "v@:@"))));
+              Map.entry(
+                  "windowWillEnterFullScreen:", new MethodStub(ON_FULL_SCREEN_STARTING, "v@:@")),
+              Map.entry(
+                  "windowWillExitFullScreen:", new MethodStub(ON_FULL_SCREEN_STARTING, "v@:@")),
+              Map.entry(
+                  "windowDidEnterFullScreen:", new MethodStub(ON_FULL_SCREEN_SETTLED, "v@:@")),
+              Map.entry("windowDidExitFullScreen:", new MethodStub(ON_FULL_SCREEN_SETTLED, "v@:@")),
+              Map.entry(
+                  "windowDidFailToEnterFullScreen:",
+                  new MethodStub(ON_FULL_SCREEN_SETTLED, "v@:@")),
+              Map.entry(
+                  "windowDidFailToExitFullScreen:",
+                  new MethodStub(ON_FULL_SCREEN_SETTLED, "v@:@"))));
 
   private volatile MemorySegment window;
   private volatile MemorySegment webView;
@@ -147,6 +162,10 @@ public class MacWindow extends AbstractWindow {
   private volatile String reportedFailure;
   private volatile WindowSize minimumSize = WindowSize.NONE;
   private volatile WindowSize maximumSize = WindowSize.NONE;
+
+  // --- full screen, which AppKit enters and leaves with an animation; read on the main thread ---
+  private boolean fullScreenChanging;
+  private Boolean fullScreenWanted;
   private final boolean minimizable;
 
   /**
@@ -424,7 +443,27 @@ public class MacWindow extends AbstractWindow {
 
   @Override
   public void fullscreen(boolean fullscreen) {
-    this.dispatcher().run(() -> AppKit.setFullScreen(this.window(), fullscreen));
+    this.dispatcher()
+        .run(
+            () -> {
+              if (this.fullScreenChanging) {
+                // toggleFullScreen: is ignored while the animation of the last one runs.
+                this.fullScreenWanted = fullscreen;
+                return;
+              }
+              AppKit.setFullScreen(this.window(), fullscreen);
+            });
+  }
+
+  /** A transition to full screen or back ended: the request that waited for it goes now. */
+  private void fullScreenSettled() {
+    this.fullScreenChanging = false;
+    Boolean wanted = this.fullScreenWanted;
+    this.fullScreenWanted = null;
+    if (wanted != null && !this.isClosed()) {
+      AppKit.setFullScreen(this.window(), wanted);
+    }
+    this.windowChanged();
   }
 
   @Override
@@ -759,10 +798,50 @@ public class MacWindow extends AbstractWindow {
   }
 
   /**
+   * {@code windowWillEnterFullScreen:} and {@code windowWillExitFullScreen:}: the animation of a
+   * transition runs, and a request for another one waits for its end.
+   *
+   * <p>Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
+   * binds it by name. {@code resource}: the window is only borrowed.
+   */
+  @SuppressWarnings({"unused", "resource"})
+  private static void onFullScreenStarting(
+      MemorySegment self, MemorySegment command, MemorySegment notification) {
+    try {
+      MacWindow window = windowOf(self);
+      if (window != null) {
+        window.fullScreenChanging = true;
+      }
+    } catch (Throwable t) {
+      ThrowableUtil.report(t);
+    }
+  }
+
+  /**
+   * {@code windowDidEnterFullScreen:}, {@code windowDidExitFullScreen:}, and their failures: the
+   * transition ended, the window changed, and a request that waited goes now.
+   *
+   * <p>Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
+   * binds it by name. {@code resource}: the window is only borrowed.
+   */
+  @SuppressWarnings({"unused", "resource"})
+  private static void onFullScreenSettled(
+      MemorySegment self, MemorySegment command, MemorySegment notification) {
+    try {
+      MacWindow window = windowOf(self);
+      if (window != null) {
+        window.fullScreenSettled();
+      }
+    } catch (Throwable t) {
+      ThrowableUtil.report(t);
+    }
+  }
+
+  /**
    * {@code windowDidResize:}, {@code windowDidMove:}, {@code windowDidBecomeKey:}, {@code
-   * windowDidResignKey:}, {@code windowDidMiniaturize:}, {@code windowDidDeminiaturize:}, {@code
-   * windowDidEnterFullScreen:}, and {@code windowDidExitFullScreen:}: the window may have changed.
-   * There's no notification of a zoom; the resize that comes with it reports it.
+   * windowDidResignKey:}, {@code windowDidMiniaturize:}, and {@code windowDidDeminiaturize:}: the
+   * window may have changed. There's no notification of a zoom; the resize that comes with it
+   * reports it.
    *
    * <p>Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
    * binds it by name, so no Java code calls it and the compiler sees a dead private method. {@code
