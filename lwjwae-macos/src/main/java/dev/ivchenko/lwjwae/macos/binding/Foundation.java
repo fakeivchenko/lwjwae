@@ -53,6 +53,18 @@ public class Foundation {
     }
   }
 
+  /** The bytes of an {@code NSData}, or {@code null} for {@code nil}. */
+  public byte[] bytes(MemorySegment data) {
+    if (ObjC.isNull(data)) {
+      return null;
+    }
+    long length = ObjC.sendLong(data, "length");
+    if (length == 0) {
+      return new byte[0];
+    }
+    return ObjC.send(data, "bytes").reinterpret(length).toArray(ValueLayout.JAVA_BYTE);
+  }
+
   /** An autoreleased {@code NSError} in the domain of the library. */
   public MemorySegment error(long code, String description) {
     MemorySegment key = Foundation.string("NSLocalizedDescription");

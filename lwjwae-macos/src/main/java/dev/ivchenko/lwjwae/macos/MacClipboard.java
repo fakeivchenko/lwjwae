@@ -8,7 +8,7 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * The general pasteboard of AppKit, the one of Command-C, in plain text.
+ * The general pasteboard of AppKit, the one of Command-C: plain text, and images as PNG and TIFF.
  *
  * <p>The pasteboard server holds what was written, so it stays after the application exits. A read
  * runs on the main thread, where AppKit wants it, and completes the future there.
@@ -38,5 +38,25 @@ public class MacClipboard implements Clipboard {
   public void writeText(String text) {
     Objects.requireNonNull(text, "text");
     this.dispatcher.run(() -> AppKit.setPasteboardText(text));
+  }
+
+  @Override
+  public CompletableFuture<Optional<byte[]>> readImage() {
+    CompletableFuture<Optional<byte[]>> read = new CompletableFuture<>();
+    this.dispatcher.post(
+        () -> {
+          try {
+            read.complete(Optional.ofNullable(AppKit.pasteboardImage()));
+          } catch (Throwable t) {
+            read.completeExceptionally(t);
+          }
+        });
+    return read;
+  }
+
+  @Override
+  public void writeImage(byte[] png) {
+    Objects.requireNonNull(png, "png");
+    this.dispatcher.run(() -> AppKit.setPasteboardImage(png));
   }
 }

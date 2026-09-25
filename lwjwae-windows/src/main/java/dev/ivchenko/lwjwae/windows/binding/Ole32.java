@@ -30,6 +30,10 @@ public class Ole32 {
           OLE32, "CoCreateInstance", Signatures.INT_POINTER_POINTER_INT_POINTER_POINTER);
   private final MethodHandle CO_TASK_MEM_FREE =
       NativeLibraries.downcall(OLE32, "CoTaskMemFree", Signatures.VOID_POINTER);
+  private final MethodHandle CREATE_STREAM_ON_HGLOBAL =
+      NativeLibraries.downcall(OLE32, "CreateStreamOnHGlobal", Signatures.INT_POINTER_INT_POINTER);
+  private final MethodHandle GET_HGLOBAL_FROM_STREAM =
+      NativeLibraries.downcall(OLE32, "GetHGlobalFromStream", Signatures.INT_POINTER_POINTER);
 
   /** Enters a single-threaded apartment on the calling thread. */
   @SneakyThrows
@@ -56,5 +60,34 @@ public class Ole32 {
   @SneakyThrows
   public void coTaskMemFree(MemorySegment pointer) {
     CO_TASK_MEM_FREE.invokeExact(pointer);
+  }
+
+  /**
+   * An empty {@code IStream} over global memory that grows as it's written, which the caller
+   * releases; the memory goes with it.
+   *
+   * @throws IllegalStateException If Windows has no memory for it.
+   */
+  @SneakyThrows
+  public MemorySegment memoryStream() {
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment stream = arena.allocate(Signatures.C_POINTER);
+      int hresult = (int) CREATE_STREAM_ON_HGLOBAL.invokeExact(MemorySegment.NULL, 1, stream);
+      if (hresult < 0) {
+        throw new IllegalStateException(
+            "CreateStreamOnHGlobal failed with HRESULT 0x%08X".formatted(hresult));
+      }
+      return stream.get(Signatures.C_POINTER, 0);
+    }
+  }
+
+  /** The global memory under a stream of {@link #memoryStream()}, which the stream owns. */
+  @SneakyThrows
+  public MemorySegment streamMemory(MemorySegment stream) {
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment memory = arena.allocate(Signatures.C_POINTER);
+      int _ = (int) GET_HGLOBAL_FROM_STREAM.invokeExact(stream, memory);
+      return memory.get(Signatures.C_POINTER, 0);
+    }
   }
 }

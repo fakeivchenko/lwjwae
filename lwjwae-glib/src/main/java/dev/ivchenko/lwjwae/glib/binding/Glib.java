@@ -5,6 +5,7 @@ import java.lang.foreign.Arena;
 import java.lang.foreign.MemoryLayout;
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.SymbolLookup;
+import java.lang.foreign.ValueLayout;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.VarHandle;
 import java.util.ArrayList;
@@ -81,6 +82,12 @@ public class Glib {
       NativeLibraries.downcall(GIO, "g_file_new_for_path", Signatures.POINTER_POINTER);
   private final MethodHandle FILE_GET_PATH =
       NativeLibraries.downcall(GIO, "g_file_get_path", Signatures.POINTER_POINTER);
+  private final MethodHandle BYTES_NEW =
+      NativeLibraries.downcall(GLIB, "g_bytes_new", Signatures.POINTER_POINTER_LONG);
+  private final MethodHandle BYTES_GET_DATA =
+      NativeLibraries.downcall(GLIB, "g_bytes_get_data", Signatures.POINTER_POINTER_POINTER);
+  private final MethodHandle BYTES_UNREF =
+      NativeLibraries.downcall(GLIB, "g_bytes_unref", Signatures.VOID_POINTER);
   private final MethodHandle LIST_MODEL_GET_N_ITEMS =
       NativeLibraries.downcall(GIO, "g_list_model_get_n_items", Signatures.INT_POINTER);
   private final MethodHandle LIST_MODEL_GET_ITEM =
@@ -262,6 +269,37 @@ public class Glib {
     try (Arena arena = Arena.ofConfined()) {
       return (MemorySegment) FILE_NEW_FOR_PATH.invokeExact(arena.allocateFrom(path));
     }
+  }
+
+  /**
+   * A {@code GBytes} with a copy of {@code data}, which the caller gives back with {@link
+   * #unrefBytes}.
+   */
+  @SneakyThrows
+  public MemorySegment bytes(byte[] data) {
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment copy = arena.allocate(Math.max(data.length, 1));
+      MemorySegment.copy(MemorySegment.ofArray(data), 0L, copy, 0L, data.length);
+      return (MemorySegment) BYTES_NEW.invokeExact(copy, (long) data.length);
+    }
+  }
+
+  /** The contents of a {@code GBytes} that the caller owns, which is given back. */
+  @SneakyThrows
+  public byte[] takeBytes(MemorySegment bytes) {
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment size = arena.allocate(Signatures.C_LONG);
+      MemorySegment data = (MemorySegment) BYTES_GET_DATA.invokeExact(bytes, size);
+      return data.reinterpret(size.get(Signatures.C_LONG, 0)).toArray(ValueLayout.JAVA_BYTE);
+    } finally {
+      Glib.unrefBytes(bytes);
+    }
+  }
+
+  /** Calls {@code g_bytes_unref}. */
+  @SneakyThrows
+  public void unrefBytes(MemorySegment bytes) {
+    BYTES_UNREF.invokeExact(bytes);
   }
 
   /**

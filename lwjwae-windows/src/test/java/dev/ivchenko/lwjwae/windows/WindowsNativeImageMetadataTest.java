@@ -5,6 +5,7 @@ import dev.ivchenko.lwjwae.util.PlatformUtil;
 import dev.ivchenko.lwjwae.windows.binding.Advapi32;
 import dev.ivchenko.lwjwae.windows.binding.Com;
 import dev.ivchenko.lwjwae.windows.binding.ComCallback;
+import dev.ivchenko.lwjwae.windows.binding.Gdiplus;
 import dev.ivchenko.lwjwae.windows.binding.Kernel32;
 import dev.ivchenko.lwjwae.windows.binding.Ole32;
 import dev.ivchenko.lwjwae.windows.binding.Shcore;
@@ -48,6 +49,7 @@ class WindowsNativeImageMetadataTest extends NativeImageMetadataContractTest {
         WindowsTray.class,
         WindowsApplication.class,
         Shcore.class,
+        Gdiplus.class,
         WindowsScreens.class);
   }
 }

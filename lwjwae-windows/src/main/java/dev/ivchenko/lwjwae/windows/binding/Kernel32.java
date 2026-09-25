@@ -4,6 +4,7 @@ import dev.ivchenko.lwjwae.foreign.NativeLibraries;
 import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.SymbolLookup;
+import java.lang.foreign.ValueLayout;
 import java.lang.invoke.MethodHandle;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
@@ -35,6 +36,8 @@ public class Kernel32 {
       NativeLibraries.downcall(KERNEL32, "GlobalLock", Signatures.POINTER_POINTER);
   private final MethodHandle GLOBAL_UNLOCK =
       NativeLibraries.downcall(KERNEL32, "GlobalUnlock", Signatures.INT_POINTER);
+  private final MethodHandle GLOBAL_SIZE =
+      NativeLibraries.downcall(KERNEL32, "GlobalSize", Signatures.LONG_POINTER);
   private final MethodHandle GLOBAL_FREE =
       NativeLibraries.downcall(KERNEL32, "GlobalFree", Signatures.POINTER_POINTER);
 
@@ -112,6 +115,44 @@ public class Kernel32 {
         MemorySegment.ofArray(bytes), 0, locked.reinterpret(bytes.length), 0, bytes.length);
     int _ = (int) GLOBAL_UNLOCK.invokeExact(memory);
     return memory;
+  }
+
+  /**
+   * A copy of {@code data} in movable global memory, the form that {@code SetClipboardData} takes;
+   * the caller hands it over or frees it with {@link #globalFree}.
+   *
+   * @throws IllegalStateException If Windows has no memory for it.
+   */
+  @SneakyThrows
+  public MemorySegment globalBytes(byte[] data) {
+    MemorySegment memory =
+        (MemorySegment) GLOBAL_ALLOC.invokeExact(GMEM_MOVEABLE, (long) Math.max(data.length, 1));
+    if (memory.equals(MemorySegment.NULL)) {
+      throw new IllegalStateException("GlobalAlloc failed: " + Kernel32.lastError());
+    }
+    MemorySegment locked = (MemorySegment) GLOBAL_LOCK.invokeExact(memory);
+    MemorySegment.copy(
+        MemorySegment.ofArray(data), 0, locked.reinterpret(data.length), 0, data.length);
+    int _ = (int) GLOBAL_UNLOCK.invokeExact(memory);
+    return memory;
+  }
+
+  /**
+   * The bytes of global memory that another owner holds, as many as it has allocated, which may be
+   * more than were written.
+   */
+  @SneakyThrows
+  public byte[] readGlobal(MemorySegment memory) {
+    long size = (long) GLOBAL_SIZE.invokeExact(memory);
+    MemorySegment locked = (MemorySegment) GLOBAL_LOCK.invokeExact(memory);
+    if (locked.equals(MemorySegment.NULL)) {
+      return new byte[0];
+    }
+    try {
+      return locked.reinterpret(size).toArray(ValueLayout.JAVA_BYTE);
+    } finally {
+      int _ = (int) GLOBAL_UNLOCK.invokeExact(memory);
+    }
   }
 
   /** The NUL-terminated UTF-16 text in global memory that another owner holds. */

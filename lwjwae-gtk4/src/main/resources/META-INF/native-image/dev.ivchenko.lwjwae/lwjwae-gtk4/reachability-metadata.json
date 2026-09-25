@@ -123,6 +123,14 @@
       "type": "dev.ivchenko.lwjwae.gtk4.Gtk4Clipboard",
       "methods": [
         {
+          "name": "onImageRead",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
+        },
+        {
           "name": "onTextRead",
           "parameterTypes": [
             "java.lang.foreign.MemorySegment",
@@ -419,6 +427,16 @@
       {
         "class": "dev.ivchenko.lwjwae.gtk4.Gtk4Clipboard",
         "method": "onTextRead",
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.gtk4.Gtk4Clipboard",
+        "method": "onImageRead",
         "returnType": "void",
         "parameterTypes": [
           "void*",

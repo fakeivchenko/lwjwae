@@ -241,7 +241,14 @@ at once:
 Clipboard clipboard = application.clipboard();
 clipboard.writeText("https://example.com");
 Optional<String> text = clipboard.readText().get();
+
+clipboard.writeImage("app/logo.png");               // or PNG bytes
+Optional<byte[]> png = clipboard.readImage().get(); // PNG, whatever form was copied
 ```
+
+An image goes in the forms that other applications of the platform read: PNG and a bitmap on
+Windows, PNG and TIFF on macOS, every format that GTK writes on Linux. It comes back as PNG, from
+whichever form the application that copied it chose, a screenshot included.
 
 The page has the same through `window.lwjwae.clipboard`, without the permission prompts and the
 user gesture that `navigator.clipboard` asks for in a web view:

@@ -1,5 +1,7 @@
 package dev.ivchenko.lwjwae.clipboard;
 
+import dev.ivchenko.lwjwae.exception.ResourceNotFoundException;
+import dev.ivchenko.lwjwae.util.ResourceUtil;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
@@ -28,4 +30,28 @@ public interface Clipboard {
 
   /** Puts {@code text} on the clipboard, in place of what was there. */
   void writeText(String text);
+
+  /**
+   * The image on the clipboard as PNG bytes, whatever form the application that copied it chose, or
+   * empty when there is none, such as after text was copied.
+   */
+  CompletableFuture<Optional<byte[]>> readImage();
+
+  /**
+   * Puts the PNG image {@code png} on the clipboard, in place of what was there, in the forms that
+   * other applications of the platform read.
+   *
+   * @throws IllegalArgumentException If {@code png} isn't an image that the platform can read.
+   */
+  void writeImage(byte[] png);
+
+  /**
+   * Puts a PNG among the resources of the application, such as {@code "app/logo.png"}, on the
+   * clipboard.
+   *
+   * @throws ResourceNotFoundException If the classpath has no such resource.
+   */
+  default void writeImage(String resource) {
+    this.writeImage(ResourceUtil.read(resource));
+  }
 }

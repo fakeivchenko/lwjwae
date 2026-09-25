@@ -34,6 +34,10 @@ public class Gtk {
       NativeLibraries.downcall(GTK, "gtk_clipboard_set_text", Signatures.VOID_POINTER_POINTER_INT);
   private final MethodHandle CLIPBOARD_WAIT_FOR_TEXT =
       NativeLibraries.downcall(GTK, "gtk_clipboard_wait_for_text", Signatures.POINTER_POINTER);
+  private final MethodHandle CLIPBOARD_SET_IMAGE =
+      NativeLibraries.downcall(GTK, "gtk_clipboard_set_image", Signatures.VOID_POINTER_POINTER);
+  private final MethodHandle CLIPBOARD_WAIT_FOR_IMAGE =
+      NativeLibraries.downcall(GTK, "gtk_clipboard_wait_for_image", Signatures.POINTER_POINTER);
 
   /** {@code GDK_SELECTION_CLIPBOARD}: the atom of the clipboard that Ctrl+C fills, a constant. */
   private final MemorySegment SELECTION_CLIPBOARD = MemorySegment.ofAddress(69);
@@ -780,5 +784,22 @@ public class Gtk {
   public String clipboardWaitForText() {
     MemorySegment clipboard = (MemorySegment) CLIPBOARD_GET.invokeExact(SELECTION_CLIPBOARD);
     return Glib.takeString((MemorySegment) CLIPBOARD_WAIT_FOR_TEXT.invokeExact(clipboard));
+  }
+
+  /** Puts {@code pixbuf} on the clipboard, which takes a reference of its own. */
+  @SneakyThrows
+  public void clipboardSetImage(MemorySegment pixbuf) {
+    MemorySegment clipboard = (MemorySegment) CLIPBOARD_GET.invokeExact(SELECTION_CLIPBOARD);
+    CLIPBOARD_SET_IMAGE.invokeExact(clipboard, pixbuf);
+  }
+
+  /**
+   * The image on the clipboard as a pixbuf that the caller gives back with {@link Glib#unref}, or
+   * {@code NULL}: {@code gtk_clipboard_wait_for_image}, which runs the main loop meanwhile.
+   */
+  @SneakyThrows
+  public MemorySegment clipboardWaitForImage() {
+    MemorySegment clipboard = (MemorySegment) CLIPBOARD_GET.invokeExact(SELECTION_CLIPBOARD);
+    return (MemorySegment) CLIPBOARD_WAIT_FOR_IMAGE.invokeExact(clipboard);
   }
 }

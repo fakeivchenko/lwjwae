@@ -640,6 +640,73 @@ public class AppKit {
         Foundation.string(PASTEBOARD_TYPE_STRING));
   }
 
+  /** {@code NSPasteboardTypePNG}. */
+  private final String PASTEBOARD_TYPE_PNG = "public.png";
+
+  /** {@code NSPasteboardTypeTIFF}: the image type of older applications, and of screenshots. */
+  private final String PASTEBOARD_TYPE_TIFF = "public.tiff";
+
+  /** {@code NSBitmapImageFileTypePNG}. */
+  private final long BITMAP_FILE_TYPE_PNG = 4;
+
+  /**
+   * Replaces what the general pasteboard has with the image {@code png}, as PNG and as TIFF, the
+   * type that applications from before PNG read.
+   *
+   * @throws IllegalArgumentException If AppKit can't read the image.
+   */
+  public void setPasteboardImage(byte[] png) {
+    MemorySegment data = Foundation.data(png);
+    MemorySegment image = ObjC.send(ObjC.send(ObjC.cls("NSImage"), "alloc"), "initWithData:", data);
+    if (ObjC.isNull(image)) {
+      throw new IllegalArgumentException("Not an image AppKit can read");
+    }
+    try {
+      MemorySegment pasteboard = ObjC.send(ObjC.cls("NSPasteboard"), "generalPasteboard");
+      long _ = ObjC.sendLong(pasteboard, "clearContents");
+      ObjC.sendVoid(pasteboard, "setData:forType:", data, Foundation.string(PASTEBOARD_TYPE_PNG));
+      ObjC.sendVoid(
+          pasteboard,
+          "setData:forType:",
+          ObjC.send(image, "TIFFRepresentation"),
+          Foundation.string(PASTEBOARD_TYPE_TIFF));
+    } finally {
+      Foundation.release(image);
+    }
+  }
+
+  /**
+   * The image on the general pasteboard as PNG, or {@code null} for none: its PNG, or its TIFF,
+   * which screenshots and older applications write, encoded as PNG.
+   */
+  public byte[] pasteboardImage() {
+    MemorySegment pasteboard = ObjC.send(ObjC.cls("NSPasteboard"), "generalPasteboard");
+    MemorySegment png =
+        ObjC.send(pasteboard, "dataForType:", Foundation.string(PASTEBOARD_TYPE_PNG));
+    if (!ObjC.isNull(png)) {
+      return Foundation.bytes(png);
+    }
+    MemorySegment tiff =
+        ObjC.send(pasteboard, "dataForType:", Foundation.string(PASTEBOARD_TYPE_TIFF));
+    if (ObjC.isNull(tiff)) {
+      return null;
+    }
+    MemorySegment representation =
+        ObjC.send(ObjC.cls("NSBitmapImageRep"), "imageRepWithData:", tiff);
+    if (ObjC.isNull(representation)) {
+      return null;
+    }
+    MemorySegment representations =
+        ObjC.send(ObjC.cls("NSArray"), "arrayWithObject:", representation);
+    return Foundation.bytes(
+        ObjC.send(
+            ObjC.cls("NSBitmapImageRep"),
+            "representationOfImageRepsInArray:usingType:properties:",
+            representations,
+            BITMAP_FILE_TYPE_PNG,
+            ObjC.send(ObjC.cls("NSDictionary"), "dictionary")));
+  }
+
   /** The text on the general pasteboard, or {@code null} for none. */
   public String pasteboardText() {
     MemorySegment pasteboard = ObjC.send(ObjC.cls("NSPasteboard"), "generalPasteboard");

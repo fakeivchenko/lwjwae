@@ -147,6 +147,18 @@ public class Gtk {
   private final MethodHandle CLIPBOARD_READ_TEXT_FINISH =
       NativeLibraries.downcall(
           GTK, "gdk_clipboard_read_text_finish", Signatures.POINTER_POINTER_POINTER_POINTER);
+  private final MethodHandle CLIPBOARD_SET_TEXTURE =
+      NativeLibraries.downcall(GTK, "gdk_clipboard_set_texture", Signatures.VOID_POINTER_POINTER);
+  private final MethodHandle CLIPBOARD_READ_TEXTURE_ASYNC =
+      NativeLibraries.downcall(GTK, "gdk_clipboard_read_texture_async", Signatures.VOID_POINTER_X4);
+  private final MethodHandle CLIPBOARD_READ_TEXTURE_FINISH =
+      NativeLibraries.downcall(
+          GTK, "gdk_clipboard_read_texture_finish", Signatures.POINTER_POINTER_POINTER_POINTER);
+  private final MethodHandle TEXTURE_NEW_FROM_BYTES =
+      NativeLibraries.downcall(
+          GTK, "gdk_texture_new_from_bytes", Signatures.POINTER_POINTER_POINTER);
+  private final MethodHandle TEXTURE_SAVE_TO_PNG_BYTES =
+      NativeLibraries.downcall(GTK, "gdk_texture_save_to_png_bytes", Signatures.POINTER_POINTER);
   private final MethodHandle DISPLAY_GET_MONITORS =
       NativeLibraries.downcall(GTK, "gdk_display_get_monitors", Signatures.POINTER_POINTER);
   private final MethodHandle DISPLAY_GET_MONITOR_AT_SURFACE =
@@ -442,6 +454,58 @@ public class Gtk {
           (MemorySegment) CLIPBOARD_READ_TEXT_FINISH.invokeExact(clipboard, result, error);
       String _ = Glib.takeErrorMessage(error.get(Signatures.C_POINTER, 0));
       return Glib.takeString(text);
+    }
+  }
+
+  /**
+   * Puts the image {@code png} on {@code clipboard}, as a {@code GdkTexture}, which GDK offers in
+   * every image format that it writes.
+   *
+   * @throws IllegalArgumentException If GDK can't read the image.
+   */
+  @SneakyThrows
+  public void clipboardSetImage(MemorySegment clipboard, byte[] png) {
+    MemorySegment bytes = Glib.bytes(png);
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment error = arena.allocate(Signatures.C_POINTER);
+      error.set(Signatures.C_POINTER, 0, MemorySegment.NULL);
+      MemorySegment texture = (MemorySegment) TEXTURE_NEW_FROM_BYTES.invokeExact(bytes, error);
+      if (texture.equals(MemorySegment.NULL)) {
+        throw new IllegalArgumentException(
+            "Not an image GDK can read: "
+                + Glib.takeErrorMessage(error.get(Signatures.C_POINTER, 0)));
+      }
+      CLIPBOARD_SET_TEXTURE.invokeExact(clipboard, texture);
+      Glib.unref(texture);
+    } finally {
+      Glib.unrefBytes(bytes);
+    }
+  }
+
+  /** Asks for the image of {@code clipboard}; {@code callback} gets the answer later. */
+  @SneakyThrows
+  public void clipboardReadImageAsync(
+      MemorySegment clipboard, MemorySegment callback, MemorySegment userData) {
+    CLIPBOARD_READ_TEXTURE_ASYNC.invokeExact(clipboard, MemorySegment.NULL, callback, userData);
+  }
+
+  /** The image that a read of {@code clipboard} found, as PNG, or {@code null} for none. */
+  @SneakyThrows
+  public byte[] clipboardReadImageFinish(MemorySegment clipboard, MemorySegment result) {
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment error = arena.allocate(Signatures.C_POINTER);
+      error.set(Signatures.C_POINTER, 0, MemorySegment.NULL);
+      MemorySegment texture =
+          (MemorySegment) CLIPBOARD_READ_TEXTURE_FINISH.invokeExact(clipboard, result, error);
+      String _ = Glib.takeErrorMessage(error.get(Signatures.C_POINTER, 0));
+      if (texture.equals(MemorySegment.NULL)) {
+        return null;
+      }
+      try {
+        return Glib.takeBytes((MemorySegment) TEXTURE_SAVE_TO_PNG_BYTES.invokeExact(texture));
+      } finally {
+        Glib.unref(texture);
+      }
     }
   }
 

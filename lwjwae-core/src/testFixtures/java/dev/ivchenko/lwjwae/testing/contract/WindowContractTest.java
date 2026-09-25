@@ -27,7 +27,9 @@ import dev.ivchenko.lwjwae.testing.Tags;
 import dev.ivchenko.lwjwae.tray.Tray;
 import dev.ivchenko.lwjwae.tray.TrayIcon;
 import java.awt.Color;
+import java.nio.ByteBuffer;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -690,6 +692,34 @@ public abstract class WindowContractTest extends DisplayContractTest {
       Assertions.assertEquals("true", Loads.awaitValue(window, "window.__written"));
       Assertions.assertEquals(
           Optional.of(fromPage), clipboard.readText().get(10, TimeUnit.SECONDS));
+    }
+  }
+
+  @Test
+  void imageGoesThroughTheClipboardAsPng() throws Exception {
+    Assumptions.assumeTrue(
+        this.canUseClipboardUnattended(), "Wayland gives the clipboard to the focused client");
+    try (Application application = Application.create()) {
+      Window window =
+          application.open(
+              WindowParameters.builder().title("lwjwae :: clipboard image").size(400, 300).build());
+      window.show();
+      window.focus();
+      WindowContractTest.awaitTrue(window::isVisible, "the window must show");
+      Clipboard clipboard = application.clipboard();
+
+      clipboard.writeImage(Icons.circle(48, Color.ORANGE));
+      byte[] read = clipboard.readImage().get(10, TimeUnit.SECONDS).orElseThrow();
+      Assertions.assertArrayEquals(
+          new byte[] {(byte) 0x89, 'P', 'N', 'G'},
+          Arrays.copyOf(read, 4),
+          "the image comes back as PNG");
+      ByteBuffer header = ByteBuffer.wrap(read, 16, 8);
+      Assertions.assertEquals(48, header.getInt(), "width");
+      Assertions.assertEquals(48, header.getInt(), "height");
+
+      clipboard.writeText("no image any more");
+      Assertions.assertEquals(Optional.empty(), clipboard.readImage().get(10, TimeUnit.SECONDS));
     }
   }
 

@@ -238,6 +238,8 @@ public class User32 {
       NativeLibraries.downcall(USER32, "EmptyClipboard", Signatures.INT_VOID);
   private final MethodHandle SET_CLIPBOARD_DATA =
       NativeLibraries.downcall(USER32, "SetClipboardData", Signatures.POINTER_INT_POINTER);
+  private final MethodHandle REGISTER_CLIPBOARD_FORMAT =
+      NativeLibraries.downcall(USER32, "RegisterClipboardFormatW", Signatures.INT_POINTER);
   private final MethodHandle GET_CLIPBOARD_DATA =
       NativeLibraries.downcall(USER32, "GetClipboardData", Signatures.POINTER_INT);
   private final MethodHandle ENUM_DISPLAY_MONITORS =
@@ -775,6 +777,9 @@ public class User32 {
   /** {@code CF_UNICODETEXT}: text in UTF-16, the one text format that every application reads. */
   public final int CF_UNICODETEXT = 13;
 
+  /** {@code CF_BITMAP}: an {@code HBITMAP}, from which Windows makes the DIB formats on request. */
+  public final int CF_BITMAP = 2;
+
   /**
    * Opens the clipboard for {@code owner}, trying a few times over 100 milliseconds, since another
    * application may hold it for a moment.
@@ -798,17 +803,30 @@ public class User32 {
     int _ = (int) CLOSE_CLIPBOARD.invokeExact();
   }
 
+  /** Empties the open clipboard and makes its owner the one that opened it. */
+  @SneakyThrows
+  public void emptyClipboard() {
+    int _ = (int) EMPTY_CLIPBOARD.invokeExact();
+  }
+
   /**
-   * Replaces what the open clipboard has with {@code memory} in {@code format}, which the clipboard
-   * owns from then on.
+   * Adds {@code memory} in {@code format} to what the open clipboard has; the clipboard owns it
+   * from then on.
    *
    * @return Whether the clipboard took it; the caller frees the memory when it didn't.
    */
   @SneakyThrows
   public boolean setClipboardData(int format, MemorySegment memory) {
-    int _ = (int) EMPTY_CLIPBOARD.invokeExact();
     return !((MemorySegment) SET_CLIPBOARD_DATA.invokeExact(format, memory))
         .equals(MemorySegment.NULL);
+  }
+
+  /** The number of the clipboard format named {@code name}, registered on first use. */
+  @SneakyThrows
+  public int registerClipboardFormat(String name) {
+    try (Arena arena = Arena.ofConfined()) {
+      return (int) REGISTER_CLIPBOARD_FORMAT.invokeExact(Wide.allocate(arena, name));
+    }
   }
 
   /** What the open clipboard has in {@code format}, which it keeps owning, or {@code NULL}. */
