@@ -1,6 +1,7 @@
 package dev.ivchenko.lwjwae.state;
 
 import dev.ivchenko.lwjwae.Window;
+import dev.ivchenko.lwjwae.WindowSize;
 import dev.ivchenko.lwjwae.event.WindowEvent;
 import dev.ivchenko.lwjwae.event.WindowEventType;
 
@@ -28,8 +29,9 @@ public final class WindowStateTracker {
    */
   public WindowStateTracker(String key, Window window, SavedWindowState saved) {
     this.key = key;
-    this.width = saved != null ? saved.width() : window.width();
-    this.height = saved != null ? saved.height() : window.height();
+    WindowSize size = saved != null ? new WindowSize(saved.width(), saved.height()) : window.size();
+    this.width = size.width();
+    this.height = size.height();
     if (saved != null && saved.hasPosition()) {
       this.left = saved.x();
       this.top = saved.y();

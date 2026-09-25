@@ -136,10 +136,10 @@ public class WindowsWindow extends AbstractWindow {
         User32.createWindow(
             WINDOW_CLASS,
             parameters.title(),
-            placed ? parameters.x() : User32.CW_USEDEFAULT,
-            placed ? parameters.y() : User32.CW_USEDEFAULT,
-            parameters.width(),
-            parameters.height(),
+            placed ? parameters.position().x() : User32.CW_USEDEFAULT,
+            placed ? parameters.position().y() : User32.CW_USEDEFAULT,
+            parameters.size().width(),
+            parameters.size().height(),
             WindowsWindow.windowStyle(parameters),
             parameters.alwaysOnTop());
     User32.userData(window, this.callbackId);
@@ -151,7 +151,8 @@ public class WindowsWindow extends AbstractWindow {
     if (!parameters.closable()) {
       User32.disableClose(window);
     }
-    User32.resizeClient(window, parameters.width(), parameters.height(), this.titleBar);
+    User32.resizeClient(
+        window, parameters.size().width(), parameters.size().height(), this.titleBar);
     if (parameters.centered()) {
       WindowsWindow.centerWindow(window);
     }
@@ -189,13 +190,13 @@ public class WindowsWindow extends AbstractWindow {
   }
 
   @Override
-  public int width() {
-    return this.dispatcher().call(() -> User32.clientSize(this.window())[0]);
-  }
-
-  @Override
-  public int height() {
-    return this.dispatcher().call(() -> User32.clientSize(this.window())[1]);
+  public WindowSize size() {
+    return this.dispatcher()
+        .call(
+            () -> {
+              int[] size = User32.clientSize(this.window());
+              return new WindowSize(size[0], size[1]);
+            });
   }
 
   @Override

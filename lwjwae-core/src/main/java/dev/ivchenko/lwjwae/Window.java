@@ -45,17 +45,19 @@ public interface Window extends AutoCloseable {
   /** Changes the text in the title bar. */
   void title(String title);
 
-  /** The width of the content area, in pixels. */
-  int width();
-
-  /** The height of the content area, in pixels. */
-  int height();
+  /** The size of the content area, in the units of the platform: pixels, or points on macOS. */
+  WindowSize size();
 
   /**
    * Resizes the content area. The toolkit applies the request asynchronously. GTK 4 applies it only
    * to a window that hasn't been on screen yet: once it has, its size is the user's.
    */
   void size(int width, int height);
+
+  /** The same as {@link #size(int, int)}. */
+  default void size(WindowSize size) {
+    this.size(size.width(), size.height());
+  }
 
   /**
    * The position of the window frame on the screen, from the top left, in the units of the
@@ -65,6 +67,11 @@ public interface Window extends AutoCloseable {
 
   /** Moves the window frame. Does nothing on Wayland. */
   void position(int x, int y);
+
+  /** The same as {@link #position(int, int)}. */
+  default void position(WindowPosition position) {
+    this.position(position.x(), position.y());
+  }
 
   /** Moves the window to the middle of the screen it's on. A request that Wayland may ignore. */
   void center();
@@ -84,6 +91,11 @@ public interface Window extends AutoCloseable {
    */
   void minimumSize(int width, int height);
 
+  /** The same as {@link #minimumSize(int, int)}; {@link WindowSize#NONE} removes the limit. */
+  default void minimumSize(WindowSize size) {
+    this.minimumSize(size.width(), size.height());
+  }
+
   /**
    * The largest size that the user can resize the content area to, or {@link WindowSize#NONE}. GTK
    * 4 has no such limit, and the answer there is always {@code NONE}.
@@ -96,6 +108,11 @@ public interface Window extends AutoCloseable {
    * GTK 4.
    */
   void maximumSize(int width, int height);
+
+  /** The same as {@link #maximumSize(int, int)}; {@link WindowSize#NONE} removes the limit. */
+  default void maximumSize(WindowSize size) {
+    this.maximumSize(size.width(), size.height());
+  }
 
   /**
    * Whether the window is minimized: in the taskbar, the Dock, or wherever the desktop keeps it.

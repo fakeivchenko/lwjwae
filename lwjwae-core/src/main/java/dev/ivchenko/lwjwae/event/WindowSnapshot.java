@@ -26,7 +26,7 @@ record WindowSnapshot(
   /** Reads the window. Call on its UI thread, where every getter answers at once. */
   static WindowSnapshot of(Window window) {
     return new WindowSnapshot(
-        new WindowSize(window.width(), window.height()),
+        window.size(),
         window.position(),
         window.isMinimized(),
         window.isMaximized(),

@@ -163,10 +163,10 @@ public abstract class AbstractApplication implements Application {
   /** Applies what a window starts with beyond what the backend creates it with. */
   private static void applyLimits(Window window, WindowParameters parameters) {
     if (!parameters.minimumSize().equals(WindowSize.NONE)) {
-      window.minimumSize(parameters.minimumSize().width(), parameters.minimumSize().height());
+      window.minimumSize(parameters.minimumSize());
     }
     if (!parameters.maximumSize().equals(WindowSize.NONE)) {
-      window.maximumSize(parameters.maximumSize().width(), parameters.maximumSize().height());
+      window.maximumSize(parameters.maximumSize());
     }
     if (parameters.alwaysOnTop()) {
       window.alwaysOnTop(true);

@@ -195,15 +195,15 @@ public class MacWindow extends AbstractWindow {
     WebKit.addScriptMessageHandler(controller, newDelegate, BridgeProtocol.CHANNEL);
 
     MemorySegment newWebView =
-        WebKit.webView(parameters.width(), parameters.height(), configuration);
+        WebKit.webView(parameters.size().width(), parameters.size().height(), configuration);
     Foundation.release(configuration);
     WebKit.setNavigationDelegate(newWebView, newDelegate);
     WebKit.setUiDelegate(newWebView, newDelegate);
 
     MemorySegment newWindow =
         AppKit.window(
-            parameters.width(),
-            parameters.height(),
+            parameters.size().width(),
+            parameters.size().height(),
             parameters.title(),
             MacWindow.styleMask(parameters));
     if (!parameters.decorated()) {
@@ -216,7 +216,7 @@ public class MacWindow extends AbstractWindow {
     AppKit.setDelegate(newWindow, newDelegate);
     // AppKit.window centers; a requested position wins over that, a requested center is a no-op.
     if (parameters.hasPosition() && !parameters.centered()) {
-      AppKit.setFramePosition(newWindow, parameters.x(), parameters.y());
+      AppKit.setFramePosition(newWindow, parameters.position().x(), parameters.position().y());
     }
 
     this.delegate = newDelegate;
@@ -260,13 +260,13 @@ public class MacWindow extends AbstractWindow {
   }
 
   @Override
-  public int width() {
-    return this.dispatcher().call(() -> AppKit.contentSize(this.window())[0]);
-  }
-
-  @Override
-  public int height() {
-    return this.dispatcher().call(() -> AppKit.contentSize(this.window())[1]);
+  public WindowSize size() {
+    return this.dispatcher()
+        .call(
+            () -> {
+              int[] size = AppKit.contentSize(this.window());
+              return new WindowSize(size[0], size[1]);
+            });
   }
 
   @Override

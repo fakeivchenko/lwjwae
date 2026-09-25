@@ -404,8 +404,8 @@ class AbstractApplicationTest {
       Assertions.assertEquals("2", opener.awaitReply(7).body());
       FakeWindow child = (FakeWindow) application.window(2).orElseThrow();
       Assertions.assertEquals("child", child.title());
-      Assertions.assertEquals(320, child.width());
-      Assertions.assertEquals(240, child.height());
+      Assertions.assertEquals(320, child.size().width());
+      Assertions.assertEquals(240, child.size().height());
       Assertions.assertTrue(child.isShown(), "a window opened from a page shows itself");
       Assertions.assertEquals(List.of("app://local/app/child.html"), child.navigated);
 
@@ -450,13 +450,14 @@ class AbstractApplicationTest {
 
     try (FakeApplication application = new FakeApplication(parameters)) {
       FakeWindow window = (FakeWindow) application.open(remembered);
-      Assertions.assertEquals(800, window.width());
-      Assertions.assertEquals(600, window.height());
+      Assertions.assertEquals(800, window.size().width());
+      Assertions.assertEquals(600, window.size().height());
       Assertions.assertEquals(new WindowPosition(10, 20), window.position());
       Assertions.assertTrue(window.isMaximized());
 
       FakeWindow other = application.openFake();
-      Assertions.assertEquals(1024, other.width(), "a window without a state key opens as asked");
+      Assertions.assertEquals(
+          1024, other.size().width(), "a window without a state key opens as asked");
     }
   }
 

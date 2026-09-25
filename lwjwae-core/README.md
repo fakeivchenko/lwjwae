@@ -31,8 +31,7 @@ A minimal application:
 try (Application application = Application.create()) {
   Window window = application.open(WindowParameters.builder()
       .title("Docs")
-      .width(1280)
-      .height(800)
+      .size(1280, 800)
       .build());
   window.bind("reverse", text -> new StringBuilder(text).reverse().toString());
   window.loadResource("app/index.html");
@@ -61,8 +60,10 @@ the window, and resolves to its ID. `window.lwjwae.close()` closes the window of
 
 ### Placing the window
 
-`WindowParameters.x`/`y` open the window at a screen position, `centered` in the middle of
-the screen; `position(x, y)`, `center()`, and `position()` on the window do the same later. The
+`WindowParameters.position` opens the window at a screen position, `centered` in the middle of
+the screen; `position(x, y)` or `position(WindowPosition)`, `center()`, and `position()` on the
+window do the same later. `size()` reads the content area as a `WindowSize`, and `size(width,
+height)` or `size(WindowSize)` changes it. The
 coordinates are those of the window frame, from the top left of the screen, in the units of the
 platform. Wayland is the exception: the protocol keeps window placement with the compositor, so
 there `position(x, y)` does nothing, `position()` returns `0, 0`, and `center()` is a request that
@@ -73,9 +74,9 @@ the compositor may ignore. X11, Windows, and macOS place windows as asked.
 `minimize()`, `maximize()`, `restore()`, `fullscreen(boolean)`, `alwaysOnTop(boolean)`, and
 `focus()` change the state of the window, and `isMinimized()`, `isMaximized()`, `isFullscreen()`,
 `isAlwaysOnTop()`, and `isFocused()` read it. The window manager applies a change
-asynchronously, so a read right after a change may still see the old state. `minimumSize(width,
-height)` and `maximumSize(width, height)` keep the user within limits of the content area, zero
-meaning no limit, and resize a window that is outside them; `WindowParameters` takes the limits
+asynchronously, so a read right after a change may still see the old state. `minimumSize` and
+`maximumSize`, each with two numbers or a `WindowSize`, keep the user within limits of the content
+area, zero meaning no limit, and resize a window that is outside them; `WindowParameters` takes the limits
 and `alwaysOnTop` for a window from its start. A hidden window keeps a minimize or a maximize
 until it's shown.
 

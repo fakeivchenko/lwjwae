@@ -79,8 +79,8 @@ WebKitGTK 6.0 differ, and what the backend does about each.
 - **Size.** There is no `gtk_window_resize`, and `gtk_window_set_default_size` counts only for the
   first show of a window: after that, on X11 as on Wayland, its size is the user's, and `size()`
   changes nothing. GTK 4 keeps the default size as the size that the window goes back to, so it
-  stays put while the window is maximized or in full screen; `width()` and `height()` read the
-  size of the web view.
+  stays put while the window is maximized or in full screen; `size()` reads the size of the web
+  view.
 - **Limits and state.** A minimum size goes on the web view with `gtk_widget_set_size_request`, since
   GTK 4 has no minimum size of a window. There's no maximum size and no way to keep a window on
   top, so `maximumSize` and `alwaysOnTop` do nothing. Minimizing is `gtk_window_minimize`, and

@@ -1,7 +1,7 @@
 package dev.ivchenko.lwjwae;
 
 /**
- * A size of the content area of a window, in the units of {@link Window#width()}. For a limit, zero
+ * A size of the content area of a window, in the units of {@link Window#size()}. For a limit, zero
  * in either dimension means no limit in that dimension.
  *
  * @param width The width.

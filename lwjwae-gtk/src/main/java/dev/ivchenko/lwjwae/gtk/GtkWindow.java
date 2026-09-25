@@ -162,11 +162,11 @@ public class GtkWindow extends AbstractWindow {
   private void createWindow(WindowParameters parameters) {
     MemorySegment newWindow = Gtk.windowNew(Gtk.WINDOW_TOPLEVEL);
     Gtk.windowSetTitle(newWindow, parameters.title());
-    Gtk.windowSetDefaultSize(newWindow, parameters.width(), parameters.height());
+    Gtk.windowSetDefaultSize(newWindow, parameters.size().width(), parameters.size().height());
     if (parameters.centered()) {
       Gtk.windowSetPosition(newWindow, Gtk.WIN_POS_CENTER);
     } else if (parameters.hasPosition()) {
-      Gtk.windowMove(newWindow, parameters.x(), parameters.y());
+      Gtk.windowMove(newWindow, parameters.position().x(), parameters.position().y());
     }
 
     if (!parameters.decorated()) {
@@ -255,13 +255,13 @@ public class GtkWindow extends AbstractWindow {
   }
 
   @Override
-  public int width() {
-    return this.dispatcher().call(() -> Gtk.windowGetSize(this.window())[0]);
-  }
-
-  @Override
-  public int height() {
-    return this.dispatcher().call(() -> Gtk.windowGetSize(this.window())[1]);
+  public WindowSize size() {
+    return this.dispatcher()
+        .call(
+            () -> {
+              int[] size = Gtk.windowGetSize(this.window());
+              return new WindowSize(size[0], size[1]);
+            });
   }
 
   @Override

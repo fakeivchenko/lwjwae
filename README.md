@@ -39,8 +39,7 @@ GraalVM to one executable and captured on Windows 11.
 try (Application application = Application.create()) {
   Window window = application.open(WindowParameters.builder()
       .title("Docs")
-      .width(1280)
-      .height(800)
+      .size(1280, 800)
       .build());
   window.bind("reverse", text -> new StringBuilder(text).reverse().toString());
   window.loadResource("app/index.html");

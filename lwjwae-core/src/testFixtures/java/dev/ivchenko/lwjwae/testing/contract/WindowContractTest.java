@@ -124,7 +124,7 @@ public abstract class WindowContractTest extends DisplayContractTest {
   @Test
   void opensWindowAndRendersPage() throws Exception {
     WindowParameters parameters =
-        WindowParameters.builder().title("lwjwae :: page").width(800).height(600).build();
+        WindowParameters.builder().title("lwjwae :: page").size(800, 600).build();
 
     try (LocalPages pages = new LocalPages();
         Application application = Application.create()) {
@@ -156,7 +156,8 @@ public abstract class WindowContractTest extends DisplayContractTest {
       Assertions.assertEquals("lwjwae :: page", window.title());
       Assertions.assertTrue(
           application.engine().matches(".+ \\d+(\\.\\d+)+"), "engine: " + application.engine());
-      Assertions.assertTrue(window.width() > 0 && window.height() > 0, "Window has no size");
+      Assertions.assertTrue(
+          window.size().width() > 0 && window.size().height() > 0, "Window has no size");
     }
   }
 
@@ -185,12 +186,12 @@ public abstract class WindowContractTest extends DisplayContractTest {
       window.size(640, 480);
       // Toolkits apply the request asynchronously and offer no completion signal; polling is the
       // point.
-      for (int attempt = 0; attempt < 50 && window.width() != 640; attempt++) {
+      for (int attempt = 0; attempt < 50 && window.size().width() != 640; attempt++) {
         // noinspection BusyWait
         Thread.sleep(50);
       }
-      Assertions.assertEquals(640, window.width());
-      Assertions.assertEquals(480, window.height());
+      Assertions.assertEquals(640, window.size().width());
+      Assertions.assertEquals(480, window.size().height());
     }
   }
 
@@ -235,8 +236,7 @@ public abstract class WindowContractTest extends DisplayContractTest {
     WindowParameters parameters =
         WindowParameters.builder()
             .title("lwjwae :: limits")
-            .width(400)
-            .height(300)
+            .size(400, 300)
             .minimumSize(new WindowSize(500, 350))
             .build();
     try (Application application = Application.create()) {
@@ -244,14 +244,17 @@ public abstract class WindowContractTest extends DisplayContractTest {
       window.show();
       Assertions.assertEquals(new WindowSize(500, 350), window.minimumSize());
       WindowContractTest.awaitTrue(
-          () -> window.width() >= 500 && window.height() >= 350,
+          () -> window.size().width() >= 500 && window.size().height() >= 350,
           "the minimum must grow the window");
 
       window.size(300, 200);
       Thread.sleep(300);
       Assertions.assertTrue(
-          window.width() >= 500 && window.height() >= 350,
-          "a resize below the minimum stops at it: " + window.width() + "x" + window.height());
+          window.size().width() >= 500 && window.size().height() >= 350,
+          "a resize below the minimum stops at it: "
+              + window.size().width()
+              + "x"
+              + window.size().height());
 
       if (this.hasMaximumSize()) {
         window.maximumSize(600, 450);
@@ -259,8 +262,11 @@ public abstract class WindowContractTest extends DisplayContractTest {
         window.size(900, 700);
         Thread.sleep(300);
         Assertions.assertTrue(
-            window.width() <= 600 && window.height() <= 450,
-            "a resize beyond the maximum stops at it: " + window.width() + "x" + window.height());
+            window.size().width() <= 600 && window.size().height() <= 450,
+            "a resize beyond the maximum stops at it: "
+                + window.size().width()
+                + "x"
+                + window.size().height());
       }
 
       window.minimumSize(0, 0);
@@ -268,7 +274,7 @@ public abstract class WindowContractTest extends DisplayContractTest {
       Assertions.assertEquals(WindowSize.NONE, window.minimumSize());
       window.size(320, 240);
       WindowContractTest.awaitTrue(
-          () -> window.width() < 500, "without limits the window shrinks again");
+          () -> window.size().width() < 500, "without limits the window shrinks again");
     }
   }
 
@@ -277,7 +283,7 @@ public abstract class WindowContractTest extends DisplayContractTest {
     try (Application application = Application.create()) {
       Window window =
           application.open(
-              WindowParameters.builder().title("lwjwae :: state").width(400).height(300).build());
+              WindowParameters.builder().title("lwjwae :: state").size(400, 300).build());
       window.show();
       WindowContractTest.awaitTrue(window::isVisible, "the window must show");
       // Whether this process may take the focus at all: Windows refuses it to one in the
@@ -310,23 +316,19 @@ public abstract class WindowContractTest extends DisplayContractTest {
     try (Application application = Application.create()) {
       Window window =
           application.open(
-              WindowParameters.builder()
-                  .title("lwjwae :: full screen")
-                  .width(400)
-                  .height(300)
-                  .build());
+              WindowParameters.builder().title("lwjwae :: full screen").size(400, 300).build());
       window.show();
       WindowContractTest.awaitTrue(window::isVisible, "the window must show");
 
       window.fullscreen(true);
       WindowContractTest.awaitTrue(window::isFullscreen, "full screen must start");
       WindowContractTest.awaitTrue(
-          () -> window.width() > 400, "full screen must cover more than the window did");
+          () -> window.size().width() > 400, "full screen must cover more than the window did");
       Screenshots.capture("window-fullscreen");
       window.fullscreen(false);
       WindowContractTest.awaitTrue(() -> !window.isFullscreen(), "full screen must end");
       WindowContractTest.awaitTrue(
-          () -> window.width() < 500, "the window must come back to its size");
+          () -> window.size().width() < 500, "the window must come back to its size");
     }
   }
 
@@ -335,7 +337,7 @@ public abstract class WindowContractTest extends DisplayContractTest {
     try (Application application = Application.create()) {
       Window window =
           application.open(
-              WindowParameters.builder().title("lwjwae :: events").width(400).height(300).build());
+              WindowParameters.builder().title("lwjwae :: events").size(400, 300).build());
       BlockingQueue<WindowEvent> heard = new LinkedBlockingQueue<>();
       window.onWindowEvent(heard::add);
       final var loaded = Loads.expectFinished(window);
@@ -376,8 +378,7 @@ public abstract class WindowContractTest extends DisplayContractTest {
     WindowParameters remembered =
         WindowParameters.builder()
             .title("lwjwae :: remembered")
-            .width(400)
-            .height(300)
+            .size(400, 300)
             .stateKey("main")
             .build();
     try (Application application = Application.create(parameters)) {
@@ -386,7 +387,7 @@ public abstract class WindowContractTest extends DisplayContractTest {
       WindowContractTest.awaitTrue(window::isVisible, "the window must show");
       if (this.canResizeShownWindows()) {
         window.size(520, 360);
-        WindowContractTest.awaitTrue(() -> window.width() == 520, "the window must resize");
+        WindowContractTest.awaitTrue(() -> window.size().width() == 520, "the window must resize");
       }
       window.maximize();
       WindowContractTest.awaitTrue(window::isMaximized, "maximize must maximize");
@@ -402,8 +403,8 @@ public abstract class WindowContractTest extends DisplayContractTest {
       window.restore();
       if (this.canResizeShownWindows()) {
         WindowContractTest.awaitTrue(
-            () -> window.width() == 520 && window.height() == 360,
-            "restore must bring back the size from before: " + window.width());
+            () -> window.size().width() == 520 && window.size().height() == 360,
+            "restore must bring back the size from before: " + window.size().width());
       }
     }
   }
@@ -415,8 +416,7 @@ public abstract class WindowContractTest extends DisplayContractTest {
           application.open(
               WindowParameters.builder()
                   .title("lwjwae :: frameless")
-                  .width(400)
-                  .height(300)
+                  .size(400, 300)
                   .decorated(false)
                   .build());
       final var loaded = Loads.expectFinished(window);
@@ -456,8 +456,7 @@ public abstract class WindowContractTest extends DisplayContractTest {
     WindowParameters parameters =
         WindowParameters.builder()
             .title("lwjwae :: buttons")
-            .width(400)
-            .height(300)
+            .size(400, 300)
             .closable(false)
             .minimizable(false)
             .maximizable(false)
@@ -528,7 +527,7 @@ public abstract class WindowContractTest extends DisplayContractTest {
     try (Application application = Application.create()) {
       Window window =
           application.open(
-              WindowParameters.builder().title("lwjwae :: dialogs").width(640).height(480).build());
+              WindowParameters.builder().title("lwjwae :: dialogs").size(640, 480).build());
       final var loaded = Loads.expectFinished(window);
       window.loadResource("test-app/index.html");
       window.show();
@@ -619,7 +618,7 @@ public abstract class WindowContractTest extends DisplayContractTest {
         Application.createSingleInstance(parameters, "first").orElseThrow()) {
       Window window =
           application.open(
-              WindowParameters.builder().title("lwjwae :: single").width(400).height(300).build());
+              WindowParameters.builder().title("lwjwae :: single").size(400, 300).build());
       window.show();
       WindowContractTest.awaitTrue(window::isVisible, "the window must show");
       window.minimize();
@@ -651,10 +650,8 @@ public abstract class WindowContractTest extends DisplayContractTest {
     WindowParameters parameters =
         WindowParameters.builder()
             .title("lwjwae :: position")
-            .width(400)
-            .height(300)
-            .x(120)
-            .y(80)
+            .size(400, 300)
+            .position(120, 80)
             .build();
     try (Application application = Application.create()) {
       Window window = application.open(parameters);
@@ -684,7 +681,7 @@ public abstract class WindowContractTest extends DisplayContractTest {
   @Test
   void windowOpensCentered() throws Exception {
     WindowParameters parameters =
-        WindowParameters.builder().width(400).height(300).x(0).y(0).centered(true).build();
+        WindowParameters.builder().size(400, 300).position(0, 0).centered(true).build();
     try (Application application = Application.create()) {
       Window window = application.open(parameters);
       window.show();

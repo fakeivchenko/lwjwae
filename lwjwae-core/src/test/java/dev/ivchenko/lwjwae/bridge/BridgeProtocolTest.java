@@ -2,6 +2,7 @@ package dev.ivchenko.lwjwae.bridge;
 
 import dev.ivchenko.lwjwae.WindowEdge;
 import dev.ivchenko.lwjwae.WindowParameters;
+import dev.ivchenko.lwjwae.WindowPosition;
 import dev.ivchenko.lwjwae.event.Event;
 import java.util.List;
 import org.junit.jupiter.api.Assertions;
@@ -100,10 +101,9 @@ class BridgeProtocolTest {
                 "0",
                 "0"));
     Assertions.assertEquals("Docs", full.title());
-    Assertions.assertEquals(640, full.width());
-    Assertions.assertEquals(480, full.height());
-    Assertions.assertEquals(10, full.x());
-    Assertions.assertEquals(20, full.y());
+    Assertions.assertEquals(640, full.size().width());
+    Assertions.assertEquals(480, full.size().height());
+    Assertions.assertEquals(new WindowPosition(10, 20), full.position());
     Assertions.assertTrue(full.centered());
     Assertions.assertEquals("https://x", full.url());
     Assertions.assertEquals("app/i.html", full.resource());

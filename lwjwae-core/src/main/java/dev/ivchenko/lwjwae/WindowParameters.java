@@ -9,20 +9,17 @@ import lombok.Builder;
  * only states what it needs:
  *
  * <pre>{@code
- * WindowParameters.builder().title("Docs").width(1280).height(800).build()
+ * WindowParameters.builder().title("Docs").size(1280, 800).build()
  * }</pre>
  *
  * @param title The window title. Default: {@code "Application"}.
- * @param width The initial window width, in pixels. A non-positive value means the default.
- *     Default: {@code 1024}.
- * @param height The initial window height, in pixels. A non-positive value means the default.
- *     Default: {@code 768}.
- * @param x The screen X coordinate that the window opens at, in the units of the platform, or
- *     {@code null} to let the window manager choose. Both {@code x} and {@code y} must be set for
- *     either to count. Wayland ignores them: a client can't place its window there.
- * @param y The screen Y coordinate that the window opens at, measured from the top. See {@code x}.
- * @param centered Whether the window opens in the middle of the screen. Wins over {@code x} and
- *     {@code y}. Default: {@code false}, except on macOS, where every window opens centered.
+ * @param size The initial size of the content area. A dimension that isn't positive takes the
+ *     default. Default: {@code 1024} by {@code 768}.
+ * @param position Where the frame of the window opens on the screen, in the units of the platform,
+ *     or {@code null} to let the window manager choose. Wayland ignores it: a client can't place
+ *     its window there.
+ * @param centered Whether the window opens in the middle of the screen. Wins over {@code position}.
+ *     Default: {@code false}, except on macOS, where every window opens centered.
  * @param url The URL to load after the window exists, or {@code null} to leave the window blank.
  *     This is a convenience for simple cases. {@link Application#open} navigates before it returns,
  *     so to observe a load from its first event, leave this value unset, register the listener, and
@@ -31,10 +28,10 @@ import lombok.Builder;
  *     Window#loadResource} does, or {@code null}. Wins over {@code url}.
  * @param closeAction What the window does when the user closes it. Default: {@link
  *     CloseAction#CLOSE}. {@link Window#closeAction(CloseAction)} changes it later.
- * @param minimumSize The smallest size of the content area, see {@link Window#minimumSize(int,
- *     int)}. Default: {@link WindowSize#NONE}.
- * @param maximumSize The largest size of the content area, see {@link Window#maximumSize(int,
- *     int)}. Default: {@link WindowSize#NONE}.
+ * @param minimumSize The smallest size of the content area, see {@link
+ *     Window#minimumSize(WindowSize)}. Default: {@link WindowSize#NONE}.
+ * @param maximumSize The largest size of the content area, see {@link
+ *     Window#maximumSize(WindowSize)}. Default: {@link WindowSize#NONE}.
  * @param alwaysOnTop Whether the window stays above other windows, see {@link
  *     Window#alwaysOnTop(boolean)}. Default: {@code false}.
  * @param stateKey The name under which the window remembers its size, its place, and whether it was
@@ -56,10 +53,8 @@ import lombok.Builder;
 @Builder(toBuilder = true)
 public record WindowParameters(
     String title,
-    int width,
-    int height,
-    Integer x,
-    Integer y,
+    WindowSize size,
+    WindowPosition position,
     boolean centered,
     String url,
     String resource,
@@ -73,8 +68,7 @@ public record WindowParameters(
     Boolean minimizable,
     Boolean maximizable) {
   private static final String DEFAULT_TITLE = "Application";
-  private static final int DEFAULT_WIDTH = 1024;
-  private static final int DEFAULT_HEIGHT = 768;
+  private static final WindowSize DEFAULT_SIZE = new WindowSize(1024, 768);
 
   public WindowParameters {
     if (closeAction == null) {
@@ -89,15 +83,14 @@ public record WindowParameters(
     if (title == null || title.isBlank()) {
       title = DEFAULT_TITLE;
     }
-    if (width <= 0) {
-      width = DEFAULT_WIDTH;
+    if (size == null) {
+      size = DEFAULT_SIZE;
     }
-    if (height <= 0) {
-      height = DEFAULT_HEIGHT;
-    }
-    if (x == null || y == null) {
-      x = null;
-      y = null;
+    if (size.width() <= 0 || size.height() <= 0) {
+      size =
+          new WindowSize(
+              size.width() > 0 ? size.width() : DEFAULT_SIZE.width(),
+              size.height() > 0 ? size.height() : DEFAULT_SIZE.height());
     }
     if (url != null && url.isBlank()) {
       url = null;
@@ -122,11 +115,9 @@ public record WindowParameters(
     }
   }
 
-  /**
-   * Whether the window opens at {@link #x()}, {@link #y()} rather than where the platform puts it.
-   */
+  /** Whether the window opens at {@link #position()} rather than where the platform puts it. */
   public boolean hasPosition() {
-    return this.x != null;
+    return this.position != null;
   }
 
   /**
@@ -135,5 +126,55 @@ public record WindowParameters(
    */
   public static WindowParameters createDefault() {
     return builder().build();
+  }
+
+  /**
+   * The builder, with the sizes and the position also as two numbers. Lombok leaves out a method
+   * whose name is already here, so the ones that take a model are here too.
+   */
+  public static class WindowParametersBuilder {
+    /** The initial size of the content area, see {@link WindowParameters#size()}. */
+    public WindowParametersBuilder size(WindowSize size) {
+      this.size = size;
+      return this;
+    }
+
+    /** The same as {@link #size(WindowSize)}. */
+    public WindowParametersBuilder size(int width, int height) {
+      return this.size(new WindowSize(width, height));
+    }
+
+    /** Where the window opens, see {@link WindowParameters#position()}. */
+    public WindowParametersBuilder position(WindowPosition position) {
+      this.position = position;
+      return this;
+    }
+
+    /** The same as {@link #position(WindowPosition)}. */
+    public WindowParametersBuilder position(int x, int y) {
+      return this.position(new WindowPosition(x, y));
+    }
+
+    /** The smallest size of the content area, see {@link WindowParameters#minimumSize()}. */
+    public WindowParametersBuilder minimumSize(WindowSize minimumSize) {
+      this.minimumSize = minimumSize;
+      return this;
+    }
+
+    /** The same as {@link #minimumSize(WindowSize)}. */
+    public WindowParametersBuilder minimumSize(int width, int height) {
+      return this.minimumSize(new WindowSize(width, height));
+    }
+
+    /** The largest size of the content area, see {@link WindowParameters#maximumSize()}. */
+    public WindowParametersBuilder maximumSize(WindowSize maximumSize) {
+      this.maximumSize = maximumSize;
+      return this;
+    }
+
+    /** The same as {@link #maximumSize(WindowSize)}. */
+    public WindowParametersBuilder maximumSize(int width, int height) {
+      return this.maximumSize(new WindowSize(width, height));
+    }
   }
 }

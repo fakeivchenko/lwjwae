@@ -637,7 +637,7 @@ public abstract class AbstractWindow implements Window {
 
   /** What {@code window.lwjwae.window.state()} resolves to. Call on the UI thread. */
   private String stateJson() {
-    WindowSize size = new WindowSize(this.width(), this.height());
+    WindowSize size = this.size();
     WindowPosition position = this.position();
     return ("{\"width\":%d,\"height\":%d,\"x\":%d,\"y\":%d,\"minimized\":%b,\"maximized\":%b,"
             + "\"fullscreen\":%b,\"focused\":%b,\"resizable\":%b}")

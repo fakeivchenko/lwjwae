@@ -76,8 +76,8 @@ public class FakeWindow extends AbstractWindow {
   FakeWindow(AbstractApplication application, long id, WindowParameters parameters) {
     super(application, id, parameters);
     this.title = parameters.title();
-    this.width = parameters.width();
-    this.height = parameters.height();
+    this.width = parameters.size().width();
+    this.height = parameters.size().height();
     this.installBridge();
   }
 
@@ -271,13 +271,8 @@ public class FakeWindow extends AbstractWindow {
   }
 
   @Override
-  public int width() {
-    return this.width;
-  }
-
-  @Override
-  public int height() {
-    return this.height;
+  public WindowSize size() {
+    return new WindowSize(this.width, this.height);
   }
 
   @Override

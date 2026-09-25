@@ -174,7 +174,7 @@ public class Gtk4Window extends AbstractWindow {
   private void createWindow(WindowParameters parameters) {
     MemorySegment newWindow = Gtk.windowNew();
     Gtk.windowSetTitle(newWindow, parameters.title());
-    Gtk.windowSetDefaultSize(newWindow, parameters.width(), parameters.height());
+    Gtk.windowSetDefaultSize(newWindow, parameters.size().width(), parameters.size().height());
     if (!parameters.decorated()) {
       // A title bar that never shows rather than gtk_window_set_decorated(FALSE): the window keeps
       // the frame that it draws itself, the shadow and the resize edges in it, and loses only the
@@ -244,13 +244,18 @@ public class Gtk4Window extends AbstractWindow {
   }
 
   @Override
-  public int width() {
-    return this.dispatcher().call(() -> this.contentSize()[0]);
+  public WindowSize size() {
+    return this.dispatcher()
+        .call(
+            () -> {
+              int[] size = this.contentSize();
+              return new WindowSize(size[0], size[1]);
+            });
   }
 
   @Override
-  public int height() {
-    return this.dispatcher().call(() -> this.contentSize()[1]);
+  public void size(int width, int height) {
+    this.dispatcher().run(() -> Gtk.windowSetDefaultSize(this.window(), width, height));
   }
 
   /**
@@ -261,11 +266,6 @@ public class Gtk4Window extends AbstractWindow {
   private int[] contentSize() {
     int[] allocated = Gtk.widgetSize(this.webView());
     return allocated[0] > 0 ? allocated : Gtk.windowGetDefaultSize(this.window());
-  }
-
-  @Override
-  public void size(int width, int height) {
-    this.dispatcher().run(() -> Gtk.windowSetDefaultSize(this.window(), width, height));
   }
 
   /** Always {@code 0, 0}: GTK 4 can't tell where a window is. */

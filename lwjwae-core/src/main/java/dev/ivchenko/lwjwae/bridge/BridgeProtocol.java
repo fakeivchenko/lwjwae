@@ -2,6 +2,7 @@ package dev.ivchenko.lwjwae.bridge;
 
 import dev.ivchenko.lwjwae.WindowEdge;
 import dev.ivchenko.lwjwae.WindowParameters;
+import dev.ivchenko.lwjwae.WindowPosition;
 import dev.ivchenko.lwjwae.dialog.FileType;
 import dev.ivchenko.lwjwae.dialog.MessageButtons;
 import dev.ivchenko.lwjwae.dialog.MessageDialogParameters;
@@ -243,10 +244,11 @@ public class BridgeProtocol {
     try {
       return WindowParameters.builder()
           .title(parts[0])
-          .width(BridgeProtocol.integer(parts[1]))
-          .height(BridgeProtocol.integer(parts[2]))
-          .x(parts[3].isEmpty() ? null : Integer.valueOf(parts[3]))
-          .y(parts[4].isEmpty() ? null : Integer.valueOf(parts[4]))
+          .size(BridgeProtocol.integer(parts[1]), BridgeProtocol.integer(parts[2]))
+          .position(
+              parts[3].isEmpty() || parts[4].isEmpty()
+                  ? null
+                  : new WindowPosition(Integer.parseInt(parts[3]), Integer.parseInt(parts[4])))
           .centered(parts[5].equals("1"))
           .url(parts[6])
           .resource(parts[7])
