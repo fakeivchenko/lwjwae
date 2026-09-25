@@ -51,6 +51,7 @@ class GtkNativeImageMetadataTest extends NativeImageMetadataContractTest {
         AppIndicator.class,
         GtkDispatcher.class,
         GtkWindow.class,
+        GtkDialogs.class,
         GtkApplication.class,
         GtkTray.class);
   }

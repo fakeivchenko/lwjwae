@@ -49,6 +49,8 @@ public class Shell32 {
   /** The highest {@code HINSTANCE} of {@code ShellExecuteW} that stands for an error. */
   private final long SHELL_EXECUTE_ERROR = 32;
 
+  private final MethodHandle SH_CREATE_ITEM_FROM_PARSING_NAME =
+      NativeLibraries.downcall(SHELL32, "SHCreateItemFromParsingName", Signatures.INT_POINTER_X4);
   private final MethodHandle SHELL_EXECUTE =
       NativeLibraries.downcall(SHELL32, "ShellExecuteW", Signatures.POINTER_POINTER_X5_INT);
   private final MethodHandle SHELL_NOTIFY_ICON =
@@ -62,6 +64,25 @@ public class Shell32 {
   private final VarHandle ICON = field("hIcon");
   private final long TIP_OFFSET =
       Signatures.NOTIFYICONDATAW.byteOffset(MemoryLayout.PathElement.groupElement("szTip"));
+
+  /**
+   * Calls {@code SHCreateItemFromParsingName}: the {@code IShellItem} of a path, which the caller
+   * releases.
+   *
+   * @throws dev.ivchenko.lwjwae.windows.exception.ComCallFailedException If there's no such path.
+   */
+  @SneakyThrows
+  public MemorySegment shellItem(String path) {
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment out = arena.allocate(Signatures.C_POINTER);
+      Com.check(
+          "SHCreateItemFromParsingName",
+          (int)
+              SH_CREATE_ITEM_FROM_PARSING_NAME.invokeExact(
+                  Wide.allocate(arena, path), MemorySegment.NULL, FileDialog.IID_SHELL_ITEM, out));
+      return Com.pointerAt(out);
+    }
+  }
 
   /**
    * Opens {@code url} with the {@code open} verb: in the browser, or the mail client for {@code

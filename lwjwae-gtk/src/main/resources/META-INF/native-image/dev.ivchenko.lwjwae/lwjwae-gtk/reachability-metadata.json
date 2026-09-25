@@ -112,6 +112,19 @@
           ]
         }
       ]
+    },
+    {
+      "type": "dev.ivchenko.lwjwae.gtk.GtkDialogs",
+      "methods": [
+        {
+          "name": "onResponse",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "int",
+            "java.lang.foreign.MemorySegment"
+          ]
+        }
+      ]
     }
   ],
   "resources": [
@@ -249,6 +262,16 @@
           "void*",
           "void*"
         ]
+      },
+      {
+        "returnType": "void*",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "jint",
+          "void*",
+          "void*"
+        ]
       }
     ],
     "directUpcalls": [
@@ -380,6 +403,16 @@
         "parameterTypes": [
           "void*",
           "void*",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.gtk.GtkDialogs",
+        "method": "onResponse",
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "jint",
           "void*"
         ]
       }

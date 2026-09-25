@@ -146,6 +146,41 @@ itself, `startMove()` and `startResize(edge)`, called while the button is down, 
 | Windows | `WM_NCCALCSIZE` gives the whole window to the client area except the resize edges on the left, the right, and at the bottom; the style stays, and with it snapping and the animations. The top edge is a strip that the page lays over itself and resizes from. |
 | macOS | A titled window with its content under a transparent title bar, and no buttons: rounded corners, a shadow, resize edges, and the keyboard, which a borderless window can't take. `startResize` does nothing: AppKit resizes only from the edges. |
 
+### Dialogs
+
+`showOpenDialog`, `showSaveDialog`, and `showMessageDialog` on a window show the dialogs of the
+platform over it, and return a future at once:
+
+```java
+window.showOpenDialog(OpenDialogParameters.builder()
+        .fileTypes(List.of(FileType.of("Images", "png", "jpg")))
+        .multiple(true)
+        .build())
+    .thenAccept(paths -> ...);             // none if the user cancelled
+window.showSaveDialog(SaveDialogParameters.builder().fileName("notes.txt").build());
+window.showMessageDialog(MessageDialogParameters.builder()
+    .message("Delete it?").level(MessageLevel.QUESTION).buttons(MessageButtons.YES_NO).build());
+```
+
+`directories(true)` picks folders; a save dialog asks before it picks a file that exists; a message
+answers `true` for OK or yes. Extensions match without regard to case. Cancelling the future closes
+the dialog, and a window that closes cancels its dialogs. The page has the same in
+`window.lwjwae.dialog.open(options)`, `save(options)`, and `message(options)`, with `fileTypes` as
+`[{ name, extensions }]`, `level` as `info`, `warning`, `error`, or `question`, `buttons` as `ok`,
+`okCancel`, or `yesNo`, and a `signal` whose abort closes the dialog; they are calls under the
+reserved name `lwjwae:dialog`.
+
+A backend shows a dialog on the UI thread in `presentOpenDialog` and its siblings, and answers the
+[`DialogCompletion`](src/main/java/dev/ivchenko/lwjwae/dialog/DialogCompletion.java) that it gets;
+it registers how to close the dialog before it shows it, since a modal dialog of Windows returns
+only when the user answers.
+
+| Platform | Files | Messages |
+|---|---|---|
+| GTK 3, GTK 4 | `GtkFileChooserNative`: the portal of the desktop inside a sandbox, GTK's own outside one | `GtkMessageDialog`, with the button labels of GTK in the language of the user |
+| Windows | `IFileOpenDialog` and `IFileSaveDialog`; the first extension of the chosen kind completes a name without one | `MessageBoxW`; the title of the window as its caption when there's none |
+| macOS | `NSOpenPanel` and `NSSavePanel` as sheets of the window; an open panel has no menu of kinds, so it shows the files of every kind | `NSAlert` as a sheet, which has no title |
+
 ### Links that leave the application
 
 A click in a page of the application on a link to another origin or a `mailto:` link,

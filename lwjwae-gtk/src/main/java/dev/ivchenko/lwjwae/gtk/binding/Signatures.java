@@ -54,6 +54,10 @@ public class Signatures {
   /** {@code T* f(gint, gint)}: {@code gtk_box_new}. */
   public final FunctionDescriptor POINTER_INT_INT = FunctionDescriptor.of(C_POINTER, C_INT, C_INT);
 
+  /** {@code T* f(const gchar*, U*, gint, const gchar*, const gchar*)}: the native file chooser. */
+  public final FunctionDescriptor GTK_FILE_CHOOSER_NATIVE_NEW =
+      FunctionDescriptor.of(C_POINTER, C_POINTER, C_POINTER, C_INT, C_POINTER, C_POINTER);
+
   /** {@code gint f(T*)}. */
   public final FunctionDescriptor INT_POINTER = FunctionDescriptor.of(C_INT, C_POINTER);
 
@@ -236,6 +240,12 @@ public class Signatures {
    * request for a new window, which a {@code NULL} answer declines.
    */
   public final FunctionDescriptor CREATE_CALLBACK = POINTER_POINTER_POINTER_POINTER;
+
+  /**
+   * {@code void (*)(T*, gint response_id, gpointer)}: the {@code response} signal of a dialog and
+   * of a native dialog.
+   */
+  public final FunctionDescriptor RESPONSE_CALLBACK = VOID_POINTER_INT_POINTER;
 
   /** {@code void (*)(WebKitWebView*, WebKitLoadEvent, gpointer)}: {@code load-changed}. */
   public final FunctionDescriptor LOAD_CHANGED_CALLBACK =

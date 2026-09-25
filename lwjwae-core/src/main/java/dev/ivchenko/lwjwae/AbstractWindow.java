@@ -7,6 +7,10 @@ import dev.ivchenko.lwjwae.bridge.MessageRpcExchange;
 import dev.ivchenko.lwjwae.bridge.PageEvents;
 import dev.ivchenko.lwjwae.bridge.RpcMessageChannel;
 import dev.ivchenko.lwjwae.bridge.codec.BridgeCodec;
+import dev.ivchenko.lwjwae.dialog.DialogCompletion;
+import dev.ivchenko.lwjwae.dialog.MessageDialogParameters;
+import dev.ivchenko.lwjwae.dialog.OpenDialogParameters;
+import dev.ivchenko.lwjwae.dialog.SaveDialogParameters;
 import dev.ivchenko.lwjwae.event.Event;
 import dev.ivchenko.lwjwae.event.EventSubscription;
 import dev.ivchenko.lwjwae.event.LoadEvent;
@@ -23,6 +27,7 @@ import dev.ivchenko.lwjwae.util.ThrowableUtil;
 import java.net.URI;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.security.SecureRandom;
 import java.util.Base64;
 import java.util.LinkedHashMap;
@@ -30,6 +35,9 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executor;
@@ -37,6 +45,7 @@ import java.util.concurrent.Executors;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * The toolkit-independent half of a window: listener bookkeeping, the closed state, and the whole
@@ -74,6 +83,7 @@ public abstract class AbstractWindow implements Window {
   private final PageEvents pageEvents = new PageEvents();
   private final WindowEvents windowEvents = new WindowEvents(this, this::sendToPage);
   private final String token = newToken();
+  private final Set<DialogCompletion<?>> dialogs = ConcurrentHashMap.newKeySet();
   private final boolean closable;
   private final boolean maximizable;
 
@@ -329,6 +339,7 @@ public abstract class AbstractWindow implements Window {
       case BridgeProtocol.OPEN_CALL -> this::openFromPage;
       case BridgeProtocol.CLOSE_CALL -> _ -> this.close();
       case BridgeProtocol.CONTROL_CALL -> this::controlFromPage;
+      case BridgeProtocol.DIALOG_CALL -> this::dialogFromPage;
       default -> null;
     };
   }
@@ -499,6 +510,123 @@ public abstract class AbstractWindow implements Window {
     }
   }
 
+  @Override
+  public final CompletableFuture<List<Path>> showOpenDialog(OpenDialogParameters parameters) {
+    Objects.requireNonNull(parameters, "parameters");
+    return this.showDialog(completion -> this.presentOpenDialog(parameters, completion));
+  }
+
+  @Override
+  public final CompletableFuture<Optional<Path>> showSaveDialog(SaveDialogParameters parameters) {
+    Objects.requireNonNull(parameters, "parameters");
+    return this.showDialog(completion -> this.presentSaveDialog(parameters, completion));
+  }
+
+  @Override
+  public final CompletableFuture<Boolean> showMessageDialog(MessageDialogParameters parameters) {
+    Objects.requireNonNull(parameters, "parameters");
+    return this.showDialog(completion -> this.presentMessageDialog(parameters, completion));
+  }
+
+  /**
+   * Shows a dialog on the UI thread. The window keeps the dialogs that are up, and cancels them
+   * when it closes, which closes them: a dialog must not outlive the window that it belongs to.
+   */
+  private <T> CompletableFuture<T> showDialog(Consumer<DialogCompletion<T>> present) {
+    this.checkOpen();
+    DialogCompletion<T> completion = new DialogCompletion<>(this.dispatcher());
+    this.dialogs.add(completion);
+    completion.future().whenComplete((_, _) -> this.dialogs.remove(completion));
+    this.dispatcher()
+        .post(
+            () -> {
+              try {
+                this.checkOpen();
+                present.accept(completion);
+              } catch (Throwable t) {
+                completion.fail(t);
+              }
+            });
+    return completion.future();
+  }
+
+  /**
+   * Shows the dialog of the platform that opens files or folders, parented to this window, on the
+   * UI thread. The backend registers how to close it with {@link DialogCompletion#onCancel} before
+   * it shows it, and completes {@code completion} with the picked paths, none for a cancel.
+   */
+  protected abstract void presentOpenDialog(
+      OpenDialogParameters parameters, DialogCompletion<List<Path>> completion);
+
+  /** The same as {@link #presentOpenDialog} for the dialog that saves a file. */
+  protected abstract void presentSaveDialog(
+      SaveDialogParameters parameters, DialogCompletion<Optional<Path>> completion);
+
+  /**
+   * The same as {@link #presentOpenDialog} for a message: {@code true} for OK or yes, {@code false}
+   * for anything else.
+   */
+  protected abstract void presentMessageDialog(
+      MessageDialogParameters parameters, DialogCompletion<Boolean> completion);
+
+  /**
+   * {@code window.lwjwae.dialog}: the body is {@code open}, {@code save}, or {@code message}, and
+   * the fields of the dialog, see {@link BridgeProtocol#parseOpenDialog} and its siblings. The
+   * answer is the picked paths separated by {@link BridgeProtocol#SEPARATOR}, empty for none, or
+   * {@code 1} and {@code 0} for a message. A page that abandons the call closes the dialog.
+   */
+  private void dialogFromPage(RpcCall call) throws Exception {
+    String[] parts = call.text().split(BridgeProtocol.SEPARATOR, 2);
+    String fields = parts.length > 1 ? parts[1] : "";
+    // The future of the dialog itself, which a cancellation must reach to close it, and the answer.
+    CompletableFuture<?> dialog;
+    CompletableFuture<String> answer;
+    switch (parts[0]) {
+      case "open" -> {
+        OpenDialogParameters parameters = BridgeProtocol.parseOpenDialog(fields);
+        CompletableFuture<List<Path>> open =
+            parameters == null ? null : this.showOpenDialog(parameters);
+        dialog = open;
+        answer = open == null ? null : open.thenApply(AbstractWindow::joinPaths);
+      }
+      case "save" -> {
+        SaveDialogParameters parameters = BridgeProtocol.parseSaveDialog(fields);
+        CompletableFuture<Optional<Path>> save =
+            parameters == null ? null : this.showSaveDialog(parameters);
+        dialog = save;
+        answer = save == null ? null : save.thenApply(path -> path.map(Path::toString).orElse(""));
+      }
+      case "message" -> {
+        MessageDialogParameters parameters = BridgeProtocol.parseMessageDialog(fields);
+        CompletableFuture<Boolean> message =
+            parameters == null ? null : this.showMessageDialog(parameters);
+        dialog = message;
+        answer = message == null ? null : message.thenApply(yes -> yes ? "1" : "0");
+      }
+      default -> {
+        dialog = null;
+        answer = null;
+      }
+    }
+    if (answer == null) {
+      throw RpcException.badRequest("malformed-dialog", "Malformed dialog: " + parts[0]);
+    }
+    // A page that gives the call up interrupts this thread.
+    try {
+      if (call.isCancelled()) {
+        throw new InterruptedException();
+      }
+      call.reply(answer.get());
+    } catch (InterruptedException e) {
+      dialog.cancel(false);
+      throw e;
+    }
+  }
+
+  private static String joinPaths(List<Path> paths) {
+    return paths.stream().map(Path::toString).collect(Collectors.joining(BridgeProtocol.SEPARATOR));
+  }
+
   private void toggleMaximize() {
     if (this.isMaximized()) {
       this.restore();
@@ -594,6 +722,7 @@ public abstract class AbstractWindow implements Window {
     this.application.windowClosed(this);
     this.pageEvents.close();
     this.windowEvents.shutdown();
+    this.dialogs.forEach(dialog -> dialog.future().cancel(false));
     MessageRpcCalls calls = this.messageCalls;
     if (calls != null) {
       calls.cancelAll();

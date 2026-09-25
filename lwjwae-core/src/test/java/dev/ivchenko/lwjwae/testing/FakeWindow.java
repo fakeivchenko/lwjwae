@@ -8,15 +8,24 @@ import dev.ivchenko.lwjwae.WindowPosition;
 import dev.ivchenko.lwjwae.WindowSize;
 import dev.ivchenko.lwjwae.bridge.BridgeProtocol;
 import dev.ivchenko.lwjwae.bridge.RpcMessageChannel;
+import dev.ivchenko.lwjwae.dialog.DialogCompletion;
+import dev.ivchenko.lwjwae.dialog.MessageDialogParameters;
+import dev.ivchenko.lwjwae.dialog.OpenDialogParameters;
+import dev.ivchenko.lwjwae.dialog.SaveDialogParameters;
 import dev.ivchenko.lwjwae.event.LoadEvent;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
+import java.util.Optional;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.regex.Matcher;
@@ -37,6 +46,9 @@ public class FakeWindow extends AbstractWindow {
   public final List<String> evaluated = new CopyOnWriteArrayList<>();
   public final List<String> navigated = new CopyOnWriteArrayList<>();
   public final List<String> posted = new CopyOnWriteArrayList<>();
+
+  /** Every dialog that the window was asked to show, in order. */
+  public final BlockingQueue<PresentedDialog> dialogs = new LinkedBlockingQueue<>();
 
   /** Every drag that the page handed to the window manager: {@code move}, or the resize edge. */
   public final List<String> drags = new CopyOnWriteArrayList<>();
@@ -401,6 +413,30 @@ public class FakeWindow extends AbstractWindow {
   @Override
   public boolean isVisible() {
     return this.shown;
+  }
+
+  @Override
+  protected void presentOpenDialog(
+      OpenDialogParameters parameters, DialogCompletion<List<Path>> completion) {
+    this.present(parameters, completion);
+  }
+
+  @Override
+  protected void presentSaveDialog(
+      SaveDialogParameters parameters, DialogCompletion<Optional<Path>> completion) {
+    this.present(parameters, completion);
+  }
+
+  @Override
+  protected void presentMessageDialog(
+      MessageDialogParameters parameters, DialogCompletion<Boolean> completion) {
+    this.present(parameters, completion);
+  }
+
+  private void present(Object parameters, DialogCompletion<?> completion) {
+    AtomicBoolean closed = new AtomicBoolean();
+    completion.onCancel(() -> closed.set(true));
+    this.dialogs.add(new PresentedDialog(parameters, completion, closed));
   }
 
   @Override

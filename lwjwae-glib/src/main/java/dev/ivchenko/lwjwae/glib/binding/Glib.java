@@ -7,6 +7,8 @@ import java.lang.foreign.MemorySegment;
 import java.lang.foreign.SymbolLookup;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.VarHandle;
+import java.util.ArrayList;
+import java.util.List;
 import lombok.SneakyThrows;
 import lombok.experimental.UtilityClass;
 
@@ -61,6 +63,28 @@ public class Glib {
       NativeLibraries.downcall(GOBJECT, "g_value_get_string", Signatures.POINTER_POINTER);
   private final MethodHandle VALUE_UNSET =
       NativeLibraries.downcall(GOBJECT, "g_value_unset", Signatures.VOID_POINTER);
+  private final MethodHandle VALUE_SET_STRING =
+      NativeLibraries.downcall(GOBJECT, "g_value_set_string", Signatures.VOID_POINTER_POINTER);
+  private final MethodHandle VALUE_SET_ENUM =
+      NativeLibraries.downcall(GOBJECT, "g_value_set_enum", Signatures.VOID_POINTER_INT);
+  private final MethodHandle OBJECT_SET_PROPERTY =
+      NativeLibraries.downcall(
+          GOBJECT, "g_object_set_property", Signatures.VOID_POINTER_POINTER_POINTER);
+  private final MethodHandle OBJECT_NEW_WITH_PROPERTIES =
+      NativeLibraries.downcall(
+          GOBJECT, "g_object_new_with_properties", Signatures.POINTER_LONG_INT_POINTER_POINTER);
+  private final MethodHandle DGETTEXT =
+      NativeLibraries.downcall(GLIB, "g_dgettext", Signatures.POINTER_POINTER_POINTER);
+  private final MethodHandle SLIST_FREE =
+      NativeLibraries.downcall(GLIB, "g_slist_free", Signatures.VOID_POINTER);
+  private final MethodHandle FILE_NEW_FOR_PATH =
+      NativeLibraries.downcall(GIO, "g_file_new_for_path", Signatures.POINTER_POINTER);
+  private final MethodHandle FILE_GET_PATH =
+      NativeLibraries.downcall(GIO, "g_file_get_path", Signatures.POINTER_POINTER);
+  private final MethodHandle LIST_MODEL_GET_N_ITEMS =
+      NativeLibraries.downcall(GIO, "g_list_model_get_n_items", Signatures.INT_POINTER);
+  private final MethodHandle LIST_MODEL_GET_ITEM =
+      NativeLibraries.downcall(GIO, "g_list_model_get_item", Signatures.POINTER_POINTER_INT);
   private final MethodHandle OBJECT_GET_PROPERTY =
       NativeLibraries.downcall(
           GOBJECT, "g_object_get_property", Signatures.VOID_POINTER_POINTER_POINTER);
@@ -157,6 +181,108 @@ public class Glib {
         VALUE_UNSET.invokeExact(value);
       }
     }
+  }
+
+  /**
+   * Calls {@code g_object_new_with_properties} with no properties: a new object of {@code type}
+   * with its defaults, what {@code g_object_new(type, NULL)} makes without a variadic call.
+   */
+  @SneakyThrows
+  public MemorySegment objectNew(long type) {
+    return (MemorySegment)
+        OBJECT_NEW_WITH_PROPERTIES.invokeExact(type, 0, MemorySegment.NULL, MemorySegment.NULL);
+  }
+
+  /** Sets a string property through {@code g_object_set_property}. */
+  @SneakyThrows
+  public void setStringProperty(MemorySegment object, String name, String text) {
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment value = arena.allocate(VALUE_SIZE, 8);
+      MemorySegment _ = (MemorySegment) VALUE_INIT.invokeExact(value, TYPE_STRING);
+      try {
+        MemorySegment string = text == null ? MemorySegment.NULL : arena.allocateFrom(text);
+        VALUE_SET_STRING.invokeExact(value, string);
+        OBJECT_SET_PROPERTY.invokeExact(object, arena.allocateFrom(name), value);
+      } finally {
+        VALUE_UNSET.invokeExact(value);
+      }
+    }
+  }
+
+  /**
+   * Sets an enum property of the enum type {@code enumType} through {@code g_object_set_property}.
+   */
+  @SneakyThrows
+  public void setEnumProperty(MemorySegment object, String name, long enumType, int constant) {
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment value = arena.allocate(VALUE_SIZE, 8);
+      MemorySegment _ = (MemorySegment) VALUE_INIT.invokeExact(value, enumType);
+      try {
+        VALUE_SET_ENUM.invokeExact(value, constant);
+        OBJECT_SET_PROPERTY.invokeExact(object, arena.allocateFrom(name), value);
+      } finally {
+        VALUE_UNSET.invokeExact(value);
+      }
+    }
+  }
+
+  /**
+   * Calls {@code g_dgettext}: {@code text} in the language of the user, from the translations of
+   * {@code domain}, such as the labels of the buttons of GTK from {@code gtk30}.
+   */
+  @SneakyThrows
+  public String translate(String domain, String text) {
+    try (Arena arena = Arena.ofConfined()) {
+      return NativeLibraries.string(
+          (MemorySegment)
+              DGETTEXT.invokeExact(arena.allocateFrom(domain), arena.allocateFrom(text)));
+    }
+  }
+
+  /**
+   * The strings of a {@code GSList} of {@code gchar*} that the caller owns, as {@code
+   * gtk_file_chooser_get_filenames} returns: each string and the list are freed.
+   */
+  @SneakyThrows
+  public List<String> takeStringList(MemorySegment list) {
+    List<String> strings = new ArrayList<>();
+    MemorySegment node = list;
+    while (!node.equals(MemorySegment.NULL)) {
+      MemorySegment cell = node.reinterpret(2 * Signatures.C_POINTER.byteSize());
+      strings.add(takeString(cell.get(Signatures.C_POINTER, 0)));
+      node = cell.get(Signatures.C_POINTER, Signatures.C_POINTER.byteSize());
+    }
+    SLIST_FREE.invokeExact(list);
+    return strings;
+  }
+
+  /** Calls {@code g_file_new_for_path}. The caller owns the {@code GFile}. */
+  @SneakyThrows
+  public MemorySegment fileForPath(String path) {
+    try (Arena arena = Arena.ofConfined()) {
+      return (MemorySegment) FILE_NEW_FOR_PATH.invokeExact(arena.allocateFrom(path));
+    }
+  }
+
+  /**
+   * The local paths of the {@code GFile} items of a {@code GListModel}, as {@code
+   * gtk_file_chooser_get_files} of GTK 4 returns, which the caller owns: the model is released.
+   * Items without a local path are left out.
+   */
+  @SneakyThrows
+  public List<String> takeFilePaths(MemorySegment model) {
+    List<String> paths = new ArrayList<>();
+    int count = (int) LIST_MODEL_GET_N_ITEMS.invokeExact(model);
+    for (int index = 0; index < count; index++) {
+      MemorySegment file = (MemorySegment) LIST_MODEL_GET_ITEM.invokeExact(model, index);
+      String path = takeString((MemorySegment) FILE_GET_PATH.invokeExact(file));
+      if (path != null) {
+        paths.add(path);
+      }
+      unref(file);
+    }
+    unref(model);
+    return paths;
   }
 
   /**

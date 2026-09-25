@@ -313,6 +313,28 @@
     };
     const reportFailure = (error) => console.error("lwjwae window:", error);
 
+    // Dialogs over the window. open resolves to the picked paths, none for a cancel; save to the
+    // path or null; message to true for OK or yes. fileTypes is [{ name, extensions }], level is
+    // info, warning, error, or question, and buttons is ok, okCancel, or yesNo. A signal that aborts
+    // closes the dialog.
+    const fileTypes = (types) => (types || [])
+        .map((type) => [type.name || "", ...(type.extensions || [])].join("\u001d")).join("\u001e");
+    const buttonNames = { ok: "OK", okCancel: "OK_CANCEL", yesNo: "YES_NO" };
+    const dialogCall = (fields, options) =>
+        callMessage("${dialogCall}", fields.join(separator), { signal: options.signal }, true).then(({ text }) => text);
+    const dialog = {
+        open: (options = {}) => dialogCall(["open", field(options.title), field(options.directory),
+            options.multiple ? "1" : "", options.directories ? "1" : "", fileTypes(options.fileTypes)], options)
+            .then((text) => text === "" ? [] : text.split(separator)),
+        save: (options = {}) => dialogCall(["save", field(options.title), field(options.directory),
+            field(options.fileName), fileTypes(options.fileTypes)], options)
+            .then((text) => text === "" ? null : text),
+        message: (options = {}) => dialogCall(["message", field(options.title), field(options.message),
+            field(options.detail), options.level ? String(options.level).toUpperCase() : "",
+            options.buttons ? buttonNames[options.buttons] || "?" : ""], options)
+            .then((text) => text === "1")
+    };
+
     // Links that leave the application: a web page of another origin, or mailto:. Java decides
     // where they go, by default the browser of the system, and the window stays on the page. A
     // link that the page already handled, a download, and one inside the application stay with
@@ -425,5 +447,5 @@
         });
     }
 
-    window.${pageApi} = { listen, once, emit, open, close, openExternal, call: callRpc, invoke: rpcInvoke, RpcError, window: windowApi };
+    window.${pageApi} = { listen, once, emit, open, close, openExternal, call: callRpc, invoke: rpcInvoke, RpcError, window: windowApi, dialog };
 })();

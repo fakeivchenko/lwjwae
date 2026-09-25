@@ -274,6 +274,12 @@ public class Signatures {
       FunctionDescriptor.of(
           C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER);
 
+  /**
+   * {@code void (^)(NSModalResponse)}: the completion handler of a sheet. It receives the block
+   * itself first.
+   */
+  public final FunctionDescriptor SHEET_BLOCK = FunctionDescriptor.ofVoid(C_POINTER, C_LONG);
+
   /** {@code void (^)(id result, NSError* error)}. It receives the block itself first. */
   public final FunctionDescriptor COMPLETION_BLOCK = VOID_POINTER_POINTER_POINTER;
 

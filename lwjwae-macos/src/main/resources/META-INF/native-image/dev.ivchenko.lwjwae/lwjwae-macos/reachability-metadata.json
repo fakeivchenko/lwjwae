@@ -187,6 +187,18 @@
           ]
         }
       ]
+    },
+    {
+      "type": "dev.ivchenko.lwjwae.macos.MacDialogs",
+      "methods": [
+        {
+          "name": "onSheetEnd",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "long"
+          ]
+        }
+      ]
     }
   ],
   "resources": [
@@ -736,6 +748,15 @@
           "void*",
           "void*",
           "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.macos.MacDialogs",
+        "method": "onSheetEnd",
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "jlong"
         ]
       }
     ]

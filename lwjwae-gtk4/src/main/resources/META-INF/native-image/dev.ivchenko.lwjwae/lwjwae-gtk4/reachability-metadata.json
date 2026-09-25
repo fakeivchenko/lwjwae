@@ -105,6 +105,19 @@
           ]
         }
       ]
+    },
+    {
+      "type": "dev.ivchenko.lwjwae.gtk4.Gtk4Dialogs",
+      "methods": [
+        {
+          "name": "onResponse",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "int",
+            "java.lang.foreign.MemorySegment"
+          ]
+        }
+      ]
     }
   ],
   "resources": [
@@ -218,6 +231,28 @@
           "jint",
           "jdouble",
           "jdouble",
+          "jint"
+        ]
+      },
+      {
+        "returnType": "void*",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "jint",
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "returnType": "jlong",
+        "parameterTypes": []
+      },
+      {
+        "returnType": "void*",
+        "parameterTypes": [
+          "void*",
+          "void*",
           "jint"
         ]
       }
@@ -340,6 +375,16 @@
         "parameterTypes": [
           "void*",
           "void*",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.gtk4.Gtk4Dialogs",
+        "method": "onResponse",
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "jint",
           "void*"
         ]
       }

@@ -37,6 +37,8 @@ public class Com {
       NativeLibraries.downcall(Signatures.INT_POINTER_POINTER_POINTER);
   private final MethodHandle CALL_P_P_I =
       NativeLibraries.downcall(Signatures.INT_POINTER_POINTER_INT);
+  private final MethodHandle CALL_P_I_P =
+      NativeLibraries.downcall(Signatures.INT_POINTER_INT_POINTER);
   private final MethodHandle CALL_P_L_P =
       NativeLibraries.downcall(Signatures.INT_POINTER_LONG_POINTER);
   private final MethodHandle CALL_P_P_I_P =
@@ -52,6 +54,12 @@ public class Com {
     return vtable
         .reinterpret((index + 1L) * Signatures.C_POINTER.byteSize())
         .getAtIndex(Signatures.C_POINTER, index);
+  }
+
+  /** Calls method {@code index} of {@code object} with a 32-bit integer and a pointer. */
+  @SneakyThrows
+  public int call(MemorySegment object, int index, int first, MemorySegment second) {
+    return (int) CALL_P_I_P.invokeExact(slot(object, index), object, first, second);
   }
 
   /** Calls method {@code index} of {@code object} with no arguments. */

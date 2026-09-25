@@ -7,6 +7,12 @@ import dev.ivchenko.lwjwae.Window;
 import dev.ivchenko.lwjwae.WindowParameters;
 import dev.ivchenko.lwjwae.WindowPosition;
 import dev.ivchenko.lwjwae.WindowSize;
+import dev.ivchenko.lwjwae.dialog.FileType;
+import dev.ivchenko.lwjwae.dialog.MessageButtons;
+import dev.ivchenko.lwjwae.dialog.MessageDialogParameters;
+import dev.ivchenko.lwjwae.dialog.MessageLevel;
+import dev.ivchenko.lwjwae.dialog.OpenDialogParameters;
+import dev.ivchenko.lwjwae.dialog.SaveDialogParameters;
 import dev.ivchenko.lwjwae.event.LoadEvent;
 import dev.ivchenko.lwjwae.event.WindowEvent;
 import dev.ivchenko.lwjwae.event.WindowEventType;
@@ -21,6 +27,7 @@ import java.awt.Color;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BooleanSupplier;
@@ -498,6 +505,64 @@ public abstract class WindowContractTest extends DisplayContractTest {
               + " blank.target = '_blank'; document.body.append(blank); blank.click(); undefined;");
       awaitTrue(() -> window.url().endsWith("?blank"), "the new window must open in place");
       Assertions.assertEquals(List.of(window), application.windows(), "and no other opens");
+    }
+  }
+
+  @Test
+  void dialogsShowAndCancellingTheFutureClosesThem() throws Exception {
+    try (Application application = Application.create()) {
+      Window window =
+          application.open(
+              WindowParameters.builder().title("lwjwae :: dialogs").width(640).height(480).build());
+      final var loaded = Loads.expectFinished(window);
+      window.loadResource("test-app/index.html");
+      window.show();
+      loaded.get(30, TimeUnit.SECONDS);
+
+      List<CompletableFuture<?>> dialogs =
+          List.of(
+              window.showOpenDialog(
+                  OpenDialogParameters.builder()
+                      .title("lwjwae :: open")
+                      .multiple(true)
+                      .fileTypes(List.of(FileType.of("Images", "png", "jpg")))
+                      .build()),
+              window.showOpenDialog(OpenDialogParameters.builder().directories(true).build()),
+              window.showSaveDialog(SaveDialogParameters.builder().fileName("lwjwae.txt").build()),
+              window.showMessageDialog(
+                  MessageDialogParameters.builder()
+                      .title("lwjwae :: message")
+                      .message("A question")
+                      .detail("With a detail")
+                      .level(MessageLevel.QUESTION)
+                      .buttons(MessageButtons.YES_NO)
+                      .build()));
+      String[] names = {"open", "folder", "save", "message"};
+      for (int index = 0; index < dialogs.size(); index++) {
+        CompletableFuture<?> dialog = dialogs.get(index);
+        Thread.sleep(1000);
+        Screenshots.capture("dialog-" + names[index]);
+        Assertions.assertFalse(dialog.isDone(), names[index] + " waits for the user");
+        dialog.cancel(false);
+        // The UI thread runs work while the dialog goes: a modal loop mustn't hold it up.
+        Assertions.assertEquals("2", Loads.eval(window, "String(1 + 1)"), names[index]);
+      }
+
+      // A page that aborts its call closes the dialog too.
+      Loads.eval(
+          window,
+          "window.__aborted = undefined; const controller = new AbortController();"
+              + " lwjwae.dialog.message({ message: 'Abort me', signal: controller.signal })"
+              + ".catch((error) => window.__aborted = error.name);"
+              + " setTimeout(() => controller.abort(), 1000); undefined;");
+      Assertions.assertEquals("AbortError", Loads.awaitValue(window, "window.__aborted"));
+      Assertions.assertEquals("4", Loads.eval(window, "String(2 + 2)"));
+
+      CompletableFuture<Boolean> left =
+          window.showMessageDialog(MessageDialogParameters.of("Left open"));
+      Thread.sleep(500);
+      window.close();
+      Assertions.assertTrue(left.isCancelled(), "a closed window cancels its dialogs");
     }
   }
 

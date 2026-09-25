@@ -1,5 +1,6 @@
 package dev.ivchenko.lwjwae.windows;
 
+import dev.ivchenko.lwjwae.foreign.NativeLibraries;
 import dev.ivchenko.lwjwae.ui.EventLoopDispatcher;
 import dev.ivchenko.lwjwae.windows.binding.Kernel32;
 import dev.ivchenko.lwjwae.windows.binding.Ole32;
@@ -7,6 +8,8 @@ import dev.ivchenko.lwjwae.windows.binding.Signatures;
 import dev.ivchenko.lwjwae.windows.binding.User32;
 import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.MethodType;
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -22,6 +25,11 @@ import java.util.concurrent.TimeoutException;
  * of the process, and drains queued tasks whenever a {@code WM_APP} message posted from another
  * thread lands in its queue.
  *
+ * <p>The wake-up is a {@code WM_APP} posted to a message-only window of the thread, not to the
+ * thread itself. A modal loop, such as the one of a file dialog, a message box, a menu, or a drag
+ * of the frame, dispatches the messages of windows and drops those of the thread, so work that
+ * other threads queue keeps running while such a loop is up, and a dialog can be closed from it.
+ *
  * <p>WebView2 creates its objects asynchronously and reports back through that same queue, so a
  * caller that needs the result has to wait while messages keep flowing. Another thread blocks. The
  * UI thread can't, because blocking it would starve the very callback it waits for, so {@link
@@ -31,8 +39,18 @@ import java.util.concurrent.TimeoutException;
  */
 public class WindowsDispatcher extends EventLoopDispatcher {
   private static final WindowsDispatcher INSTANCE = new WindowsDispatcher();
+  private static final String WINDOW_CLASS = "lwjwae-dispatcher";
+
+  private static final MemorySegment WINDOW_PROC =
+      NativeLibraries.upcall(
+          MethodHandles.lookup(),
+          WindowsDispatcher.class,
+          "windowProc",
+          MethodType.methodType(long.class, MemorySegment.class, int.class, long.class, long.class),
+          Signatures.LONG_POINTER_INT_LONG_LONG);
 
   private volatile int threadId;
+  private volatile MemorySegment messageWindow;
 
   private WindowsDispatcher() {
     super("lwjwae-win32");
@@ -57,6 +75,8 @@ public class WindowsDispatcher extends EventLoopDispatcher {
     }
     this.threadId = Kernel32.currentThreadId();
     User32.ensureMessageQueue();
+    User32.registerClass(WINDOW_CLASS, WINDOW_PROC);
+    this.messageWindow = User32.createMessageWindow(WINDOW_CLASS);
   }
 
   @Override
@@ -110,9 +130,32 @@ public class WindowsDispatcher extends EventLoopDispatcher {
     return future.get(0, TimeUnit.NANOSECONDS);
   }
 
+  /** Before the message window exists, the thread takes the wake-up. */
   @Override
   protected void wakeUp() {
-    User32.postThreadMessage(this.threadId, User32.WM_APP);
+    MemorySegment window = this.messageWindow;
+    if (window != null) {
+      User32.post(window, User32.WM_APP);
+    } else {
+      User32.postThreadMessage(this.threadId, User32.WM_APP);
+    }
+  }
+
+  /**
+   * The {@code WNDPROC} of the message window: a {@code WM_APP} runs the queued tasks, wherever the
+   * loop that dispatched it runs.
+   *
+   * <p>Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
+   * binds it by name, so no Java code calls it and the compiler sees a dead private method.
+   */
+  @SuppressWarnings("unused")
+  private static long windowProc(
+      MemorySegment hwnd, int message, long wordParameter, long longParameter) {
+    if (message == User32.WM_APP) {
+      INSTANCE.drainTasks();
+      return 0;
+    }
+    return User32.defWindowProc(hwnd, message, wordParameter, longParameter);
   }
 
   private void dispatch(MemorySegment message) {

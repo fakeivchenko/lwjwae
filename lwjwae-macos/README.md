@@ -236,6 +236,16 @@ called through their invoke pointer.
 The display tests run the contract only where the process is a bundle whose notifications are
 allowed; the test JVM on CI is neither, and there the tests check that the refusal is clean.
 
+## Dialogs
+
+`NSOpenPanel`, `NSSavePanel`, and `NSAlert` are sheets of the window, begun with
+`beginSheetModalForWindow:completionHandler:`, which returns at once and calls the block when the
+user answers: `runModal` would hold up the work of other threads until then. The block is a
+global literal like the one of `evaluateJavaScript:`, and a cancellation ends the sheet with
+`endSheet:`, which calls it too. A panel has no menu of kinds of file, so it takes the extensions of
+every kind through `setAllowedFileTypes:`, and the title of the dialog goes to `setMessage:`, since
+a sheet has no title bar.
+
 ## Closing
 
 `close()` calls `-[NSWindow close]` on the main thread. The delegate receives `windowWillClose:`

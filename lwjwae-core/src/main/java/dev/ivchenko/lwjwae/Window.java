@@ -1,10 +1,16 @@
 package dev.ivchenko.lwjwae;
 
+import dev.ivchenko.lwjwae.dialog.MessageDialogParameters;
+import dev.ivchenko.lwjwae.dialog.OpenDialogParameters;
+import dev.ivchenko.lwjwae.dialog.SaveDialogParameters;
 import dev.ivchenko.lwjwae.event.Event;
 import dev.ivchenko.lwjwae.event.EventSubscription;
 import dev.ivchenko.lwjwae.event.LoadEvent;
 import dev.ivchenko.lwjwae.event.WindowEvent;
 import dev.ivchenko.lwjwae.rpc.RpcHandler;
+import java.nio.file.Path;
+import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -279,6 +285,33 @@ public interface Window extends AutoCloseable {
    *     #navigate} to it, or drop it; {@code null} brings the default back.
    */
   void externalLinkHandler(Consumer<String> handler);
+
+  /**
+   * Shows the dialog of the platform that opens files, or folders, over this window, and returns
+   * without waiting for the user. On Linux, inside a sandbox, the dialog comes from the portal of
+   * the desktop.
+   *
+   * @return The files or folders that the user picked, or none if they cancelled. Cancelling the
+   *     future closes the dialog.
+   */
+  CompletableFuture<List<Path>> showOpenDialog(OpenDialogParameters parameters);
+
+  /**
+   * Shows the dialog of the platform that saves a file over this window, and returns without
+   * waiting for the user. The dialog asks before it picks a file that exists; nothing is written.
+   *
+   * @return The file that the user picked, or empty if they cancelled. Cancelling the future closes
+   *     the dialog.
+   */
+  CompletableFuture<Optional<Path>> showSaveDialog(SaveDialogParameters parameters);
+
+  /**
+   * Shows a message over this window, and returns without waiting for the user.
+   *
+   * @return {@code true} if the user chose OK or yes, {@code false} for cancel, no, or a closed
+   *     dialog. Cancelling the future closes the dialog.
+   */
+  CompletableFuture<Boolean> showMessageDialog(MessageDialogParameters parameters);
 
   /** Puts the window on screen, or back on it after {@link #hide()}, and brings it to the front. */
   void show();

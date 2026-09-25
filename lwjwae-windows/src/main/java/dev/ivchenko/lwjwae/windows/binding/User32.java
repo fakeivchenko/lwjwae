@@ -57,6 +57,7 @@ public class User32 {
   public final int WM_CLOSE = 0x0010;
   public final int WM_GETMINMAXINFO = 0x0024;
   public final int WM_NCCALCSIZE = 0x0083;
+  private final int WM_COMMAND = 0x0111;
   private final int WM_NCLBUTTONDOWN = 0x00A1;
 
   // --- hit-test codes of WM_NCHITTEST, what a press on the frame means ---
@@ -99,6 +100,24 @@ public class User32 {
 
   /** {@code COLOR_WINDOW + 1}: the class background brush that GTK-style applications use. */
   private final MemorySegment WINDOW_BACKGROUND = MemorySegment.ofAddress(5 + 1);
+
+  // --- MessageBoxW ---
+  public final int MB_OK = 0x0;
+  public final int MB_OKCANCEL = 0x1;
+  public final int MB_YESNO = 0x4;
+  public final int MB_ICONERROR = 0x10;
+  public final int MB_ICONQUESTION = 0x20;
+  public final int MB_ICONWARNING = 0x30;
+  public final int MB_ICONINFORMATION = 0x40;
+  public final int IDOK = 1;
+  public final int IDCANCEL = 2;
+  public final int IDYES = 6;
+
+  /** {@code GW_ENABLEDPOPUP}: the enabled window that a window owns, a dialog over it. */
+  private final int GW_ENABLEDPOPUP = 6;
+
+  /** {@code HWND_MESSAGE}: the parent that makes a window message-only. */
+  private final MemorySegment HWND_MESSAGE = MemorySegment.ofAddress(-3);
 
   /** {@code WS_EX_TOOLWINDOW}: no taskbar button, no Alt+Tab entry. */
   private final int WS_EX_TOOLWINDOW = 0x00000080;
@@ -160,6 +179,12 @@ public class User32 {
       NativeLibraries.downcall(USER32, "GetSystemMenu", Signatures.POINTER_POINTER_INT);
   private final MethodHandle ENABLE_MENU_ITEM =
       NativeLibraries.downcall(USER32, "EnableMenuItem", Signatures.INT_POINTER_INT_INT);
+  private final MethodHandle MESSAGE_BOX =
+      NativeLibraries.downcall(USER32, "MessageBoxW", Signatures.INT_POINTER_POINTER_POINTER_INT);
+  private final MethodHandle GET_WINDOW =
+      NativeLibraries.downcall(USER32, "GetWindow", Signatures.POINTER_POINTER_INT);
+  private final MethodHandle END_DIALOG =
+      NativeLibraries.downcall(USER32, "EndDialog", Signatures.INT_POINTER_LONG);
   private final MethodHandle GET_SYSTEM_METRICS =
       NativeLibraries.downcall(USER32, "GetSystemMetrics", Signatures.INT_INT);
   private final MethodHandle CREATE_ICON_FROM_RESOURCE_EX =
@@ -365,6 +390,75 @@ public class User32 {
         throw new IllegalStateException("CreateWindowExW failed, error " + Kernel32.lastError());
       }
       return hwnd;
+    }
+  }
+
+  /**
+   * A message-only window of {@code className}: never shown, never enumerated, it exists to receive
+   * the messages posted to it, in the loop of a modal dialog as in the main one.
+   */
+  @SneakyThrows
+  public MemorySegment createMessageWindow(String className) {
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment hwnd =
+          (MemorySegment)
+              CREATE_WINDOW_EX.invokeExact(
+                  0,
+                  Wide.allocate(arena, className),
+                  Wide.allocate(arena, className),
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  HWND_MESSAGE,
+                  MemorySegment.NULL,
+                  Kernel32.moduleHandle(),
+                  MemorySegment.NULL);
+      if (hwnd.equals(MemorySegment.NULL)) {
+        throw new IllegalStateException("CreateWindowExW failed, error " + Kernel32.lastError());
+      }
+      return hwnd;
+    }
+  }
+
+  /**
+   * Calls {@code MessageBoxW} over {@code owner}: a modal dialog with its own loop, which returns
+   * the {@code ID} of the button that closed it.
+   */
+  @SneakyThrows
+  public int messageBox(MemorySegment owner, String text, String caption, int type) {
+    try (Arena arena = Arena.ofConfined()) {
+      return (int)
+          MESSAGE_BOX.invokeExact(
+              owner, Wide.allocate(arena, text), Wide.allocate(arena, caption), type);
+    }
+  }
+
+  /**
+   * Cancels the dialog that {@code owner} has up, as its Cancel button does: {@code WM_COMMAND}
+   * with {@code IDCANCEL}. {@code IFileDialog::Close} answers {@code S_OK} from the loop of the
+   * dialog and leaves it on screen. Nothing happens without a dialog.
+   */
+  @SneakyThrows
+  public void cancelOwnedDialog(MemorySegment owner) {
+    MemorySegment dialog = (MemorySegment) GET_WINDOW.invokeExact(owner, GW_ENABLEDPOPUP);
+    if (!dialog.equals(MemorySegment.NULL) && !dialog.equals(owner)) {
+      int _ = (int) POST_MESSAGE.invokeExact(dialog, WM_COMMAND, (long) IDCANCEL, 0L);
+    }
+  }
+
+  /**
+   * Closes the modal dialog that {@code owner} has up, a message box among them, as if its button
+   * {@code result} was pressed, which a message box without a Cancel button needs. Call it on the
+   * thread of the dialog, from a message that its loop dispatched; nothing happens without a
+   * dialog.
+   */
+  @SneakyThrows
+  public void endOwnedDialog(MemorySegment owner, int result) {
+    MemorySegment dialog = (MemorySegment) GET_WINDOW.invokeExact(owner, GW_ENABLEDPOPUP);
+    if (!dialog.equals(MemorySegment.NULL) && !dialog.equals(owner)) {
+      int _ = (int) END_DIALOG.invokeExact(dialog, (long) result);
     }
   }
 

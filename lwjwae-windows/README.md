@@ -82,9 +82,15 @@ receives its callbacks, and must pump messages for them to arrive. [`WindowsDisp
 2. On that thread, `initialize()` calls `CoInitializeEx(NULL, COINIT_APARTMENTTHREADED)`, records
    the thread ID, and calls `PeekMessageW` once. Until a thread has called a message function, it
    has no message queue, and `PostThreadMessage` to it fails, so the first wake-up would be lost.
-3. `runEventLoop()` runs `GetMessageW`, and for every message either drains the task queue, when
-   the message is `WM_APP`, or calls `TranslateMessage` and `DispatchMessageW`.
-4. `wakeUp()` posts `WM_APP` to the thread with `PostThreadMessageW`, which is safe from any thread.
+3. It then creates a message-only window, a child of `HWND_MESSAGE` that is never shown, whose
+   window procedure drains the task queue on `WM_APP`.
+4. `runEventLoop()` runs `GetMessageW`, and for every message either drains the task queue, when
+   the message is a `WM_APP` of the thread, or calls `TranslateMessage` and `DispatchMessageW`.
+5. `wakeUp()` posts `WM_APP` to the message window with `PostMessageW`, which is safe from any
+   thread, and to the thread before the window exists. A modal loop, the one of a file dialog, a
+   message box, a menu, or a drag of the frame, dispatches the messages of windows and drops those
+   of the thread: through the window, the work that other threads queue keeps running while such a
+   loop is up, and a dialog can be closed from it.
 
 ## Creating the application
 
@@ -281,6 +287,22 @@ on a thread of the pool, not on the UI thread, so the handlers are agile COM obj
 Center, where it can still be clicked, so its handle stays open until a click, a dismissal, `close()`,
 or `quit()`. Under Do Not Disturb, every toast goes there at once and reports a timeout; taking those
 back would hide every notification from a user who only asked for quiet.
+
+## Dialogs
+
+The common item dialogs come from `CoCreateInstance` with `CLSID_FileOpenDialog` or
+`CLSID_FileSaveDialog`, and are called through their vtables like WebView2. The options add
+`FOS_FORCEFILESYSTEM` to what the dialog has, the folder is an `IShellItem` from
+`SHCreateItemFromParsingName`, the kinds of file are `COMDLG_FILTERSPEC` entries, and the answer
+is the `SIGDN_FILESYSPATH` of each item. A message is `MessageBoxW`, since `TaskDialog` needs
+version 6 of the common controls, which a Java launcher doesn't declare in its manifest.
+
+Both kinds are modal: `Show` and `MessageBoxW` return when the user answers, and meanwhile the UI
+thread runs their loop, and the queued work through the message window of the dispatcher. A
+cancellation posts `WM_COMMAND` with `IDCANCEL` to the dialog that the window owns, found with
+`GetWindow(GW_ENABLEDPOPUP)`: `IFileDialog::Close` answers `S_OK` from the loop and leaves the
+dialog on screen. A message box without a Cancel button ignores `IDCANCEL`, so it ends with
+`EndDialog` instead.
 
 ## Closing
 

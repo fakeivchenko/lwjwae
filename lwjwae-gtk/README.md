@@ -200,6 +200,21 @@ keeps `Application.run()` going, so an application can live in the tray with no 
 of [`lwjwae-glib`](../lwjwae-glib#notifications): `org.freedesktop.Notifications` over GDBus, the
 same under GTK 3 and GTK 4.
 
+## Dialogs
+
+Files go through `GtkFileChooserNative`, which is the dialog of the desktop portal inside a sandbox,
+where an application sees no file of the user until the user picks it, and GTK's own outside one.
+It answers through `response`, and never blocks the GTK thread; a cancellation hides it with
+`gtk_native_dialog_hide`, which answers nothing. A kind of file is a `GtkFileFilter` with a glob
+pattern per extension, every letter in brackets of both cases, since GTK matches with case.
+
+A message is a `GtkMessageDialog` made with `g_object_new_with_properties` and its properties:
+`gtk_message_dialog_new` takes a `printf` format and variadic arguments. Its buttons come from
+`gtk_dialog_add_button`, labelled from the translations of GTK itself (`g_dgettext("gtk30", "_OK")`)
+so they're in the language of the user. [`GtkDialogs`](src/main/java/dev/ivchenko/lwjwae/gtk/GtkDialogs.java)
+holds both, and GTK 4 has the same in `Gtk4Dialogs`, with `GFile` and `GListModel` where GTK 3 has
+paths and lists.
+
 ## Closing
 
 `close()` calls `gtk_widget_destroy` on the window, on the GTK thread. GTK emits `destroy`

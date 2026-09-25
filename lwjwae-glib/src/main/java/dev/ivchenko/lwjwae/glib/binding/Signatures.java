@@ -45,6 +45,10 @@ public class Signatures {
   /** {@code T* f(gsize)}. */
   public final FunctionDescriptor POINTER_LONG = FunctionDescriptor.of(C_POINTER, C_LONG);
 
+  /** {@code T* f(GType, guint, U*, V*)}: {@code g_object_new_with_properties}. */
+  public final FunctionDescriptor POINTER_LONG_INT_POINTER_POINTER =
+      FunctionDescriptor.of(C_POINTER, C_LONG, C_INT, C_POINTER, C_POINTER);
+
   /** {@code gint f(T*)}. */
   public final FunctionDescriptor INT_POINTER = FunctionDescriptor.of(C_INT, C_POINTER);
 

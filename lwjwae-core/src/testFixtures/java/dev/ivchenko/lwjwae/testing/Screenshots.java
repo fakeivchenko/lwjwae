@@ -38,8 +38,8 @@ public class Screenshots {
   private final long CAPTURE_TIMEOUT_SECONDS = 30;
 
   /**
-   * The virtual screen of Windows into the PNG file {@code $file}. The process declares itself aware
-   * of the DPI first, so that a scaled desktop is captured whole.
+   * The virtual screen of Windows into the PNG file {@code $file}. The process declares itself
+   * aware of the DPI first, so that a scaled desktop is captured whole.
    */
   private final String WINDOWS_CAPTURE =
       """

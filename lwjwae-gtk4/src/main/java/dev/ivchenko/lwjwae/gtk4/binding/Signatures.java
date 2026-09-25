@@ -99,6 +99,17 @@ public class Signatures {
   public final FunctionDescriptor VOID_POINTER_INT_POINTER =
       FunctionDescriptor.ofVoid(C_POINTER, C_INT, C_POINTER);
 
+  /** {@code GType f(void)}: the {@code _get_type} functions. */
+  public final FunctionDescriptor LONG_VOID = FunctionDescriptor.of(C_LONG);
+
+  /** {@code T* f(U*, const gchar*, gint)}: {@code gtk_dialog_add_button}. */
+  public final FunctionDescriptor POINTER_POINTER_POINTER_INT =
+      FunctionDescriptor.of(C_POINTER, C_POINTER, C_POINTER, C_INT);
+
+  /** {@code T* f(const gchar*, U*, gint, const gchar*, const gchar*)}: the native file chooser. */
+  public final FunctionDescriptor GTK_FILE_CHOOSER_NATIVE_NEW =
+      FunctionDescriptor.of(C_POINTER, C_POINTER, C_POINTER, C_INT, C_POINTER, C_POINTER);
+
   /** {@code T* f(gint, gint)}: {@code gtk_box_new}. */
   public final FunctionDescriptor POINTER_INT_INT = FunctionDescriptor.of(C_POINTER, C_INT, C_INT);
 
@@ -257,6 +268,12 @@ public class Signatures {
    * the request for a new window, which a {@code NULL} answer declines.
    */
   public final FunctionDescriptor CREATE_CALLBACK = POINTER_POINTER_POINTER_POINTER;
+
+  /**
+   * {@code void (*)(T*, gint response_id, gpointer)}: the {@code response} signal of a dialog and
+   * of a native dialog.
+   */
+  public final FunctionDescriptor RESPONSE_CALLBACK = VOID_POINTER_INT_POINTER;
 
   /** {@code void (*)(WebKitWebView*, WebKitLoadEvent, gpointer)}: {@code load-changed}. */
   public final FunctionDescriptor LOAD_CHANGED_CALLBACK =

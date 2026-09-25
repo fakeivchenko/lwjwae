@@ -1,6 +1,11 @@
 package dev.ivchenko.lwjwae;
 
 import dev.ivchenko.lwjwae.bridge.BridgeProtocol;
+import dev.ivchenko.lwjwae.dialog.FileType;
+import dev.ivchenko.lwjwae.dialog.MessageButtons;
+import dev.ivchenko.lwjwae.dialog.MessageDialogParameters;
+import dev.ivchenko.lwjwae.dialog.OpenDialogParameters;
+import dev.ivchenko.lwjwae.dialog.SaveDialogParameters;
 import dev.ivchenko.lwjwae.event.Event;
 import dev.ivchenko.lwjwae.event.EventSubscription;
 import dev.ivchenko.lwjwae.event.LoadEvent;
@@ -11,10 +16,14 @@ import dev.ivchenko.lwjwae.testing.FakeApplication;
 import dev.ivchenko.lwjwae.testing.FakeWindow;
 import dev.ivchenko.lwjwae.testing.Point;
 import dev.ivchenko.lwjwae.testing.PointCodec;
+import dev.ivchenko.lwjwae.testing.PresentedDialog;
 import dev.ivchenko.lwjwae.testing.RpcReply;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -540,6 +549,93 @@ class AbstractWindowTest {
       }
       Assertions.assertEquals(
           List.of("HTTPS://example.com", "mailto:someone@example.com"), application.launched);
+    }
+  }
+
+  @Test
+  void dialogsAnswerJavaAndCancellingOneClosesIt() throws Exception {
+    try (FakeApplication application = new FakeApplication()) {
+      FakeWindow window = application.openFake();
+      CompletableFuture<List<Path>> opened =
+          window.showOpenDialog(OpenDialogParameters.builder().multiple(true).build());
+      PresentedDialog open = window.dialogs.poll(5, TimeUnit.SECONDS);
+      Assertions.assertNotNull(open);
+      Assertions.assertTrue(((OpenDialogParameters) open.parameters()).multiple());
+      open.answer(List.of(Path.of("/a"), Path.of("/b")));
+      Assertions.assertEquals(
+          List.of(Path.of("/a"), Path.of("/b")), opened.get(5, TimeUnit.SECONDS));
+
+      CompletableFuture<Boolean> asked =
+          window.showMessageDialog(MessageDialogParameters.of("Sure?"));
+      PresentedDialog message = window.dialogs.poll(5, TimeUnit.SECONDS);
+      asked.cancel(false);
+      window.awaitUiThread();
+      Assertions.assertTrue(message.closed().get(), "cancelling the future closes the dialog");
+
+      CompletableFuture<Optional<Path>> saved =
+          window.showSaveDialog(SaveDialogParameters.createDefault());
+      PresentedDialog save = window.dialogs.poll(5, TimeUnit.SECONDS);
+      window.close();
+      window.awaitUiThread();
+      Assertions.assertTrue(saved.isCancelled(), "a closed window cancels its dialogs");
+      Assertions.assertTrue(save.closed().get());
+    }
+  }
+
+  @Test
+  void thePageShowsDialogsAndGetsTheAnswers() throws Exception {
+    try (FakeApplication application = new FakeApplication()) {
+      FakeWindow window = application.openFake();
+      window.call(
+          1,
+          BridgeProtocol.DIALOG_CALL,
+          String.join(
+              SEP,
+              "open",
+              "Pick",
+              "/home",
+              "1",
+              "",
+              "Images\u001dpng\u001d.JPG\u001eText\u001dtxt"));
+      PresentedDialog open = window.dialogs.poll(5, TimeUnit.SECONDS);
+      OpenDialogParameters parameters = (OpenDialogParameters) open.parameters();
+      Assertions.assertEquals("Pick", parameters.title());
+      Assertions.assertEquals(Path.of("/home"), parameters.directory());
+      Assertions.assertTrue(parameters.multiple());
+      Assertions.assertFalse(parameters.directories());
+      Assertions.assertEquals(
+          List.of(FileType.of("Images", "png", "jpg"), FileType.of("Text", "txt")),
+          parameters.fileTypes());
+      open.answer(List.of(Path.of("/home/a.png"), Path.of("/home/b.png")));
+      Assertions.assertEquals("/home/a.png" + SEP + "/home/b.png", window.awaitReply(1).body());
+
+      window.call(2, BridgeProtocol.DIALOG_CALL, String.join(SEP, "save", "", "", "a.txt", ""));
+      PresentedDialog save = window.dialogs.poll(5, TimeUnit.SECONDS);
+      Assertions.assertEquals("a.txt", ((SaveDialogParameters) save.parameters()).fileName());
+      save.answer(Optional.empty());
+      Assertions.assertEquals("", window.awaitReply(2).body());
+
+      window.call(
+          3,
+          BridgeProtocol.DIALOG_CALL,
+          String.join(SEP, "message", "", "Sure?", "", "QUESTION", "YES_NO"));
+      PresentedDialog message = window.dialogs.poll(5, TimeUnit.SECONDS);
+      Assertions.assertEquals(
+          MessageButtons.YES_NO, ((MessageDialogParameters) message.parameters()).buttons());
+      message.answer(true);
+      Assertions.assertEquals("1", window.awaitReply(3).body());
+
+      window.call(
+          4, BridgeProtocol.DIALOG_CALL, String.join(SEP, "message", "", "", "", "LOUD", ""));
+      Assertions.assertEquals(400, window.awaitReply(4).status());
+
+      window.call(5, BridgeProtocol.DIALOG_CALL, String.join(SEP, "open", "", "", "", "", ""));
+      PresentedDialog abandoned = window.dialogs.poll(5, TimeUnit.SECONDS);
+      window.cancel(5);
+      for (int attempt = 0; attempt < 50 && !abandoned.closed().get(); attempt++) {
+        Thread.sleep(50);
+      }
+      Assertions.assertTrue(abandoned.closed().get(), "a call that the page gives up closes it");
     }
   }
 

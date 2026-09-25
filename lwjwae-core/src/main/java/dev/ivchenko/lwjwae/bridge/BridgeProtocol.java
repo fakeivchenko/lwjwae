@@ -2,12 +2,20 @@ package dev.ivchenko.lwjwae.bridge;
 
 import dev.ivchenko.lwjwae.WindowEdge;
 import dev.ivchenko.lwjwae.WindowParameters;
+import dev.ivchenko.lwjwae.dialog.FileType;
+import dev.ivchenko.lwjwae.dialog.MessageButtons;
+import dev.ivchenko.lwjwae.dialog.MessageDialogParameters;
+import dev.ivchenko.lwjwae.dialog.MessageLevel;
+import dev.ivchenko.lwjwae.dialog.OpenDialogParameters;
+import dev.ivchenko.lwjwae.dialog.SaveDialogParameters;
 import dev.ivchenko.lwjwae.event.Event;
 import dev.ivchenko.lwjwae.util.ScriptUtil;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.List;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -77,6 +85,25 @@ public class BridgeProtocol {
    * #EVENT_CALL}. The body is an action and, for some, an argument after {@link #SEPARATOR}.
    */
   public final String CONTROL_CALL = "lwjwae:control";
+
+  /**
+   * The name under which a page shows a dialog over its window, through {@code
+   * window.lwjwae.dialog}. Reserved like {@link #EVENT_CALL}. The body is {@code open}, {@code
+   * save}, or {@code message}, and the fields of the dialog after {@link #SEPARATOR}.
+   */
+  public final String DIALOG_CALL = "lwjwae:dialog";
+
+  /**
+   * The separator between the kinds of file of a dialog in a {@link #DIALOG_CALL}: the ASCII record
+   * separator.
+   */
+  public final String RECORD_SEPARATOR = "\u001e";
+
+  /**
+   * The separator between the name and the extensions of one kind of file: the ASCII group
+   * separator.
+   */
+  public final String GROUP_SEPARATOR = "\u001d";
 
   /**
    * The media type of a value that the codec encoded: what {@code lwjwae.invoke} and a typed
@@ -155,6 +182,7 @@ public class BridgeProtocol {
         .replace("${openCall}", OPEN_CALL)
         .replace("${closeCall}", CLOSE_CALL)
         .replace("${controlCall}", CONTROL_CALL)
+        .replace("${dialogCall}", DIALOG_CALL)
         .replace("${resizeEdges}", edges)
         .replace("${separator}", "\u001f")
         .replace("${post}", postMessage)
@@ -230,6 +258,93 @@ public class BridgeProtocol {
     } catch (NumberFormatException _) {
       return null;
     }
+  }
+
+  /**
+   * Parses the fields of an open dialog in a {@link #DIALOG_CALL}: the title, the directory, {@code
+   * 1} for multiple, {@code 1} for directories, and the kinds of file, see {@link #parseFileTypes}.
+   *
+   * @return The parameters, or {@code null} if the text doesn't have the shape.
+   */
+  public OpenDialogParameters parseOpenDialog(String payload) {
+    String[] parts = payload.split(SEPARATOR, -1);
+    if (parts.length != 5) {
+      return null;
+    }
+    return OpenDialogParameters.builder()
+        .title(text(parts[0]))
+        .directory(path(parts[1]))
+        .multiple(parts[2].equals("1"))
+        .directories(parts[3].equals("1"))
+        .fileTypes(parseFileTypes(parts[4]))
+        .build();
+  }
+
+  /**
+   * Parses the fields of a save dialog in a {@link #DIALOG_CALL}: the title, the directory, the
+   * file name, and the kinds of file.
+   *
+   * @return The parameters, or {@code null} if the text doesn't have the shape.
+   */
+  public SaveDialogParameters parseSaveDialog(String payload) {
+    String[] parts = payload.split(SEPARATOR, -1);
+    if (parts.length != 4) {
+      return null;
+    }
+    return SaveDialogParameters.builder()
+        .title(text(parts[0]))
+        .directory(path(parts[1]))
+        .fileName(text(parts[2]))
+        .fileTypes(parseFileTypes(parts[3]))
+        .build();
+  }
+
+  /**
+   * Parses the fields of a message dialog in a {@link #DIALOG_CALL}: the title, the message, the
+   * detail, the name of the {@link MessageLevel}, and the name of the {@link MessageButtons}, empty
+   * for the default.
+   *
+   * @return The parameters, or {@code null} if the text doesn't have the shape or names no level or
+   *     no buttons.
+   */
+  public MessageDialogParameters parseMessageDialog(String payload) {
+    String[] parts = payload.split(SEPARATOR, -1);
+    if (parts.length != 5) {
+      return null;
+    }
+    try {
+      return MessageDialogParameters.builder()
+          .title(text(parts[0]))
+          .message(parts[1])
+          .detail(text(parts[2]))
+          .level(parts[3].isEmpty() ? null : MessageLevel.valueOf(parts[3]))
+          .buttons(parts[4].isEmpty() ? null : MessageButtons.valueOf(parts[4]))
+          .build();
+    } catch (IllegalArgumentException _) {
+      return null;
+    }
+  }
+
+  /**
+   * Parses kinds of file: each one its name and its extensions separated by {@link
+   * #GROUP_SEPARATOR}, and the kinds separated by {@link #RECORD_SEPARATOR}.
+   */
+  public List<FileType> parseFileTypes(String text) {
+    if (text.isEmpty()) {
+      return List.of();
+    }
+    return Arrays.stream(text.split(RECORD_SEPARATOR))
+        .map(type -> type.split(GROUP_SEPARATOR, -1))
+        .map(parts -> new FileType(parts[0], List.of(parts).subList(1, parts.length)))
+        .toList();
+  }
+
+  private String text(String field) {
+    return field.isEmpty() ? null : field;
+  }
+
+  private Path path(String field) {
+    return field.isEmpty() ? null : Path.of(field);
   }
 
   /**

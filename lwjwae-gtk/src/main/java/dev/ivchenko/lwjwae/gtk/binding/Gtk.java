@@ -1,12 +1,14 @@
 package dev.ivchenko.lwjwae.gtk.binding;
 
 import dev.ivchenko.lwjwae.foreign.NativeLibraries;
+import dev.ivchenko.lwjwae.glib.binding.Glib;
 import java.lang.foreign.Arena;
 import java.lang.foreign.MemoryLayout;
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.SymbolLookup;
 import java.lang.foreign.ValueLayout;
 import java.lang.invoke.MethodHandle;
+import java.util.List;
 import lombok.SneakyThrows;
 import lombok.experimental.UtilityClass;
 
@@ -119,6 +121,50 @@ public class Gtk {
       NativeLibraries.downcall(GTK, "gtk_style_context_add_class", Signatures.VOID_POINTER_POINTER);
   private final MethodHandle SETTINGS_GET_DEFAULT =
       NativeLibraries.downcall(GTK, "gtk_settings_get_default", Signatures.POINTER_VOID);
+  // --- dialogs ---
+  private final MethodHandle FILE_CHOOSER_NATIVE_NEW =
+      NativeLibraries.downcall(
+          GTK, "gtk_file_chooser_native_new", Signatures.GTK_FILE_CHOOSER_NATIVE_NEW);
+  private final MethodHandle NATIVE_DIALOG_SHOW =
+      NativeLibraries.downcall(GTK, "gtk_native_dialog_show", Signatures.VOID_POINTER);
+  private final MethodHandle NATIVE_DIALOG_HIDE =
+      NativeLibraries.downcall(GTK, "gtk_native_dialog_hide", Signatures.VOID_POINTER);
+  private final MethodHandle FILE_CHOOSER_SET_SELECT_MULTIPLE =
+      NativeLibraries.downcall(
+          GTK, "gtk_file_chooser_set_select_multiple", Signatures.VOID_POINTER_INT);
+  private final MethodHandle FILE_CHOOSER_SET_CURRENT_FOLDER =
+      NativeLibraries.downcall(
+          GTK, "gtk_file_chooser_set_current_folder", Signatures.INT_POINTER_POINTER);
+  private final MethodHandle FILE_CHOOSER_SET_CURRENT_NAME =
+      NativeLibraries.downcall(
+          GTK, "gtk_file_chooser_set_current_name", Signatures.VOID_POINTER_POINTER);
+  private final MethodHandle FILE_CHOOSER_SET_DO_OVERWRITE_CONFIRMATION =
+      NativeLibraries.downcall(
+          GTK, "gtk_file_chooser_set_do_overwrite_confirmation", Signatures.VOID_POINTER_INT);
+  private final MethodHandle FILE_CHOOSER_ADD_FILTER =
+      NativeLibraries.downcall(GTK, "gtk_file_chooser_add_filter", Signatures.VOID_POINTER_POINTER);
+  private final MethodHandle FILE_CHOOSER_GET_FILENAMES =
+      NativeLibraries.downcall(GTK, "gtk_file_chooser_get_filenames", Signatures.POINTER_POINTER);
+  private final MethodHandle FILE_FILTER_NEW =
+      NativeLibraries.downcall(GTK, "gtk_file_filter_new", Signatures.POINTER_VOID);
+  private final MethodHandle FILE_FILTER_SET_NAME =
+      NativeLibraries.downcall(GTK, "gtk_file_filter_set_name", Signatures.VOID_POINTER_POINTER);
+  private final MethodHandle FILE_FILTER_ADD_PATTERN =
+      NativeLibraries.downcall(GTK, "gtk_file_filter_add_pattern", Signatures.VOID_POINTER_POINTER);
+  private final MethodHandle MESSAGE_DIALOG_GET_TYPE =
+      NativeLibraries.downcall(GTK, "gtk_message_dialog_get_type", Signatures.LONG_VOID);
+  private final MethodHandle MESSAGE_TYPE_GET_TYPE =
+      NativeLibraries.downcall(GTK, "gtk_message_type_get_type", Signatures.LONG_VOID);
+  private final MethodHandle DIALOG_ADD_BUTTON =
+      NativeLibraries.downcall(
+          GTK, "gtk_dialog_add_button", Signatures.POINTER_POINTER_POINTER_INT);
+  private final MethodHandle DIALOG_SET_DEFAULT_RESPONSE =
+      NativeLibraries.downcall(GTK, "gtk_dialog_set_default_response", Signatures.VOID_POINTER_INT);
+  private final MethodHandle WINDOW_SET_TRANSIENT_FOR =
+      NativeLibraries.downcall(
+          GTK, "gtk_window_set_transient_for", Signatures.VOID_POINTER_POINTER);
+  private final MethodHandle WINDOW_SET_MODAL =
+      NativeLibraries.downcall(GTK, "gtk_window_set_modal", Signatures.VOID_POINTER_INT);
   private final MethodHandle WIDGET_SET_SENSITIVE =
       NativeLibraries.downcall(GTK, "gtk_widget_set_sensitive", Signatures.VOID_POINTER_INT);
 
@@ -489,6 +535,150 @@ public class Gtk {
   @SneakyThrows
   public MemorySegment settingsGetDefault() {
     return (MemorySegment) SETTINGS_GET_DEFAULT.invokeExact();
+  }
+
+  /** {@code GTK_FILE_CHOOSER_ACTION_OPEN}. */
+  public final int FILE_CHOOSER_ACTION_OPEN = 0;
+
+  /** {@code GTK_FILE_CHOOSER_ACTION_SAVE}. */
+  public final int FILE_CHOOSER_ACTION_SAVE = 1;
+
+  /** {@code GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER}. */
+  public final int FILE_CHOOSER_ACTION_SELECT_FOLDER = 2;
+
+  /** {@code GTK_RESPONSE_ACCEPT}: the native file chooser picked something. */
+  public final int RESPONSE_ACCEPT = -3;
+
+  /** {@code GTK_RESPONSE_OK}. */
+  public final int RESPONSE_OK = -5;
+
+  /** {@code GTK_RESPONSE_CANCEL}. */
+  public final int RESPONSE_CANCEL = -6;
+
+  /** {@code GTK_RESPONSE_YES}. */
+  public final int RESPONSE_YES = -8;
+
+  /** {@code GTK_RESPONSE_NO}. */
+  public final int RESPONSE_NO = -9;
+
+  /**
+   * Calls {@code gtk_file_chooser_native_new} with the default labels: a file chooser that the
+   * desktop portal shows inside a sandbox, and GTK outside one. The caller owns it.
+   *
+   * @param title The title, or {@code null} for GTK's own.
+   */
+  @SneakyThrows
+  public MemorySegment fileChooserNativeNew(String title, MemorySegment parent, int action) {
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment text = title == null ? MemorySegment.NULL : arena.allocateFrom(title);
+      return (MemorySegment)
+          FILE_CHOOSER_NATIVE_NEW.invokeExact(
+              text, parent, action, MemorySegment.NULL, MemorySegment.NULL);
+    }
+  }
+
+  /** Calls {@code gtk_native_dialog_show}: shows it and returns; {@code response} answers. */
+  @SneakyThrows
+  public void nativeDialogShow(MemorySegment dialog) {
+    NATIVE_DIALOG_SHOW.invokeExact(dialog);
+  }
+
+  /** Calls {@code gtk_native_dialog_hide}: closes it without a {@code response}. */
+  @SneakyThrows
+  public void nativeDialogHide(MemorySegment dialog) {
+    NATIVE_DIALOG_HIDE.invokeExact(dialog);
+  }
+
+  /** Calls {@code gtk_file_chooser_set_select_multiple}. */
+  @SneakyThrows
+  public void fileChooserSetSelectMultiple(MemorySegment chooser, boolean multiple) {
+    FILE_CHOOSER_SET_SELECT_MULTIPLE.invokeExact(chooser, multiple ? 1 : 0);
+  }
+
+  /** Calls {@code gtk_file_chooser_set_current_folder}. */
+  @SneakyThrows
+  public void fileChooserSetCurrentFolder(MemorySegment chooser, String folder) {
+    try (Arena arena = Arena.ofConfined()) {
+      int _ =
+          (int) FILE_CHOOSER_SET_CURRENT_FOLDER.invokeExact(chooser, arena.allocateFrom(folder));
+    }
+  }
+
+  /** Calls {@code gtk_file_chooser_set_current_name}: the name that a save dialog proposes. */
+  @SneakyThrows
+  public void fileChooserSetCurrentName(MemorySegment chooser, String name) {
+    try (Arena arena = Arena.ofConfined()) {
+      FILE_CHOOSER_SET_CURRENT_NAME.invokeExact(chooser, arena.allocateFrom(name));
+    }
+  }
+
+  /** Calls {@code gtk_file_chooser_set_do_overwrite_confirmation}. */
+  @SneakyThrows
+  public void fileChooserSetOverwriteConfirmation(MemorySegment chooser, boolean confirm) {
+    FILE_CHOOSER_SET_DO_OVERWRITE_CONFIRMATION.invokeExact(chooser, confirm ? 1 : 0);
+  }
+
+  /**
+   * Adds a filter named {@code name} that shows the files that match any of {@code patterns}, glob
+   * patterns such as {@code *.png}.
+   */
+  @SneakyThrows
+  public void fileChooserAddFilter(MemorySegment chooser, String name, List<String> patterns) {
+    MemorySegment filter = (MemorySegment) FILE_FILTER_NEW.invokeExact();
+    try (Arena arena = Arena.ofConfined()) {
+      FILE_FILTER_SET_NAME.invokeExact(filter, arena.allocateFrom(name));
+      for (String pattern : patterns) {
+        FILE_FILTER_ADD_PATTERN.invokeExact(filter, arena.allocateFrom(pattern));
+      }
+    }
+    // The chooser sinks the floating reference of the filter.
+    FILE_CHOOSER_ADD_FILTER.invokeExact(chooser, filter);
+  }
+
+  /** The paths that the chooser picked, from {@code gtk_file_chooser_get_filenames}. */
+  @SneakyThrows
+  public List<String> fileChooserFilenames(MemorySegment chooser) {
+    return Glib.takeStringList((MemorySegment) FILE_CHOOSER_GET_FILENAMES.invokeExact(chooser));
+  }
+
+  /** The {@code GType} of {@code GtkMessageDialog}. */
+  @SneakyThrows
+  public long messageDialogType() {
+    return (long) MESSAGE_DIALOG_GET_TYPE.invokeExact();
+  }
+
+  /** The {@code GType} of the {@code GtkMessageType} enum. */
+  @SneakyThrows
+  public long messageTypeType() {
+    return (long) MESSAGE_TYPE_GET_TYPE.invokeExact();
+  }
+
+  /** Calls {@code gtk_dialog_add_button}: a button that answers with {@code response}. */
+  @SneakyThrows
+  public void dialogAddButton(MemorySegment dialog, String label, int response) {
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment _ =
+          (MemorySegment)
+              DIALOG_ADD_BUTTON.invokeExact(dialog, arena.allocateFrom(label), response);
+    }
+  }
+
+  /** Calls {@code gtk_dialog_set_default_response}: the button that Enter presses. */
+  @SneakyThrows
+  public void dialogSetDefaultResponse(MemorySegment dialog, int response) {
+    DIALOG_SET_DEFAULT_RESPONSE.invokeExact(dialog, response);
+  }
+
+  /** Calls {@code gtk_window_set_transient_for}: the dialog stays over {@code parent}. */
+  @SneakyThrows
+  public void windowSetTransientFor(MemorySegment window, MemorySegment parent) {
+    WINDOW_SET_TRANSIENT_FOR.invokeExact(window, parent);
+  }
+
+  /** Calls {@code gtk_window_set_modal}. */
+  @SneakyThrows
+  public void windowSetModal(MemorySegment window, boolean modal) {
+    WINDOW_SET_MODAL.invokeExact(window, modal ? 1 : 0);
   }
 
   /** Calls {@code gtk_widget_set_sensitive}: an insensitive widget is grayed out. */

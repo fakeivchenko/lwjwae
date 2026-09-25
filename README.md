@@ -134,6 +134,9 @@ dependencies {
 - **Windows under control.** Minimize, maximize, full screen, on top, focus, size limits, and events
   for every change of a window in Java and on the page. With a state key, a window opens the way it
   last closed.
+- **Native dialogs.** `showOpenDialog`, `showSaveDialog`, and `showMessageDialog` on a window, and
+  `lwjwae.dialog` on the page: files and folders to open, a file to save, and a message, as the
+  platform draws them, through the portal of the desktop inside a Linux sandbox.
 - **Links go to the browser.** A link to another site, `target="_blank"`, and `window.open` open in
   the browser of the system rather than in the window, or wherever `externalLinkHandler` says;
   `Application.openExternal(url)` does the same from Java.

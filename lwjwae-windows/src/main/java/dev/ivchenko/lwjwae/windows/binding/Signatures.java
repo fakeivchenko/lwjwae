@@ -135,6 +135,18 @@ public class Signatures {
   public final FunctionDescriptor INT_INT_INT_INT =
       FunctionDescriptor.of(C_INT, C_INT, C_INT, C_INT);
 
+  /** {@code HRESULT f(T*, U*, DWORD, V*, W*)}: {@code CoCreateInstance}. */
+  public final FunctionDescriptor INT_POINTER_POINTER_INT_POINTER_POINTER =
+      FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_INT, C_POINTER, C_POINTER);
+
+  /** {@code HRESULT f(T*, U*, V*, W*)}: {@code SHCreateItemFromParsingName}. */
+  public final FunctionDescriptor INT_POINTER_X4 =
+      FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_POINTER, C_POINTER);
+
+  /** {@code int f(T*, U*, V*, UINT)}: {@code MessageBoxW}. */
+  public final FunctionDescriptor INT_POINTER_POINTER_POINTER_INT =
+      FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_POINTER, C_INT);
+
   /** {@code SHORT f(int)}: {@code GetAsyncKeyState}. */
   public final FunctionDescriptor SHORT_INT = FunctionDescriptor.of(C_SHORT, C_INT);
 
