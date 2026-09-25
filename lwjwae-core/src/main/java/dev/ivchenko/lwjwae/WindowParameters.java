@@ -13,6 +13,24 @@ import lombok.Builder;
  * WindowParameters.builder().title("Docs").size(1280, 800).build()
  * }</pre>
  *
+ * <p>Platforms:
+ *
+ * <ul>
+ *   <li>Windows: {@code decorated(false)} keeps the side and bottom resize edges outside the page
+ *       and makes the top edge a strip over it. {@code closable(false)} grays out the close button
+ *       and takes {@code Alt+F4} away. {@code alwaysOnTop} works from the background too, which
+ *       {@link Window#alwaysOnTop(boolean)} doesn't.
+ *   <li>macOS: Every window opens centered, unless it has a position. {@code decorated(false)}
+ *       keeps the rounded corners, the shadow, and the resize edges; the title bar goes transparent
+ *       and its buttons hidden. {@code maximizable(false)} grays out the green button, which also
+ *       enters full screen.
+ *   <li>Linux, GTK 3: X11: as described. Wayland: {@code position} and {@code centered} are up to
+ *       the compositor. A window without its minimize or maximize button gets the title bar of GTK,
+ *       with the layout of the desktop minus those buttons.
+ *   <li>Linux, GTK 4: {@code position} and {@code centered} do nothing, on X11 as on Wayland, and
+ *       neither do {@code maximumSize} and {@code alwaysOnTop}. The buttons as on GTK 3.
+ * </ul>
+ *
  * @param title The window title. Default: {@code "Application"}.
  * @param size The initial size of the content area. A dimension that isn't positive takes the
  *     default. Default: {@code 1024} by {@code 768}.

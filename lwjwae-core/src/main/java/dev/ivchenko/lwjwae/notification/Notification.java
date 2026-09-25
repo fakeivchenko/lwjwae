@@ -23,6 +23,18 @@ import lombok.Builder;
  *     .build()
  * }</pre>
  *
+ * <p>Platforms:
+ *
+ * <ul>
+ *   <li>Windows: A toast: the title and the body as two lines, the image as the logo, and the
+ *       buttons under them.
+ *   <li>macOS: The title and the body; the image isn't shown, since macOS shows the icon of the
+ *       application. The buttons show when the user expands the notification.
+ *   <li>Linux, GTK 3: Whatever the notification server shows: every one shows the title, nearly
+ *       every one the body, most the image and the buttons.
+ *   <li>Linux, GTK 4: As on GTK 3.
+ * </ul>
+ *
  * @param title The first line, in bold on most desktops. Required.
  * @param body The text under the title. Default: none.
  * @param icon The PNG bytes of an image to show next to the text, or a PNG among the resources of

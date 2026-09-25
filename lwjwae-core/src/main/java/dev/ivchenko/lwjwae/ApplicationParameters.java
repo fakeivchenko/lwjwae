@@ -16,6 +16,18 @@ import lombok.Builder;
  * ApplicationParameters.builder().codec(new JacksonBridgeCodec()).build()
  * }</pre>
  *
+ * <p>Platforms:
+ *
+ * <ul>
+ *   <li>Windows: {@code name} also labels the toasts: the library registers it for the user under
+ *       an ID made from it, and Notification Center keeps showing it after the application exits.
+ *   <li>macOS: The menu bar says {@code name}, or the name of the process without one, which is
+ *       {@code java} under the launcher; the bundle of an {@code .app} names the application in the
+ *       Dock.
+ *   <li>Linux, GTK 3: As described.
+ *   <li>Linux, GTK 4: As described.
+ * </ul>
+ *
  * @param devServerUrl Where the frontend is served from during development, for example {@code
  *     http://localhost:5173}. When set, {@link Window#loadResource} opens this URL instead of the
  *     bundled files, so a Vite or webpack development server with hot reload drives the windows

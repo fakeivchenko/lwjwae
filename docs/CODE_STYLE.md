@@ -121,6 +121,32 @@ method names document them.
 Checkstyle `MissingJavadocType` with `scope=public`, on top of the upstream instance that covers
 `protected`.
 
+### Platforms in Javadoc
+
+A public member whose behavior differs between platforms says how in one block, after the
+description and before the tags, with the four rows always present and always in this order:
+
+```java
+/**
+ * Moves the window frame.
+ *
+ * <p>Platforms:
+ *
+ * <ul>
+ *   <li>Windows: As described.
+ *   <li>macOS: Points, from the top left of the primary screen.
+ *   <li>Linux, GTK 3: X11: as described. Wayland: does nothing.
+ *   <li>Linux, GTK 4: Does nothing, on X11 as on Wayland.
+ * </ul>
+ */
+```
+
+A platform that behaves as the description says reads `As described.`, a Linux row that differs by
+display server names X11 and Wayland inside the row, and a row that repeats another reads `As on
+GTK 3.` or the like. A record puts the block in its own Javadoc, for the components that differ.
+Nothing about a platform goes into the description itself, and a member that behaves the same
+everywhere has no block. Checked by review.
+
 ### `@SuppressWarnings` is documented
 
 An `@SuppressWarnings` sits directly under the closing `*/` of a Javadoc block, and that block has a

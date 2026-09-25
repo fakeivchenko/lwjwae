@@ -73,6 +73,22 @@ public interface Application extends AutoCloseable {
    * Creates an application on the backend of this machine. No window exists yet: {@link #open}
    * creates one.
    *
+   * <p>Platforms:
+   *
+   * <ul>
+   *   <li>Windows: The {@code win32-webview2} backend, on x64, with the WebView2 Evergreen runtime,
+   *       which Windows 11 ships and Edge installs on Windows 10.
+   *   <li>macOS: The {@code cocoa-wkwebview} backend. The first application also gives the process
+   *       the menu bar of a Mac application: the application menu, File, Edit, and Window, which
+   *       carry Command-C, V, X, A, Z, and Quit.
+   *   <li>Linux, GTK 3: The {@code gtk3-webkit2gtk-4.1} backend, with GTK 3 and WebKitGTK 2.40 or
+   *       newer with the 4.1 API. It wins when both Linux backends could run.
+   *   <li>Linux, GTK 4: The {@code gtk4-webkitgtk-6.0} backend, with GTK 4 and WebKitGTK 6.0, which
+   *       runs its web processes in a bubblewrap sandbox. The sandbox needs unprivileged user
+   *       namespaces: Ubuntu 23.10 and newer allow them only through an AppArmor profile for the
+   *       executable.
+   * </ul>
+   *
    * @throws BackendNotAvailableException If no backend on the classpath supports this machine.
    */
   static Application create(ApplicationParameters parameters) {
@@ -152,6 +168,18 @@ public interface Application extends AutoCloseable {
    *
    * <p>The processes find each other by {@link ApplicationParameters#name()} and the user, so two
    * users each run their own.
+   *
+   * <p>Platforms:
+   *
+   * <ul>
+   *   <li>Windows: The socket is in the temporary directory of the user, which needs Windows 10 or
+   *       later. The window comes forward from the background too.
+   *   <li>macOS: The socket is in the temporary directory of the user, or in {@code /tmp} when that
+   *       path leaves no room for it.
+   *   <li>Linux, GTK 3: The socket is in {@code $XDG_RUNTIME_DIR}. X11: as described. Wayland: the
+   *       window comes back but may only ask for attention.
+   *   <li>Linux, GTK 4: As on GTK 3.
+   * </ul>
    *
    * @param parameters The parameters of the application, with a name.
    * @param arguments The arguments of this process, as {@code main} received them.
@@ -239,7 +267,18 @@ public interface Application extends AutoCloseable {
   /** The parameters that the application was created with, defaults applied. */
   ApplicationParameters parameters();
 
-  /** The name and version of the engine that draws the pages, such as {@code WebKitGTK 2.46.5}. */
+  /**
+   * The name and version of the engine that draws the pages, such as {@code WebKitGTK 2.46.5}.
+   *
+   * <p>Platforms:
+   *
+   * <ul>
+   *   <li>Windows: {@code WebView2} and the version of the runtime.
+   *   <li>macOS: {@code WKWebView} and the version of WebKit.
+   *   <li>Linux, GTK 3: {@code WebKitGTK} and its version.
+   *   <li>Linux, GTK 4: {@code WebKitGTK} and its version.
+   * </ul>
+   */
   String engine();
 
   /** Opens a window with every default. The window stays hidden until {@link Window#show()}. */
@@ -374,6 +413,24 @@ public interface Application extends AutoCloseable {
    * closed, and it keeps {@link #run()} running, which is what lets an application live in the tray
    * with its window hidden or gone. It goes away with {@link Tray#close()} or with the application.
    *
+   * <p>Platforms:
+   *
+   * <ul>
+   *   <li>Windows: An icon in the notification area. A left click runs {@code onActivate}, or opens
+   *       the menu without it; a right click opens the menu. The icon comes back after Explorer
+   *       restarts.
+   *   <li>macOS: An item in the menu bar, with the image scaled to 18 points. Without {@code
+   *       onActivate}, any click opens the menu; with it, a primary click runs it, and a secondary
+   *       or Control click opens the menu.
+   *   <li>Linux, GTK 3: The first that works: libappindicator, where any click opens the menu and
+   *       {@code onActivate} never runs; a StatusNotifierItem that the library serves itself, where
+   *       the session has a StatusNotifier host; or {@code GtkStatusIcon} on X11 with a panel that
+   *       has a legacy tray. Without any, the call throws.
+   *   <li>Linux, GTK 4: A StatusNotifierItem that the library serves itself, so it needs a
+   *       StatusNotifier host, which KDE and GNOME with the AppIndicator extension have; without
+   *       one, the call throws.
+   * </ul>
+   *
    * @throws UnsupportedOperationException If this backend has no tray support yet.
    * @throws IllegalStateException If the application is closed.
    */
@@ -393,6 +450,22 @@ public interface Application extends AutoCloseable {
    * <p>The notification belongs to the application. It stays when every window is closed, but it
    * doesn't keep {@link #run()} running, and it goes away with the application, because its buttons
    * and its {@code onActivate} handler go with it.
+   *
+   * <p>Platforms:
+   *
+   * <ul>
+   *   <li>Windows: A toast, filed under an ID made from {@link ApplicationParameters#name()} that
+   *       the library registers for the user. A toast that times out moves to Notification Center,
+   *       where it can still be clicked, and under Do Not Disturb every toast goes there at once.
+   *   <li>macOS: Only for an application packaged as an {@code .app} bundle with an identifier:
+   *       under the {@code java} launcher or as a bare executable, the call throws. The first
+   *       notification asks the user for permission; after a no, every call throws until the user
+   *       allows them in System Settings.
+   *   <li>Linux, GTK 3: Through {@code org.freedesktop.Notifications} over D-Bus; without a session
+   *       bus or a notification server, the call throws. How much of the image and the buttons
+   *       shows is up to the server.
+   *   <li>Linux, GTK 4: As on GTK 3.
+   * </ul>
    *
    * @throws UnsupportedOperationException If this backend has no notifications yet, or the desktop
    *     has nothing that shows them.
@@ -422,6 +495,16 @@ public interface Application extends AutoCloseable {
    * scheme of another application would run whatever the system associates with it, which a page
    * must never be able to ask for.
    *
+   * <p>Platforms:
+   *
+   * <ul>
+   *   <li>Windows: Through {@code ShellExecuteW}.
+   *   <li>macOS: Through {@code NSWorkspace}.
+   *   <li>Linux, GTK 3: Through {@code g_app_info_launch_default_for_uri}, which goes to the
+   *       OpenURI portal inside a sandbox such as Flatpak.
+   *   <li>Linux, GTK 4: As on GTK 3.
+   * </ul>
+   *
    * @throws IllegalArgumentException If {@code url} isn't an absolute URL of one of those schemes.
    * @throws IllegalStateException If the system couldn't open it, or the application is closed.
    */
@@ -432,9 +515,19 @@ public interface Application extends AutoCloseable {
    * #quit()}. Returns at once when there is neither. A window opened from another thread, or from a
    * page, in the meantime keeps the application running.
    *
+   * <p>Platforms:
+   *
+   * <ul>
+   *   <li>Windows: As described.
+   *   <li>macOS: On the main thread of a process that hasn't started the application loop, as in
+   *       the {@code main} method of a native image, the call runs the loop itself and returns when
+   *       the last window closes or on {@link #quit()}. Elsewhere, it waits as described.
+   *   <li>Linux, GTK 3: As described.
+   *   <li>Linux, GTK 4: As described.
+   * </ul>
+   *
    * @throws IllegalStateException If called from the UI thread, where blocking would freeze every
-   *     window. The macOS backend is the exception: there the main thread runs the application loop
-   *     itself, and {@code run()} on it returns when the last window closes.
+   *     window, except on macOS.
    */
   void run();
 

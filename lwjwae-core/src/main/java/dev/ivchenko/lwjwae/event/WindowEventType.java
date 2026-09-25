@@ -7,7 +7,18 @@ public enum WindowEventType {
   /** The content area has a new size. */
   RESIZED,
 
-  /** The frame has a new place on the screen. Wayland and GTK 4 never report one. */
+  /**
+   * The frame has a new place on the screen.
+   *
+   * <p>Platforms:
+   *
+   * <ul>
+   *   <li>Windows: As described.
+   *   <li>macOS: As described.
+   *   <li>Linux, GTK 3: X11: as described. Wayland: never reported.
+   *   <li>Linux, GTK 4: Never reported, on X11 as on Wayland.
+   * </ul>
+   */
   MOVED,
 
   /** The window took the keyboard focus. */
@@ -16,10 +27,32 @@ public enum WindowEventType {
   /** The window lost the keyboard focus. */
   BLURRED,
 
-  /** The window was minimized. Wayland never reports one. */
+  /**
+   * The window was minimized.
+   *
+   * <p>Platforms:
+   *
+   * <ul>
+   *   <li>Windows: As described.
+   *   <li>macOS: As described.
+   *   <li>Linux, GTK 3: X11: as described. Wayland: never reported.
+   *   <li>Linux, GTK 4: X11: as described. Wayland: never reported.
+   * </ul>
+   */
   MINIMIZED,
 
-  /** The window came back from minimized. */
+  /**
+   * The window came back from minimized.
+   *
+   * <p>Platforms:
+   *
+   * <ul>
+   *   <li>Windows: As described.
+   *   <li>macOS: As described.
+   *   <li>Linux, GTK 3: X11: as described. Wayland: never reported.
+   *   <li>Linux, GTK 4: X11: as described. Wayland: never reported.
+   * </ul>
+   */
   UNMINIMIZED,
 
   /** The window was maximized. */
