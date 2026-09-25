@@ -25,7 +25,7 @@ public class Com {
   public final int E_POINTER = 0x80004003;
 
   /** {@code IID_IUnknown}. */
-  public final MemorySegment IID_IUNKNOWN = guid("00000000-0000-0000-C000-000000000046");
+  public final MemorySegment IID_IUNKNOWN = Com.guid("00000000-0000-0000-C000-000000000046");
 
   private final int ADD_REF = 1;
   private final int RELEASE = 2;
@@ -59,50 +59,50 @@ public class Com {
   /** Calls method {@code index} of {@code object} with a 32-bit integer and a pointer. */
   @SneakyThrows
   public int call(MemorySegment object, int index, int first, MemorySegment second) {
-    return (int) CALL_P_I_P.invokeExact(slot(object, index), object, first, second);
+    return (int) CALL_P_I_P.invokeExact(Com.slot(object, index), object, first, second);
   }
 
   /** Calls method {@code index} of {@code object} with no arguments. */
   @SneakyThrows
   public int call(MemorySegment object, int index) {
-    return (int) CALL_P.invokeExact(slot(object, index), object);
+    return (int) CALL_P.invokeExact(Com.slot(object, index), object);
   }
 
   /** Calls method {@code index} of {@code object} with one integer argument. */
   @SneakyThrows
   public int call(MemorySegment object, int index, int argument) {
-    return (int) CALL_P_I.invokeExact(slot(object, index), object, argument);
+    return (int) CALL_P_I.invokeExact(Com.slot(object, index), object, argument);
   }
 
   /** Calls method {@code index} of {@code object} with one pointer argument. */
   @SneakyThrows
   public int call(MemorySegment object, int index, MemorySegment argument) {
-    return (int) CALL_P_P.invokeExact(slot(object, index), object, argument);
+    return (int) CALL_P_P.invokeExact(Com.slot(object, index), object, argument);
   }
 
   /** Calls method {@code index} of {@code object} with two pointer arguments. */
   @SneakyThrows
   public int call(MemorySegment object, int index, MemorySegment first, MemorySegment second) {
-    return (int) CALL_P_P_P.invokeExact(slot(object, index), object, first, second);
+    return (int) CALL_P_P_P.invokeExact(Com.slot(object, index), object, first, second);
   }
 
   /** Calls method {@code index} of {@code object} with a pointer and an integer. */
   @SneakyThrows
   public int call(MemorySegment object, int index, MemorySegment first, int second) {
-    return (int) CALL_P_P_I.invokeExact(slot(object, index), object, first, second);
+    return (int) CALL_P_P_I.invokeExact(Com.slot(object, index), object, first, second);
   }
 
   /** Calls method {@code index} of {@code object} with a 64-bit integer and a pointer. */
   @SneakyThrows
   public int call(MemorySegment object, int index, long first, MemorySegment second) {
-    return (int) CALL_P_L_P.invokeExact(slot(object, index), object, first, second);
+    return (int) CALL_P_L_P.invokeExact(Com.slot(object, index), object, first, second);
   }
 
   /** Calls method {@code index} of {@code object} with a pointer, an integer, and a pointer. */
   @SneakyThrows
   public int call(
       MemorySegment object, int index, MemorySegment first, int second, MemorySegment third) {
-    return (int) CALL_P_P_I_P.invokeExact(slot(object, index), object, first, second, third);
+    return (int) CALL_P_P_I_P.invokeExact(Com.slot(object, index), object, first, second, third);
   }
 
   /** The shape of {@code ICoreWebView2Environment::CreateWebResourceResponse}. */
@@ -117,24 +117,24 @@ public class Com {
       MemorySegment out) {
     return (int)
         CALL_P_P_I_P_P_P.invokeExact(
-            slot(object, index), object, stream, status, reason, headers, out);
+            Com.slot(object, index), object, stream, status, reason, headers, out);
   }
 
   /** Calls method {@code index} of {@code object} with a {@code RECT} passed by value. */
   @SneakyThrows
   public int callWithRect(MemorySegment object, int index, MemorySegment rect) {
-    return (int) CALL_P_RECT.invokeExact(slot(object, index), object, rect);
+    return (int) CALL_P_RECT.invokeExact(Com.slot(object, index), object, rect);
   }
 
   /** Calls {@code IUnknown::AddRef}. */
   public void addRef(MemorySegment object) {
-    call(object, ADD_REF);
+    Com.call(object, ADD_REF);
   }
 
   /** Calls {@code IUnknown::Release}. {@code NULL} and {@code null} are ignored. */
   public void release(MemorySegment object) {
     if (object != null && !object.equals(MemorySegment.NULL)) {
-      call(object, RELEASE);
+      Com.call(object, RELEASE);
     }
   }
 

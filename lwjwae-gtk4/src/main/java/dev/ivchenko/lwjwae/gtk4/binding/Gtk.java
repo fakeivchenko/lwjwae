@@ -439,9 +439,9 @@ public class Gtk {
    */
   @SneakyThrows
   public void toplevelBeginMove(MemorySegment surface) {
-    MemorySegment pointer = defaultPointer();
+    MemorySegment pointer = Gtk.defaultPointer();
     try (Arena arena = Arena.ofConfined()) {
-      double[] position = pressedPosition(arena, surface, pointer);
+      double[] position = Gtk.pressedPosition(arena, surface, pointer);
       if (position != null) {
         TOPLEVEL_BEGIN_MOVE.invokeExact(
             surface, pointer, 1, position[0], position[1], CURRENT_TIME);
@@ -455,9 +455,9 @@ public class Gtk {
    */
   @SneakyThrows
   public void toplevelBeginResize(MemorySegment surface, int edge) {
-    MemorySegment pointer = defaultPointer();
+    MemorySegment pointer = Gtk.defaultPointer();
     try (Arena arena = Arena.ofConfined()) {
-      double[] position = pressedPosition(arena, surface, pointer);
+      double[] position = Gtk.pressedPosition(arena, surface, pointer);
       if (position != null) {
         TOPLEVEL_BEGIN_RESIZE.invokeExact(
             surface, edge, pointer, 1, position[0], position[1], CURRENT_TIME);

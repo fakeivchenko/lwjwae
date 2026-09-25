@@ -43,7 +43,7 @@ class WindowsDialogs {
     } else {
       options |= FileDialog.FOS_FILEMUSTEXIST;
     }
-    show(
+    WindowsDialogs.show(
         dialog,
         owner,
         options,
@@ -64,7 +64,7 @@ class WindowsDialogs {
     if (parameters.fileName() != null) {
       FileDialog.setFileName(dialog, parameters.fileName());
     }
-    show(
+    WindowsDialogs.show(
         dialog,
         owner,
         FileDialog.FOS_FORCEFILESYSTEM

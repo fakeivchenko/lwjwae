@@ -25,7 +25,7 @@ public class ResourceUtil {
 
   /** Returns the URL for {@code path}, for example {@code app://local/app/index.html}. */
   public String url(String path) {
-    return "%s://%s/%s".formatted(SCHEME, HOST, normalize(path));
+    return "%s://%s/%s".formatted(SCHEME, HOST, ResourceUtil.normalize(path));
   }
 
   /**
@@ -35,7 +35,7 @@ public class ResourceUtil {
    * @throws UncheckedIOException If the resource exists but can't be read.
    */
   public byte[] read(String path) {
-    String normalized = normalize(path);
+    String normalized = ResourceUtil.normalize(path);
     ClassLoader loader = Thread.currentThread().getContextClassLoader();
     if (loader == null) {
       loader = ResourceUtil.class.getClassLoader();

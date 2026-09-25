@@ -58,7 +58,8 @@ public class Kernel32 {
               LOAD_LIBRARY_EX.invokeExact(
                   Wide.allocate(arena, path), MemorySegment.NULL, SEARCH_DLL_DIR_AND_DEFAULTS);
       if (module.equals(MemorySegment.NULL)) {
-        throw new UnsatisfiedLinkError("LoadLibraryExW(" + path + ") failed, error " + lastError());
+        throw new UnsatisfiedLinkError(
+            "LoadLibraryExW(" + path + ") failed, error " + Kernel32.lastError());
       }
       return module;
     }

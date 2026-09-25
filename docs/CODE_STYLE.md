@@ -82,13 +82,26 @@ Google Java Style allows everything in this section. The project restricts it.
 ### `this.` on every instance member
 
 Access to an instance field or method is qualified with `this.`: `this.repository.persist(...)`,
-`this.validate(request)`, `this::handle`. A static member is never qualified with `this.`; call it
-bare in its own class and by class name from elsewhere.
+`this.validate(request)`, `this::handle`. A static member is never qualified with `this.`.
 
 Checkstyle `RequireThis` with `checkFields`, `checkMethods`, and `validateOnlyOverlapping=false`.
 Members of a `@UtilityClass` are exempt (they're static).
 
 Google Java Style doesn't regulate it. Google's own code omits `this.`.
+
+### Static methods by class name
+
+A call to a static method names the class, in the class itself too, so that the call says where it
+goes: `AppKit.isMiniaturized(window)`, `WindowContractTest.awaitTrue(...)`, never a bare
+`isMiniaturized(window)`. That covers the methods of a `@UtilityClass`, which Lombok makes static,
+and private helpers. Static fields and constants stay bare in their own class.
+
+Checkstyle `MatchXpath` with the id `staticMethodByClassName`: a bare call whose name is the name of
+a `static` method, or of a method of a `@UtilityClass`, declared in the same file. Checkstyle sees
+one file without types, so an instance method that shares its name with a static one of the same
+file would be reported too; give the two different names.
+
+Google Java Style doesn't regulate it.
 
 ### No static imports
 

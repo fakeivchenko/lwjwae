@@ -11,7 +11,7 @@ import lombok.experimental.UtilityClass;
 /** Coarse operating system detection. Backend providers use it to rule themselves out cheaply. */
 @UtilityClass
 public class PlatformUtil {
-  private final String OS = osName().toLowerCase(Locale.ROOT);
+  private final String OS = PlatformUtil.osName().toLowerCase(Locale.ROOT);
 
   /** Checks for Windows, any edition. */
   public boolean isWindows() {
@@ -30,7 +30,10 @@ public class PlatformUtil {
 
   /** Checks for Linux and the BSDs: the systems where a GTK or Qt desktop stack is the norm. */
   public boolean isUnixDesktop() {
-    return isLinux() || OS.contains("bsd") || OS.contains("sunos") || OS.contains("aix");
+    return PlatformUtil.isLinux()
+        || OS.contains("bsd")
+        || OS.contains("sunos")
+        || OS.contains("aix");
   }
 
   /**
@@ -45,10 +48,10 @@ public class PlatformUtil {
    * built on it.
    */
   public List<String> linuxDistributionIds() {
-    if (!isLinux()) {
+    if (!PlatformUtil.isLinux()) {
       return List.of();
     }
-    return distributionIds(osRelease());
+    return PlatformUtil.distributionIds(PlatformUtil.osRelease());
   }
 
   /** Parses the lines of an {@code os-release} file as {@link #linuxDistributionIds()} does. */

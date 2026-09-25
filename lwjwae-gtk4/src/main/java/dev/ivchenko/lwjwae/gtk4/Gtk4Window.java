@@ -183,7 +183,7 @@ public class Gtk4Window extends AbstractWindow {
       Gtk.widgetSetVisible(none, false);
       Gtk.windowSetTitlebar(newWindow, none);
     } else if (!parameters.minimizable() || !parameters.maximizable()) {
-      Gtk.windowSetTitlebar(newWindow, titleBar(parameters));
+      Gtk.windowSetTitlebar(newWindow, Gtk4Window.titleBar(parameters));
     }
     if (!parameters.closable()) {
       Gtk.windowSetDeletable(newWindow, false);
@@ -645,7 +645,7 @@ public class Gtk4Window extends AbstractWindow {
   @SuppressWarnings({"unused", "resource"})
   private static void onStateNotify(
       MemorySegment surface, MemorySegment property, MemorySegment userData) {
-    changed(userData);
+    Gtk4Window.changed(userData);
   }
 
   /**
@@ -657,7 +657,7 @@ public class Gtk4Window extends AbstractWindow {
   @SuppressWarnings({"unused", "resource"})
   private static void onLayout(
       MemorySegment surface, int width, int height, MemorySegment userData) {
-    changed(userData);
+    Gtk4Window.changed(userData);
   }
 
   @SuppressWarnings("resource")

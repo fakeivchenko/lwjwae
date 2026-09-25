@@ -48,7 +48,7 @@ public class Loads {
   /** Polls a page expression until it's no longer {@code undefined}. */
   public String awaitValue(Window window, String expression) throws Exception {
     for (int attempt = 0; attempt < 100; attempt++) {
-      String value = eval(window, "String(%s)".formatted(expression));
+      String value = Loads.eval(window, "String(%s)".formatted(expression));
       if (!"undefined".equals(value)) {
         return value;
       }

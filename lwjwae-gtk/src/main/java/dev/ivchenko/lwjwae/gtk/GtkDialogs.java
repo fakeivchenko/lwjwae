@@ -66,9 +66,9 @@ class GtkDialogs {
                 ? Gtk.FILE_CHOOSER_ACTION_SELECT_FOLDER
                 : Gtk.FILE_CHOOSER_ACTION_OPEN);
     Gtk.fileChooserSetSelectMultiple(chooser, parameters.multiple());
-    startIn(chooser, parameters.directory());
-    addFileTypes(chooser, parameters.fileTypes());
-    present(
+    GtkDialogs.startIn(chooser, parameters.directory());
+    GtkDialogs.addFileTypes(chooser, parameters.fileTypes());
+    GtkDialogs.present(
         chooser,
         completion,
         response ->
@@ -86,12 +86,12 @@ class GtkDialogs {
     MemorySegment chooser =
         Gtk.fileChooserNativeNew(parameters.title(), parent, Gtk.FILE_CHOOSER_ACTION_SAVE);
     Gtk.fileChooserSetOverwriteConfirmation(chooser, true);
-    startIn(chooser, parameters.directory());
+    GtkDialogs.startIn(chooser, parameters.directory());
     if (parameters.fileName() != null) {
       Gtk.fileChooserSetCurrentName(chooser, parameters.fileName());
     }
-    addFileTypes(chooser, parameters.fileTypes());
-    present(
+    GtkDialogs.addFileTypes(chooser, parameters.fileTypes());
+    GtkDialogs.present(
         chooser,
         completion,
         response ->
@@ -128,9 +128,9 @@ class GtkDialogs {
     Gtk.windowSetModal(dialog, true);
     int yes =
         switch (parameters.buttons()) {
-          case OK -> addButtons(dialog, null, "_OK", Gtk.RESPONSE_OK);
-          case OK_CANCEL -> addButtons(dialog, "_Cancel", "_OK", Gtk.RESPONSE_OK);
-          case YES_NO -> addButtons(dialog, "_No", "_Yes", Gtk.RESPONSE_YES);
+          case OK -> GtkDialogs.addButtons(dialog, null, "_OK", Gtk.RESPONSE_OK);
+          case OK_CANCEL -> GtkDialogs.addButtons(dialog, "_Cancel", "_OK", Gtk.RESPONSE_OK);
+          case YES_NO -> GtkDialogs.addButtons(dialog, "_No", "_Yes", Gtk.RESPONSE_YES);
         };
     long id =
         RESPONSES.register(

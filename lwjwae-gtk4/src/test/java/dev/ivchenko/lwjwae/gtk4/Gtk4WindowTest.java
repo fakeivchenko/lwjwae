@@ -20,13 +20,13 @@ class Gtk4WindowTest extends WindowContractTest {
   /** Wayland tells a client nothing about minimizing. */
   @Override
   protected boolean canTellMinimized() {
-    return isX11();
+    return Gtk4WindowTest.isX11();
   }
 
   /** Wayland keeps the focus with the compositor. */
   @Override
   protected boolean canTakeFocus() {
-    return isX11();
+    return Gtk4WindowTest.isX11();
   }
 
   /** GTK 4 uses the default size only for the first show; after that, the size is the user's. */

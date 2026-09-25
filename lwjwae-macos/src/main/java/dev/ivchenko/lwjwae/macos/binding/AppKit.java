@@ -62,12 +62,12 @@ public class AppKit {
    * processes only in an application that has launched.
    */
   public void finishLaunching() {
-    ObjC.sendVoid(application(), "finishLaunching");
+    ObjC.sendVoid(AppKit.application(), "finishLaunching");
   }
 
   /** {@code -[NSApplication run]}. It returns only after {@link #stopRunLoop}. */
   public void run() {
-    ObjC.sendVoid(application(), "run");
+    ObjC.sendVoid(AppKit.application(), "run");
   }
 
   /**
@@ -76,7 +76,7 @@ public class AppKit {
    * does.
    */
   public void stopRunLoop() {
-    MemorySegment application = application();
+    MemorySegment application = AppKit.application();
     ObjC.sendVoid(application, "stop:", MemorySegment.NULL);
     try (Arena arena = Arena.ofConfined()) {
       MemorySegment event =
@@ -98,7 +98,7 @@ public class AppKit {
 
   /** Brings the application to the front, the way a newly launched application comes up. */
   public void activate() {
-    ObjC.sendVoid(application(), "activateIgnoringOtherApps:", true);
+    ObjC.sendVoid(AppKit.application(), "activateIgnoringOtherApps:", true);
   }
 
   /**
@@ -118,7 +118,7 @@ public class AppKit {
               false);
     }
     ObjC.sendVoid(window, "setReleasedWhenClosed:", false);
-    setTitle(window, title);
+    AppKit.setTitle(window, title);
     ObjC.sendVoid(window, "center");
     return window;
   }
@@ -153,7 +153,7 @@ public class AppKit {
    */
   public int[] framePosition(MemorySegment window) {
     double[] frame = Foundation.rect(window, "frame");
-    double screenHeight = primaryScreenFrame()[3];
+    double screenHeight = AppKit.primaryScreenFrame()[3];
     return new int[] {
       (int) Math.round(frame[0]), (int) Math.round(screenHeight - frame[1] - frame[3])
     };
@@ -165,7 +165,7 @@ public class AppKit {
    */
   public void setFramePosition(MemorySegment window, int x, int y) {
     double[] frame = Foundation.rect(window, "frame");
-    double screenHeight = primaryScreenFrame()[3];
+    double screenHeight = AppKit.primaryScreenFrame()[3];
     try (Arena arena = Arena.ofConfined()) {
       // An NSPoint has the layout of an NSSize: two doubles.
       ObjC.sendVoidSize(
@@ -204,7 +204,7 @@ public class AppKit {
    * state differs, as the other state changes are sent.
    */
   public void setMiniaturized(MemorySegment window, boolean miniaturized) {
-    if (isMiniaturized(window) == miniaturized) {
+    if (AppKit.isMiniaturized(window) == miniaturized) {
       return;
     }
     ObjC.sendVoid(window, miniaturized ? "miniaturize:" : "deminiaturize:", MemorySegment.NULL);
@@ -221,7 +221,7 @@ public class AppKit {
    * as the button does, so a button that {@link #disableZoomButton} grayed out is enabled for it.
    */
   public void setZoomed(MemorySegment window, boolean zoomed) {
-    if (isZoomed(window) == zoomed) {
+    if (AppKit.isZoomed(window) == zoomed) {
       return;
     }
     MemorySegment button = ObjC.send(window, "standardWindowButton:", ZOOM_BUTTON);
@@ -241,7 +241,7 @@ public class AppKit {
    * sent only when the state differs.
    */
   public void setFullScreen(MemorySegment window, boolean fullScreen) {
-    if (((styleMask(window) & STYLE_FULL_SCREEN) != 0) != fullScreen) {
+    if (((AppKit.styleMask(window) & STYLE_FULL_SCREEN) != 0) != fullScreen) {
       ObjC.sendVoid(window, "toggleFullScreen:", MemorySegment.NULL);
     }
   }
@@ -324,7 +324,7 @@ public class AppKit {
     if ((ObjC.sendLong(ObjC.cls("NSEvent"), "pressedMouseButtons") & 1) == 0) {
       return;
     }
-    MemorySegment event = ObjC.send(application(), "currentEvent");
+    MemorySegment event = ObjC.send(AppKit.application(), "currentEvent");
     if (ObjC.isNull(event)) {
       return;
     }
@@ -460,7 +460,7 @@ public class AppKit {
    * button, or a click with Control held, as everywhere on macOS.
    */
   public boolean isContextClick() {
-    MemorySegment event = ObjC.send(application(), "currentEvent");
+    MemorySegment event = ObjC.send(AppKit.application(), "currentEvent");
     if (ObjC.isNull(event)) {
       return false;
     }

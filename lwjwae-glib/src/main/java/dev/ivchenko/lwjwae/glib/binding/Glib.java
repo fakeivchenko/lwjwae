@@ -249,7 +249,7 @@ public class Glib {
     MemorySegment node = list;
     while (!node.equals(MemorySegment.NULL)) {
       MemorySegment cell = node.reinterpret(2 * Signatures.C_POINTER.byteSize());
-      strings.add(takeString(cell.get(Signatures.C_POINTER, 0)));
+      strings.add(Glib.takeString(cell.get(Signatures.C_POINTER, 0)));
       node = cell.get(Signatures.C_POINTER, Signatures.C_POINTER.byteSize());
     }
     SLIST_FREE.invokeExact(list);
@@ -275,13 +275,13 @@ public class Glib {
     int count = (int) LIST_MODEL_GET_N_ITEMS.invokeExact(model);
     for (int index = 0; index < count; index++) {
       MemorySegment file = (MemorySegment) LIST_MODEL_GET_ITEM.invokeExact(model, index);
-      String path = takeString((MemorySegment) FILE_GET_PATH.invokeExact(file));
+      String path = Glib.takeString((MemorySegment) FILE_GET_PATH.invokeExact(file));
       if (path != null) {
         paths.add(path);
       }
-      unref(file);
+      Glib.unref(file);
     }
-    unref(model);
+    Glib.unref(model);
     return paths;
   }
 
@@ -301,7 +301,10 @@ public class Glib {
                   arena.allocateFrom(uri), MemorySegment.NULL, error);
       if (launched == 0) {
         throw new IllegalStateException(
-            "Could not open " + uri + ": " + takeErrorMessage(error.get(Signatures.C_POINTER, 0)));
+            "Could not open "
+                + uri
+                + ": "
+                + Glib.takeErrorMessage(error.get(Signatures.C_POINTER, 0)));
       }
     }
   }
@@ -352,7 +355,7 @@ public class Glib {
     }
 
     String value = NativeLibraries.string(pointer);
-    free(pointer);
+    Glib.free(pointer);
     return value;
   }
 
@@ -373,7 +376,7 @@ public class Glib {
       return null;
     }
 
-    String message = errorMessage(error);
+    String message = Glib.errorMessage(error);
     ERROR_FREE.invokeExact(error);
     return message;
   }

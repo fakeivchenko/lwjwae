@@ -199,7 +199,7 @@ public class BridgeProtocol {
    * receives text.
    */
   public String bindingScript(String name) {
-    return bindingScript(name, false);
+    return BridgeProtocol.bindingScript(name, false);
   }
 
   /**
@@ -243,17 +243,17 @@ public class BridgeProtocol {
     try {
       return WindowParameters.builder()
           .title(parts[0])
-          .width(integer(parts[1]))
-          .height(integer(parts[2]))
+          .width(BridgeProtocol.integer(parts[1]))
+          .height(BridgeProtocol.integer(parts[2]))
           .x(parts[3].isEmpty() ? null : Integer.valueOf(parts[3]))
           .y(parts[4].isEmpty() ? null : Integer.valueOf(parts[4]))
           .centered(parts[5].equals("1"))
           .url(parts[6])
           .resource(parts[7])
-          .decorated(flag(parts[8]))
-          .closable(flag(parts[9]))
-          .minimizable(flag(parts[10]))
-          .maximizable(flag(parts[11]))
+          .decorated(BridgeProtocol.flag(parts[8]))
+          .closable(BridgeProtocol.flag(parts[9]))
+          .minimizable(BridgeProtocol.flag(parts[10]))
+          .maximizable(BridgeProtocol.flag(parts[11]))
           .build();
     } catch (NumberFormatException _) {
       return null;
@@ -272,11 +272,11 @@ public class BridgeProtocol {
       return null;
     }
     return OpenDialogParameters.builder()
-        .title(text(parts[0]))
-        .directory(path(parts[1]))
+        .title(BridgeProtocol.text(parts[0]))
+        .directory(BridgeProtocol.path(parts[1]))
         .multiple(parts[2].equals("1"))
         .directories(parts[3].equals("1"))
-        .fileTypes(parseFileTypes(parts[4]))
+        .fileTypes(BridgeProtocol.parseFileTypes(parts[4]))
         .build();
   }
 
@@ -292,10 +292,10 @@ public class BridgeProtocol {
       return null;
     }
     return SaveDialogParameters.builder()
-        .title(text(parts[0]))
-        .directory(path(parts[1]))
-        .fileName(text(parts[2]))
-        .fileTypes(parseFileTypes(parts[3]))
+        .title(BridgeProtocol.text(parts[0]))
+        .directory(BridgeProtocol.path(parts[1]))
+        .fileName(BridgeProtocol.text(parts[2]))
+        .fileTypes(BridgeProtocol.parseFileTypes(parts[3]))
         .build();
   }
 
@@ -314,9 +314,9 @@ public class BridgeProtocol {
     }
     try {
       return MessageDialogParameters.builder()
-          .title(text(parts[0]))
+          .title(BridgeProtocol.text(parts[0]))
           .message(parts[1])
-          .detail(text(parts[2]))
+          .detail(BridgeProtocol.text(parts[2]))
           .level(parts[3].isEmpty() ? null : MessageLevel.valueOf(parts[3]))
           .buttons(parts[4].isEmpty() ? null : MessageButtons.valueOf(parts[4]))
           .build();

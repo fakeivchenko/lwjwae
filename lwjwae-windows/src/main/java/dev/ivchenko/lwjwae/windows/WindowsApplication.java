@@ -62,8 +62,9 @@ public class WindowsApplication extends AbstractApplication {
           MemorySegment handler =
               ComCallback.completion(
                   WebView2.IID_ENVIRONMENT_COMPLETED,
-                  (hresult, created) -> completeEnvironment(ready, hresult, created));
-          WebView2.createEnvironment(userDataFolder().toString(), handler);
+                  (hresult, created) ->
+                      WindowsApplication.completeEnvironment(ready, hresult, created));
+          WebView2.createEnvironment(WindowsApplication.userDataFolder().toString(), handler);
           Com.release(handler);
         });
     try {

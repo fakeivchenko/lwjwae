@@ -70,18 +70,20 @@ public abstract class WindowContractTest extends DisplayContractTest {
       window.show();
       Assertions.assertTrue(window.isVisible(), "show() brings a hidden window back");
 
-      Tray tray = trayOrNull(application);
+      Tray tray = WindowContractTest.trayOrNull(application);
       try (Tray _ = tray) {
         if (tray == null) {
           // No tray on this backend: nothing could bring a hidden window back, so HIDE closes.
           window.requestClose();
-          awaitTrue(window::isClosed, "without a tray icon, the user's close closes the window");
+          WindowContractTest.awaitTrue(
+              window::isClosed, "without a tray icon, the user's close closes the window");
           return;
         }
 
         // What the close button of the title bar does: with HIDE and a tray icon, it only hides.
         window.requestClose();
-        awaitTrue(() -> !window.isVisible(), "the user's close hides the window");
+        WindowContractTest.awaitTrue(
+            () -> !window.isVisible(), "the user's close hides the window");
         Assertions.assertFalse(window.isClosed());
         Assertions.assertEquals(
             List.of(window), application.windows(), "a hidden window stays open");
@@ -89,7 +91,8 @@ public abstract class WindowContractTest extends DisplayContractTest {
         window.show();
         window.closeAction(CloseAction.CLOSE);
         window.requestClose();
-        awaitTrue(window::isClosed, "with CLOSE, the user's close closes the window");
+        WindowContractTest.awaitTrue(
+            window::isClosed, "with CLOSE, the user's close closes the window");
         Assertions.assertTrue(application.windows().isEmpty());
       }
     }
@@ -237,7 +240,7 @@ public abstract class WindowContractTest extends DisplayContractTest {
       Window window = application.open(parameters);
       window.show();
       Assertions.assertEquals(new WindowSize(500, 350), window.minimumSize());
-      awaitTrue(
+      WindowContractTest.awaitTrue(
           () -> window.width() >= 500 && window.height() >= 350,
           "the minimum must grow the window");
 
@@ -261,7 +264,8 @@ public abstract class WindowContractTest extends DisplayContractTest {
       window.maximumSize(0, 0);
       Assertions.assertEquals(WindowSize.NONE, window.minimumSize());
       window.size(320, 240);
-      awaitTrue(() -> window.width() < 500, "without limits the window shrinks again");
+      WindowContractTest.awaitTrue(
+          () -> window.width() < 500, "without limits the window shrinks again");
     }
   }
 
@@ -272,26 +276,28 @@ public abstract class WindowContractTest extends DisplayContractTest {
           application.open(
               WindowParameters.builder().title("lwjwae :: state").width(400).height(300).build());
       window.show();
-      awaitTrue(window::isVisible, "the window must show");
+      WindowContractTest.awaitTrue(window::isVisible, "the window must show");
       // Whether this process may take the focus at all: Windows refuses it to one in the
       // background, and the test runner may be one.
       Thread.sleep(300);
       boolean mayTakeFocus = this.canTakeFocus() && window.isFocused();
 
       window.maximize();
-      awaitTrue(window::isMaximized, "maximize must maximize");
+      WindowContractTest.awaitTrue(window::isMaximized, "maximize must maximize");
       Screenshots.capture("window-maximized");
       window.restore();
-      awaitTrue(() -> !window.isMaximized(), "restore must bring the size back");
+      WindowContractTest.awaitTrue(() -> !window.isMaximized(), "restore must bring the size back");
 
       window.minimize();
       if (this.canTellMinimized()) {
-        awaitTrue(window::isMinimized, "minimize must minimize");
+        WindowContractTest.awaitTrue(window::isMinimized, "minimize must minimize");
       }
       window.focus();
-      awaitTrue(() -> !window.isMinimized(), "focus must bring a minimized window back");
+      WindowContractTest.awaitTrue(
+          () -> !window.isMinimized(), "focus must bring a minimized window back");
       if (mayTakeFocus) {
-        awaitTrue(window::isFocused, "focus must give the window the keyboard focus");
+        WindowContractTest.awaitTrue(
+            window::isFocused, "focus must give the window the keyboard focus");
       }
     }
   }
@@ -307,15 +313,17 @@ public abstract class WindowContractTest extends DisplayContractTest {
                   .height(300)
                   .build());
       window.show();
-      awaitTrue(window::isVisible, "the window must show");
+      WindowContractTest.awaitTrue(window::isVisible, "the window must show");
 
       window.fullscreen(true);
-      awaitTrue(window::isFullscreen, "full screen must start");
-      awaitTrue(() -> window.width() > 400, "full screen must cover more than the window did");
+      WindowContractTest.awaitTrue(window::isFullscreen, "full screen must start");
+      WindowContractTest.awaitTrue(
+          () -> window.width() > 400, "full screen must cover more than the window did");
       Screenshots.capture("window-fullscreen");
       window.fullscreen(false);
-      awaitTrue(() -> !window.isFullscreen(), "full screen must end");
-      awaitTrue(() -> window.width() < 500, "the window must come back to its size");
+      WindowContractTest.awaitTrue(() -> !window.isFullscreen(), "full screen must end");
+      WindowContractTest.awaitTrue(
+          () -> window.width() < 500, "the window must come back to its size");
     }
   }
 
@@ -337,12 +345,12 @@ public abstract class WindowContractTest extends DisplayContractTest {
               + " window.__windowEvents.push(event.type)); undefined;");
 
       window.maximize();
-      awaitEvent(heard, WindowEventType.MAXIMIZED);
+      WindowContractTest.awaitEvent(heard, WindowEventType.MAXIMIZED);
       window.restore();
-      awaitEvent(heard, WindowEventType.UNMAXIMIZED);
+      WindowContractTest.awaitEvent(heard, WindowEventType.UNMAXIMIZED);
       if (this.canResizeShownWindows()) {
         window.size(500, 350);
-        WindowEvent resized = awaitEvent(heard, WindowEventType.RESIZED);
+        WindowEvent resized = WindowContractTest.awaitEvent(heard, WindowEventType.RESIZED);
         Assertions.assertSame(window, resized.window());
       }
       String page = "";
@@ -372,13 +380,13 @@ public abstract class WindowContractTest extends DisplayContractTest {
     try (Application application = Application.create(parameters)) {
       Window window = application.open(remembered);
       window.show();
-      awaitTrue(window::isVisible, "the window must show");
+      WindowContractTest.awaitTrue(window::isVisible, "the window must show");
       if (this.canResizeShownWindows()) {
         window.size(520, 360);
-        awaitTrue(() -> window.width() == 520, "the window must resize");
+        WindowContractTest.awaitTrue(() -> window.width() == 520, "the window must resize");
       }
       window.maximize();
-      awaitTrue(window::isMaximized, "maximize must maximize");
+      WindowContractTest.awaitTrue(window::isMaximized, "maximize must maximize");
       // The events that the state follows arrive on their own thread.
       Thread.sleep(300);
     }
@@ -386,10 +394,11 @@ public abstract class WindowContractTest extends DisplayContractTest {
     try (Application application = Application.create(parameters)) {
       Window window = application.open(remembered);
       window.show();
-      awaitTrue(window::isMaximized, "a window that closed maximized must open maximized");
+      WindowContractTest.awaitTrue(
+          window::isMaximized, "a window that closed maximized must open maximized");
       window.restore();
       if (this.canResizeShownWindows()) {
-        awaitTrue(
+        WindowContractTest.awaitTrue(
             () -> window.width() == 520 && window.height() == 360,
             "restore must bring back the size from before: " + window.width());
       }
@@ -411,7 +420,7 @@ public abstract class WindowContractTest extends DisplayContractTest {
       window.loadResource("test-app/index.html");
       window.show();
       loaded.get(30, TimeUnit.SECONDS);
-      awaitTrue(window::isVisible, "the window must show");
+      WindowContractTest.awaitTrue(window::isVisible, "the window must show");
       Screenshots.capture("window-frameless");
 
       Loads.eval(
@@ -423,9 +432,10 @@ public abstract class WindowContractTest extends DisplayContractTest {
       Assertions.assertTrue(state.contains("\"resizable\":true"), state);
 
       Loads.eval(window, "lwjwae.window.maximize(); undefined;");
-      awaitTrue(window::isMaximized, "the page must maximize its window");
+      WindowContractTest.awaitTrue(window::isMaximized, "the page must maximize its window");
       Loads.eval(window, "lwjwae.window.toggleMaximize(); undefined;");
-      awaitTrue(() -> !window.isMaximized(), "the page must bring its window back");
+      WindowContractTest.awaitTrue(
+          () -> !window.isMaximized(), "the page must bring its window back");
 
       // With no button down, a move has nothing to follow and must leave the window as it is.
       Loads.eval(
@@ -452,7 +462,7 @@ public abstract class WindowContractTest extends DisplayContractTest {
     try (Application application = Application.create()) {
       Window window = application.open(parameters);
       window.show();
-      awaitTrue(window::isVisible, "the window must show");
+      WindowContractTest.awaitTrue(window::isVisible, "the window must show");
       Screenshots.capture("window-without-buttons");
       Assertions.assertEquals("lwjwae :: buttons", window.title());
 
@@ -461,9 +471,10 @@ public abstract class WindowContractTest extends DisplayContractTest {
       Assertions.assertFalse(window.isClosed(), "a window that isn't closable refuses the user");
 
       window.maximize();
-      awaitTrue(window::isMaximized, "Java maximizes a window without a maximize button");
+      WindowContractTest.awaitTrue(
+          window::isMaximized, "Java maximizes a window without a maximize button");
       window.restore();
-      awaitTrue(() -> !window.isMaximized(), "and brings it back");
+      WindowContractTest.awaitTrue(() -> !window.isMaximized(), "and brings it back");
 
       window.close();
       Assertions.assertTrue(window.isClosed(), "Java closes a window without a close button");
@@ -503,7 +514,8 @@ public abstract class WindowContractTest extends DisplayContractTest {
           window,
           "const blank = document.createElement('a'); blank.href = 'index.html?blank';"
               + " blank.target = '_blank'; document.body.append(blank); blank.click(); undefined;");
-      awaitTrue(() -> window.url().endsWith("?blank"), "the new window must open in place");
+      WindowContractTest.awaitTrue(
+          () -> window.url().endsWith("?blank"), "the new window must open in place");
       Assertions.assertEquals(List.of(window), application.windows(), "and no other opens");
     }
   }
@@ -606,14 +618,14 @@ public abstract class WindowContractTest extends DisplayContractTest {
       Window window = application.open(parameters);
       window.show();
       if (this.canPlaceWindows()) {
-        awaitPosition(window, 120, 80);
+        WindowContractTest.awaitPosition(window, 120, 80);
         Assertions.assertEquals(new WindowPosition(120, 80), window.position());
       }
       Screenshots.capture("window-opened-at-120-80");
 
       window.position(200, 160);
       if (this.canPlaceWindows()) {
-        awaitPosition(window, 200, 160);
+        WindowContractTest.awaitPosition(window, 200, 160);
         Assertions.assertEquals(new WindowPosition(200, 160), window.position());
       }
       Screenshots.capture("window-moved-to-200-160");
@@ -648,7 +660,7 @@ public abstract class WindowContractTest extends DisplayContractTest {
    * and some shift the frame by the size of its decorations, so the check is within a margin.
    */
   private static void awaitPosition(Window window, int x, int y) throws InterruptedException {
-    for (int attempt = 0; attempt < 50 && !near(window, x, y); attempt++) {
+    for (int attempt = 0; attempt < 50 && !WindowContractTest.near(window, x, y); attempt++) {
       // noinspection BusyWait
       Thread.sleep(50);
     }

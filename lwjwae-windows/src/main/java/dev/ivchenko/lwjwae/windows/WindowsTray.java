@@ -85,7 +85,7 @@ public class WindowsTray implements Tray {
 
   /** Creates the window and the icon. Runs on the UI thread, once, from the constructor. */
   private void create(byte[] png) {
-    registerWindowClass();
+    WindowsTray.registerWindowClass();
     MemorySegment window = User32.createHiddenToolWindow(WINDOW_CLASS);
     try {
       User32.userData(window, this.callbackId);

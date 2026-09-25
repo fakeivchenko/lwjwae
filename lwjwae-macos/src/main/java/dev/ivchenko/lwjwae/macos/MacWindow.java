@@ -72,21 +72,27 @@ public class MacWindow extends AbstractWindow {
           MethodType.methodType(
               boolean.class, MemorySegment.class, MemorySegment.class, MemorySegment.class),
           Signatures.DELEGATE_1_BOOL);
-  private static final MemorySegment ON_WINDOW_WILL_CLOSE = delegateStub("onWindowWillClose", 1);
-  private static final MemorySegment ON_WINDOW_CHANGED = delegateStub("onWindowChanged", 1);
+  private static final MemorySegment ON_WINDOW_WILL_CLOSE =
+      MacWindow.delegateStub("onWindowWillClose", 1);
+  private static final MemorySegment ON_WINDOW_CHANGED =
+      MacWindow.delegateStub("onWindowChanged", 1);
   private static final MemorySegment ON_FULL_SCREEN_STARTING =
-      delegateStub("onFullScreenStarting", 1);
+      MacWindow.delegateStub("onFullScreenStarting", 1);
   private static final MemorySegment ON_FULL_SCREEN_SETTLED =
-      delegateStub("onFullScreenSettled", 1);
+      MacWindow.delegateStub("onFullScreenSettled", 1);
   private static final MemorySegment ON_DID_START =
-      delegateStub("onDidStartProvisionalNavigation", 2);
-  private static final MemorySegment ON_DID_COMMIT = delegateStub("onDidCommitNavigation", 2);
-  private static final MemorySegment ON_DID_FINISH = delegateStub("onDidFinishNavigation", 2);
-  private static final MemorySegment ON_DID_FAIL = delegateStub("onDidFailNavigation", 3);
+      MacWindow.delegateStub("onDidStartProvisionalNavigation", 2);
+  private static final MemorySegment ON_DID_COMMIT =
+      MacWindow.delegateStub("onDidCommitNavigation", 2);
+  private static final MemorySegment ON_DID_FINISH =
+      MacWindow.delegateStub("onDidFinishNavigation", 2);
+  private static final MemorySegment ON_DID_FAIL = MacWindow.delegateStub("onDidFailNavigation", 3);
   private static final MemorySegment ON_DID_RECEIVE_MESSAGE =
-      delegateStub("onDidReceiveScriptMessage", 2);
-  private static final MemorySegment ON_START_TASK = delegateStub("onStartUrlSchemeTask", 2);
-  private static final MemorySegment ON_STOP_TASK = delegateStub("onStopUrlSchemeTask", 2);
+      MacWindow.delegateStub("onDidReceiveScriptMessage", 2);
+  private static final MemorySegment ON_START_TASK =
+      MacWindow.delegateStub("onStartUrlSchemeTask", 2);
+  private static final MemorySegment ON_STOP_TASK =
+      MacWindow.delegateStub("onStopUrlSchemeTask", 2);
   private static final MemorySegment ON_CREATE_WEB_VIEW =
       NativeLibraries.upcall(
           MethodHandles.lookup(),
@@ -196,7 +202,10 @@ public class MacWindow extends AbstractWindow {
 
     MemorySegment newWindow =
         AppKit.window(
-            parameters.width(), parameters.height(), parameters.title(), styleMask(parameters));
+            parameters.width(),
+            parameters.height(),
+            parameters.title(),
+            MacWindow.styleMask(parameters));
     if (!parameters.decorated()) {
       AppKit.hideTitleBar(newWindow);
     }
@@ -270,8 +279,8 @@ public class MacWindow extends AbstractWindow {
             () ->
                 AppKit.setContentSize(
                     this.window(),
-                    clamp(width, minimum.width(), maximum.width()),
-                    clamp(height, minimum.height(), maximum.height())));
+                    MacWindow.clamp(width, minimum.width(), maximum.width()),
+                    MacWindow.clamp(height, minimum.height(), maximum.height())));
   }
 
   @Override
@@ -392,8 +401,8 @@ public class MacWindow extends AbstractWindow {
     AppKit.setContentSizeLimits(
         current, minimum.width(), minimum.height(), maximum.width(), maximum.height());
     int[] size = AppKit.contentSize(current);
-    int width = clamp(size[0], minimum.width(), maximum.width());
-    int height = clamp(size[1], minimum.height(), maximum.height());
+    int width = MacWindow.clamp(size[0], minimum.width(), maximum.width());
+    int height = MacWindow.clamp(size[1], minimum.height(), maximum.height());
     if (width != size[0] || height != size[1]) {
       AppKit.setContentSize(current, width, height);
     }
@@ -758,7 +767,7 @@ public class MacWindow extends AbstractWindow {
       MemorySegment action,
       MemorySegment features) {
     try {
-      MacWindow window = windowOf(self);
+      MacWindow window = MacWindow.windowOf(self);
       if (window != null) {
         window.newWindowRequested(WebKit.navigationActionUrl(action));
       }
@@ -783,7 +792,7 @@ public class MacWindow extends AbstractWindow {
   private static boolean onWindowShouldClose(
       MemorySegment self, MemorySegment command, MemorySegment sender) {
     try {
-      MacWindow window = windowOf(self);
+      MacWindow window = MacWindow.windowOf(self);
       if (window != null && window.refusesCloseRequest()) {
         return false;
       }
@@ -808,7 +817,7 @@ public class MacWindow extends AbstractWindow {
   private static void onFullScreenStarting(
       MemorySegment self, MemorySegment command, MemorySegment notification) {
     try {
-      MacWindow window = windowOf(self);
+      MacWindow window = MacWindow.windowOf(self);
       if (window != null) {
         window.fullScreenChanging = true;
       }
@@ -828,7 +837,7 @@ public class MacWindow extends AbstractWindow {
   private static void onFullScreenSettled(
       MemorySegment self, MemorySegment command, MemorySegment notification) {
     try {
-      MacWindow window = windowOf(self);
+      MacWindow window = MacWindow.windowOf(self);
       if (window != null) {
         window.fullScreenSettled();
       }
@@ -853,7 +862,7 @@ public class MacWindow extends AbstractWindow {
   private static void onWindowChanged(
       MemorySegment self, MemorySegment command, MemorySegment notification) {
     try {
-      MacWindow window = windowOf(self);
+      MacWindow window = MacWindow.windowOf(self);
       if (window != null) {
         window.windowChanged();
       }
@@ -873,7 +882,7 @@ public class MacWindow extends AbstractWindow {
   private static void onWindowWillClose(
       MemorySegment self, MemorySegment command, MemorySegment notification) {
     try {
-      MacWindow window = windowOf(self);
+      MacWindow window = MacWindow.windowOf(self);
       if (window != null) {
         window.handleDestroyed();
       }
@@ -893,7 +902,7 @@ public class MacWindow extends AbstractWindow {
   private static void onDidStartProvisionalNavigation(
       MemorySegment self, MemorySegment command, MemorySegment webView, MemorySegment navigation) {
     try {
-      MacWindow window = windowOf(self);
+      MacWindow window = MacWindow.windowOf(self);
       if (window != null) {
         window.emitLoad(LoadEvent.of(LoadState.STARTED, window.url()));
       }
@@ -913,7 +922,7 @@ public class MacWindow extends AbstractWindow {
   private static void onDidCommitNavigation(
       MemorySegment self, MemorySegment command, MemorySegment webView, MemorySegment navigation) {
     try {
-      MacWindow window = windowOf(self);
+      MacWindow window = MacWindow.windowOf(self);
       if (window != null) {
         window.emitLoad(LoadEvent.of(LoadState.COMMITTED, window.url()));
       }
@@ -933,7 +942,7 @@ public class MacWindow extends AbstractWindow {
   private static void onDidFinishNavigation(
       MemorySegment self, MemorySegment command, MemorySegment webView, MemorySegment navigation) {
     try {
-      MacWindow window = windowOf(self);
+      MacWindow window = MacWindow.windowOf(self);
       if (window != null) {
         window.emitLoad(LoadEvent.of(LoadState.FINISHED, window.url()));
       }
@@ -957,7 +966,7 @@ public class MacWindow extends AbstractWindow {
       MemorySegment navigation,
       MemorySegment error) {
     try {
-      MacWindow window = windowOf(self);
+      MacWindow window = MacWindow.windowOf(self);
       if (window != null) {
         window.handleLoadFailed(error);
       }
@@ -977,7 +986,7 @@ public class MacWindow extends AbstractWindow {
   private static void onDidReceiveScriptMessage(
       MemorySegment self, MemorySegment command, MemorySegment controller, MemorySegment message) {
     try {
-      MacWindow window = windowOf(self);
+      MacWindow window = MacWindow.windowOf(self);
       if (window != null) {
         window.handleBridgeMessage(WebKit.messageBody(message));
       }
@@ -997,7 +1006,7 @@ public class MacWindow extends AbstractWindow {
   private static void onStartUrlSchemeTask(
       MemorySegment self, MemorySegment command, MemorySegment webView, MemorySegment task) {
     try {
-      MacWindow window = windowOf(self);
+      MacWindow window = MacWindow.windowOf(self);
       if (window != null && WebKit.taskPath(task).startsWith(RpcExchange.PATH_PREFIX)) {
         MacRpcExchange.start(window, task);
       } else if (window != null) {

@@ -40,7 +40,7 @@ public final class PageEvents {
 
   /** Queues an event for the document that holds the stream, or the next one. */
   public void send(String name, String payload, boolean typed) {
-    byte[] frame = frame(name, payload, typed);
+    byte[] frame = PageEvents.frame(name, payload, typed);
     synchronized (this.lock) {
       if (this.current != null) {
         this.current.add(frame);
@@ -72,12 +72,12 @@ public final class PageEvents {
       while (true) {
         batch.clear();
         batch.add(queue.take());
-        drainBatch(queue, batch);
+        PageEvents.drainBatch(queue, batch);
         boolean retired = batch.getLast() == RETIRED;
         if (retired) {
           batch.removeLast();
         }
-        if (!batch.isEmpty() && !stream.write(join(batch))) {
+        if (!batch.isEmpty() && !stream.write(PageEvents.join(batch))) {
           this.requeue(queue, batch);
           return;
         }

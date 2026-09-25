@@ -69,7 +69,7 @@ public class Screenshots {
     Thread.sleep(PAINT_DELAY_MILLIS);
     Files.createDirectories(DIRECTORY);
     Path file = DIRECTORY.resolve(name + ".png").toAbsolutePath();
-    List<String> command = command(file);
+    List<String> command = Screenshots.command(file);
     if (command == null) {
       System.err.println("Screenshot '" + name + "' skipped: no capture tool for this desktop");
       return;
@@ -102,7 +102,7 @@ public class Screenshots {
       return List.of("powershell", "-NoProfile", "-NonInteractive", "-EncodedCommand", encoded);
     }
     if (System.getenv("WAYLAND_DISPLAY") != null) {
-      return isOnPath("grim") ? List.of("grim", file.toString()) : null;
+      return Screenshots.isOnPath("grim") ? List.of("grim", file.toString()) : null;
     }
     return List.of("import", "-window", "root", file.toString());
   }

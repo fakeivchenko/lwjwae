@@ -82,7 +82,7 @@ public abstract class AbstractWindow implements Window {
   private final EventListeners listeners = new EventListeners("lwjwae-events");
   private final PageEvents pageEvents = new PageEvents();
   private final WindowEvents windowEvents = new WindowEvents(this, this::sendToPage);
-  private final String token = newToken();
+  private final String token = AbstractWindow.newToken();
   private final Set<DialogCompletion<?>> dialogs = ConcurrentHashMap.newKeySet();
   private final boolean closable;
   private final boolean maximizable;
@@ -350,10 +350,10 @@ public abstract class AbstractWindow implements Window {
 
   /** The origin that serves the resources of the window, and the development server in use. */
   private List<String> trustedOrigins() {
-    String resources = originOf(this.resourceUrl(""));
+    String resources = AbstractWindow.originOf(this.resourceUrl(""));
     ApplicationParameters parameters = this.application.parameters();
     return parameters.isDevelopment()
-        ? List.of(resources, originOf(parameters.devServerUrl()))
+        ? List.of(resources, AbstractWindow.originOf(parameters.devServerUrl()))
         : List.of(resources);
   }
 
@@ -485,7 +485,7 @@ public abstract class AbstractWindow implements Window {
       return;
     }
     String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase(Locale.ROOT);
-    if (uri.getRawAuthority() != null && this.isTrustedOrigin(originOf(url))) {
+    if (uri.getRawAuthority() != null && this.isTrustedOrigin(AbstractWindow.originOf(url))) {
       this.dispatcher().post(() -> this.navigate(url));
     } else if (scheme.equals("http") || scheme.equals("https") || scheme.equals("mailto")) {
       HANDLER_EXECUTOR.execute(() -> this.leaveReporting(url));

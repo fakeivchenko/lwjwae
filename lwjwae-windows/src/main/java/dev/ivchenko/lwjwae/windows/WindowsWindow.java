@@ -130,7 +130,7 @@ public class WindowsWindow extends AbstractWindow {
 
   /** Creates the Win32 window and starts the asynchronous WebView2 setup. Runs on the UI thread. */
   private void createWindow(WindowParameters parameters) {
-    registerWindowClass();
+    WindowsWindow.registerWindowClass();
     boolean placed = parameters.hasPosition() && !parameters.centered();
     MemorySegment window =
         User32.createWindow(
@@ -140,7 +140,7 @@ public class WindowsWindow extends AbstractWindow {
             placed ? parameters.y() : User32.CW_USEDEFAULT,
             parameters.width(),
             parameters.height(),
-            windowStyle(parameters),
+            WindowsWindow.windowStyle(parameters),
             parameters.alwaysOnTop());
     User32.userData(window, this.callbackId);
     this.hwnd = window;
@@ -153,7 +153,7 @@ public class WindowsWindow extends AbstractWindow {
     }
     User32.resizeClient(window, parameters.width(), parameters.height(), this.titleBar);
     if (parameters.centered()) {
-      centerWindow(window);
+      WindowsWindow.centerWindow(window);
     }
 
     MemorySegment handler =
@@ -220,7 +220,7 @@ public class WindowsWindow extends AbstractWindow {
 
   @Override
   public void center() {
-    this.dispatcher().run(() -> centerWindow(this.window()));
+    this.dispatcher().run(() -> WindowsWindow.centerWindow(this.window()));
   }
 
   /** Puts the frame in the middle of the work area of the monitor that holds the window. */
@@ -530,7 +530,8 @@ public class WindowsWindow extends AbstractWindow {
                 MemorySegment handler =
                     ComCallback.completion(
                         WebView2.IID_EXECUTE_SCRIPT_COMPLETED,
-                        (hresult, json) -> completeEvaluation(result, hresult, Wide.read(json)));
+                        (hresult, json) ->
+                            WindowsWindow.completeEvaluation(result, hresult, Wide.read(json)));
                 WebView2.executeScript(this.view(), wrapped, handler);
                 Com.release(handler);
               } catch (Throwable t) {

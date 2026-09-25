@@ -61,7 +61,7 @@ public interface Application extends AutoCloseable {
    * @throws BackendNotAvailableException If no backend on the classpath supports this machine.
    */
   static Application create() {
-    return create(ApplicationParameters.createDefault());
+    return Application.create(ApplicationParameters.createDefault());
   }
 
   /**
@@ -72,7 +72,8 @@ public interface Application extends AutoCloseable {
    */
   static Application create(ApplicationParameters parameters) {
     BackendProvider provider =
-        provider().orElseThrow(() -> new BackendNotAvailableException(noBackendMessage()));
+        Application.provider()
+            .orElseThrow(() -> new BackendNotAvailableException(Application.noBackendMessage()));
     return provider.create(parameters);
   }
 
@@ -81,8 +82,8 @@ public interface Application extends AutoCloseable {
    * the one that {@link #BACKEND_PROPERTY} or {@link #BACKEND_VARIABLE} names, if it's supported.
    */
   static Optional<BackendProvider> provider() {
-    String requested = requestedBackend();
-    return providers().stream()
+    String requested = Application.requestedBackend();
+    return Application.providers().stream()
         .filter(BackendProvider::isSupported)
         .filter(provider -> requested == null || provider.name().equals(requested))
         .max(Comparator.comparingInt(BackendProvider::priority));
@@ -102,8 +103,8 @@ public interface Application extends AutoCloseable {
   }
 
   private static String noBackendMessage() {
-    List<BackendProvider> providers = providers();
-    String requested = requestedBackend();
+    List<BackendProvider> providers = Application.providers();
+    String requested = Application.requestedBackend();
     if (requested != null) {
       return "Backend '"
           + requested

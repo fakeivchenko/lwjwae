@@ -191,7 +191,8 @@ public final class ExchangeRpcCall implements RpcCall {
       this.answerWhole(
           status,
           "application/json",
-          errorJson(code, rootMessage(failure)).getBytes(StandardCharsets.UTF_8));
+          ExchangeRpcCall.errorJson(code, ExchangeRpcCall.rootMessage(failure))
+              .getBytes(StandardCharsets.UTF_8));
     } else if (!this.cancelled) {
       // The stream is open: the status is gone, so the page only sees the answer end early.
       ThrowableUtil.report(failure);

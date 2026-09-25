@@ -38,13 +38,17 @@ public class WebKit {
   public void setDeveloperExtrasEnabled(MemorySegment webView, boolean enabled) {
     MemorySegment number = ObjC.send(ObjC.cls("NSNumber"), "numberWithBool:", enabled);
     ObjC.sendVoid(
-        preferences(webView), "setValue:forKey:", number, Foundation.string(DEVELOPER_EXTRAS_KEY));
+        WebKit.preferences(webView),
+        "setValue:forKey:",
+        number,
+        Foundation.string(DEVELOPER_EXTRAS_KEY));
   }
 
   /** Reads {@code developerExtrasEnabled} from the preferences of {@code webView}. */
   public boolean isDeveloperExtrasEnabled(MemorySegment webView) {
     MemorySegment number =
-        ObjC.send(preferences(webView), "valueForKey:", Foundation.string(DEVELOPER_EXTRAS_KEY));
+        ObjC.send(
+            WebKit.preferences(webView), "valueForKey:", Foundation.string(DEVELOPER_EXTRAS_KEY));
     return !ObjC.isNull(number) && ObjC.sendLong(number, "integerValue") != 0;
   }
 

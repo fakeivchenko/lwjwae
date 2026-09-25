@@ -43,23 +43,23 @@ public record ApplicationParameters(
   public static final String DEV_SERVER_URL_VARIABLE = "LWJWAE_DEV_SERVER_URL";
 
   public ApplicationParameters {
-    if (isBlank(devServerUrl)) {
+    if (ApplicationParameters.isBlank(devServerUrl)) {
       devServerUrl = System.getProperty(DEV_SERVER_URL_PROPERTY);
     }
-    if (isBlank(devServerUrl)) {
+    if (ApplicationParameters.isBlank(devServerUrl)) {
       devServerUrl = System.getenv(DEV_SERVER_URL_VARIABLE);
     }
-    if (isBlank(devServerUrl)) {
+    if (ApplicationParameters.isBlank(devServerUrl)) {
       devServerUrl = null;
     }
     if (codec == null) {
       codec = BridgeCodec.discover().orElse(null);
     }
-    if (isBlank(name)) {
+    if (ApplicationParameters.isBlank(name)) {
       name = null;
     }
     if (dataDirectory == null && name != null) {
-      dataDirectory = defaultDataDirectory(name);
+      dataDirectory = ApplicationParameters.defaultDataDirectory(name);
     }
   }
 
@@ -68,13 +68,14 @@ public record ApplicationParameters(
     String home = System.getProperty("user.home");
     if (PlatformUtil.isWindows()) {
       String appData = System.getenv("APPDATA");
-      return Path.of(isBlank(appData) ? home + "\\AppData\\Roaming" : appData, name);
+      return Path.of(
+          ApplicationParameters.isBlank(appData) ? home + "\\AppData\\Roaming" : appData, name);
     }
     if (PlatformUtil.isMacOs()) {
       return Path.of(home, "Library", "Application Support", name);
     }
     String config = System.getenv("XDG_CONFIG_HOME");
-    return Path.of(isBlank(config) ? home + "/.config" : config, name);
+    return Path.of(ApplicationParameters.isBlank(config) ? home + "/.config" : config, name);
   }
 
   /** Creates parameters with every default. */

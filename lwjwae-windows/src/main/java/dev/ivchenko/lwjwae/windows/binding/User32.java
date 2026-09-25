@@ -336,7 +336,7 @@ public class User32 {
    * procedure. Called on the thread of the window, it runs the procedure before it returns.
    */
   public void requestClose(MemorySegment hwnd) {
-    long _ = send(hwnd, WM_CLOSE, 0L, 0L);
+    long _ = User32.send(hwnd, WM_CLOSE, 0L, 0L);
   }
 
   /**
@@ -783,7 +783,7 @@ public class User32 {
    */
   @SneakyThrows
   public void resizeClient(MemorySegment hwnd, int width, int height, boolean titleBar) {
-    int[] frame = frameSize(hwnd, width, height, titleBar);
+    int[] frame = User32.frameSize(hwnd, width, height, titleBar);
     int _ =
         (int)
             SET_WINDOW_POS.invokeExact(
@@ -807,7 +807,7 @@ public class User32 {
       MemorySegment rect = arena.allocate(Signatures.RECT);
       RECT_RIGHT.set(rect, 0L, width);
       RECT_BOTTOM.set(rect, 0L, height);
-      int _ = (int) ADJUST_WINDOW_RECT_EX.invokeExact(rect, (int) style(hwnd), 0, 0);
+      int _ = (int) ADJUST_WINDOW_RECT_EX.invokeExact(rect, (int) User32.style(hwnd), 0, 0);
       return new int[] {
         (int) RECT_RIGHT.get(rect, 0L) - (int) RECT_LEFT.get(rect, 0L),
         (int) RECT_BOTTOM.get(rect, 0L) - (titleBar ? (int) RECT_TOP.get(rect, 0L) : 0)
@@ -832,8 +832,8 @@ public class User32 {
         MemorySegment.ofAddress(parameters).reinterpret(Signatures.RECT.byteSize());
     int windowLeft = (int) RECT_LEFT.get(rect, 0L);
     int windowTop = (int) RECT_TOP.get(rect, 0L);
-    long _ = defWindowProc(hwnd, WM_NCCALCSIZE, wordParameter, parameters);
-    int frame = isMaximized(hwnd) ? (int) RECT_LEFT.get(rect, 0L) - windowLeft : 0;
+    long _ = User32.defWindowProc(hwnd, WM_NCCALCSIZE, wordParameter, parameters);
+    int frame = User32.isMaximized(hwnd) ? (int) RECT_LEFT.get(rect, 0L) - windowLeft : 0;
     RECT_TOP.set(rect, 0L, windowTop + frame);
     return 0;
   }

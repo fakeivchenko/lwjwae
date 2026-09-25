@@ -75,7 +75,7 @@ public final class MessageRpcExchange implements RpcExchange {
 
   /** The key of this call among the running calls of the window. */
   String key() {
-    return key(this.doc, this.id);
+    return MessageRpcExchange.key(this.doc, this.id);
   }
 
   static String key(String doc, String id) {
@@ -113,7 +113,7 @@ public final class MessageRpcExchange implements RpcExchange {
     this.calls.forget(this);
     String type = headers.getOrDefault("Content-Type", "");
     String encoded =
-        isText(type)
+        MessageRpcExchange.isText(type)
             ? "s" + SEPARATOR + new String(body, StandardCharsets.UTF_8)
             : "b" + SEPARATOR + Base64.getEncoder().encodeToString(body);
     this.post(this.message("r", String.valueOf(status), type, encoded));

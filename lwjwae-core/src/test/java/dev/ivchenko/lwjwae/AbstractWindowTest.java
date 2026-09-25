@@ -299,7 +299,7 @@ class AbstractWindowTest {
     try (FakeApplication application = new FakeApplication()) {
       FakeWindow window = application.openFake();
       List<Throwable> reported =
-          captureUncaught(
+          AbstractWindowTest.captureUncaught(
               () -> {
                 window.receive("no separators here");
                 window.receive(
@@ -323,7 +323,7 @@ class AbstractWindowTest {
           "slow",
           _ -> {
             handlerStarted.countDown();
-            await(windowClosed);
+            AbstractWindowTest.await(windowClosed);
             return "late";
           });
 
@@ -672,7 +672,7 @@ class AbstractWindowTest {
       window.onLoad(heard::add);
 
       LoadEvent event = LoadEvent.of(LoadState.FINISHED, "app://local/x");
-      List<Throwable> reported = captureUncaught(() -> window.emit(event));
+      List<Throwable> reported = AbstractWindowTest.captureUncaught(() -> window.emit(event));
 
       Assertions.assertEquals(List.of(event), heard);
       Assertions.assertEquals("bad listener", reported.getFirst().getMessage());

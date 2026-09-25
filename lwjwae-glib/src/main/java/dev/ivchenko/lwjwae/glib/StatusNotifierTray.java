@@ -238,7 +238,7 @@ public class StatusNotifierTray implements Tray {
    * method calls and property reads arrive there.
    */
   private void export() {
-    prepareInterfaces();
+    StatusNotifierTray.prepareInterfaces();
     MemorySegment bus;
     try {
       bus = Dbus.privateSessionBus();
@@ -391,8 +391,8 @@ public class StatusNotifierTray implements Tray {
       case "Title" -> Dbus.string(text);
       case "Status" -> Dbus.string("Active");
       case "WindowId" -> Dbus.int32(0);
-      case "IconPixmap" -> pixmaps(this.pixmap);
-      case "OverlayIconPixmap", "AttentionIconPixmap" -> noPixmaps();
+      case "IconPixmap" -> StatusNotifierTray.pixmaps(this.pixmap);
+      case "OverlayIconPixmap", "AttentionIconPixmap" -> StatusNotifierTray.noPixmaps();
       case "IconName",
           "IconThemePath",
           "OverlayIconName",
@@ -400,7 +400,12 @@ public class StatusNotifierTray implements Tray {
           "AttentionMovieName" ->
           Dbus.string("");
       case "ToolTip" ->
-          Dbus.tuple(List.of(Dbus.string(""), noPixmaps(), Dbus.string(text), Dbus.string("")));
+          Dbus.tuple(
+              List.of(
+                  Dbus.string(""),
+                  StatusNotifierTray.noPixmaps(),
+                  Dbus.string(text),
+                  Dbus.string("")));
       case "ItemIsMenu" -> Dbus.bool(this.onActivate == null);
       case "Menu" -> Dbus.objectPath(MENU_PATH);
       default -> null;

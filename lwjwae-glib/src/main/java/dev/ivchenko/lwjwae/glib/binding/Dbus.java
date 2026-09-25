@@ -429,7 +429,7 @@ public class Dbus {
   @SneakyThrows
   public MemorySegment dictEntry(String key, MemorySegment value) {
     MemorySegment boxed = (MemorySegment) VARIANT_NEW_VARIANT.invokeExact(value);
-    return (MemorySegment) VARIANT_NEW_DICT_ENTRY.invokeExact(string(key), boxed);
+    return (MemorySegment) VARIANT_NEW_DICT_ENTRY.invokeExact(Dbus.string(key), boxed);
   }
 
   /** A floating tuple of {@code children}, in order. */
@@ -437,7 +437,7 @@ public class Dbus {
   public MemorySegment tuple(List<MemorySegment> children) {
     try (Arena arena = Arena.ofConfined()) {
       return (MemorySegment)
-          VARIANT_NEW_TUPLE.invokeExact(pointers(arena, children), (long) children.size());
+          VARIANT_NEW_TUPLE.invokeExact(Dbus.pointers(arena, children), (long) children.size());
     }
   }
 
@@ -450,7 +450,9 @@ public class Dbus {
     try (Arena arena = Arena.ofConfined()) {
       return (MemorySegment)
           VARIANT_NEW_ARRAY.invokeExact(
-              arena.allocateFrom(childType), pointers(arena, children), (long) children.size());
+              arena.allocateFrom(childType),
+              Dbus.pointers(arena, children),
+              (long) children.size());
     }
   }
 
@@ -465,22 +467,22 @@ public class Dbus {
   /** The {@code u} at {@code index} of a tuple. */
   @SneakyThrows
   public int uint32At(MemorySegment tuple, int index) {
-    MemorySegment child = child(tuple, index);
+    MemorySegment child = Dbus.child(tuple, index);
     try {
       return (int) VARIANT_GET_UINT32.invokeExact(child);
     } finally {
-      unref(child);
+      Dbus.unref(child);
     }
   }
 
   /** The {@code i} at {@code index} of a tuple or an array. */
   @SneakyThrows
   public int int32At(MemorySegment container, int index) {
-    MemorySegment child = child(container, index);
+    MemorySegment child = Dbus.child(container, index);
     try {
       return (int) VARIANT_GET_INT32.invokeExact(child);
     } finally {
-      unref(child);
+      Dbus.unref(child);
     }
   }
 
@@ -493,12 +495,12 @@ public class Dbus {
   /** The {@code s} at {@code index} of a tuple. */
   @SneakyThrows
   public String stringAt(MemorySegment tuple, int index) {
-    MemorySegment child = child(tuple, index);
+    MemorySegment child = Dbus.child(tuple, index);
     try {
       return NativeLibraries.string(
           (MemorySegment) VARIANT_GET_STRING.invokeExact(child, MemorySegment.NULL));
     } finally {
-      unref(child);
+      Dbus.unref(child);
     }
   }
 

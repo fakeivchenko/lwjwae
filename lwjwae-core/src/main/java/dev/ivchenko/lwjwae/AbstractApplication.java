@@ -109,7 +109,7 @@ public abstract class AbstractApplication implements Application {
     long id = this.windowIds.incrementAndGet();
     AbstractWindow window = this.createWindow(id, parameters);
     window.closeAction(parameters.closeAction());
-    applyLimits(window, parameters);
+    AbstractApplication.applyLimits(window, parameters);
     this.restoreState(window, parameters);
     this.windows.put(id, window);
     // Closed while it was being created: leave the list the way markClosed would have.
@@ -201,7 +201,7 @@ public abstract class AbstractApplication implements Application {
       String name, Class<T> argumentType, BiFunction<Window, T, R> handler) {
     Objects.requireNonNull(argumentType, "argumentType");
     Objects.requireNonNull(handler, "handler");
-    this.publish(name, typed(this.requireCodec(), argumentType, handler), true);
+    this.publish(name, AbstractApplication.typed(this.requireCodec(), argumentType, handler), true);
   }
 
   /**
@@ -516,7 +516,7 @@ public abstract class AbstractApplication implements Application {
     Objects.requireNonNull(name, "name");
     BridgeProtocol.checkIdentifier(name);
     String script = BridgeProtocol.bindingScript(name, typed);
-    this.rpcHandlers.put(name, bindingHandler(handler, typed));
+    this.rpcHandlers.put(name, AbstractApplication.bindingHandler(handler, typed));
     // The page looks the handler up by name on every call, so a new handler of the same form takes
     // over without a new script; injecting it again would stack a copy on every document.
     if (script.equals(this.bindingScripts.put(name, script))) {

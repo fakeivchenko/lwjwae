@@ -22,7 +22,7 @@ public class FakeApplication extends AbstractApplication {
   }
 
   public FakeApplication(ApplicationParameters parameters) {
-    super(started(new FakeUiDispatcher()), parameters);
+    super(FakeApplication.started(new FakeUiDispatcher()), parameters);
   }
 
   /** A backend starts its UI thread before the application; the fake does the same. */

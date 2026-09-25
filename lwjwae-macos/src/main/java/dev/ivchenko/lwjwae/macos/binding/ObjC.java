@@ -48,7 +48,7 @@ public class ObjC {
   private final int BLOCK_IS_GLOBAL = 1 << 28;
   private final VarHandle BLOCK_CONTEXT =
       Signatures.BLOCK.varHandle(MemoryLayout.PathElement.groupElement("context"));
-  private final MemorySegment BLOCK_DESCRIPTOR = blockDescriptor();
+  private final MemorySegment BLOCK_DESCRIPTOR = ObjC.blockDescriptor();
 
   private final MethodHandle MSG_ID =
       NativeLibraries.downcall(OBJC, "objc_msgSend", Signatures.MSG_ID);
@@ -149,7 +149,7 @@ public class ObjC {
             (boolean)
                 CLASS_ADD_METHOD.invokeExact(
                     cls,
-                    sel(method.getKey()),
+                    ObjC.sel(method.getKey()),
                     method.getValue().implementation(),
                     arena.allocateFrom(method.getValue().typeEncoding()));
         if (!added) {
@@ -191,8 +191,8 @@ public class ObjC {
   public void performOnMainThread(MemorySegment receiver, String selector) {
     MSG_VOID_SEL_ID_BOOL.invokeExact(
         receiver,
-        sel("performSelectorOnMainThread:withObject:waitUntilDone:"),
-        sel(selector),
+        ObjC.sel("performSelectorOnMainThread:withObject:waitUntilDone:"),
+        ObjC.sel(selector),
         MemorySegment.NULL,
         false);
   }
@@ -218,13 +218,13 @@ public class ObjC {
   /** Calls a block of type {@code void (^)(void)} that the runtime passed in. */
   @SneakyThrows
   public void callBlock(MemorySegment block) {
-    CALL_BLOCK.invokeExact(blockInvoke(block), block);
+    CALL_BLOCK.invokeExact(ObjC.blockInvoke(block), block);
   }
 
   /** Calls a block of type {@code void (^)(NSUInteger)} that the runtime passed in. */
   @SneakyThrows
   public void callBlock(MemorySegment block, long argument) {
-    CALL_BLOCK_LONG.invokeExact(blockInvoke(block), block, argument);
+    CALL_BLOCK_LONG.invokeExact(ObjC.blockInvoke(block), block, argument);
   }
 
   /** The invoke function of any block literal: the pointer after {@code isa} and the flags. */
@@ -245,45 +245,46 @@ public class ObjC {
   /** Sends {@code selector} to {@code receiver}: {@code id -[receiver selector]}. */
   @SneakyThrows
   public MemorySegment send(MemorySegment receiver, String selector) {
-    return (MemorySegment) MSG_ID.invokeExact(receiver, sel(selector));
+    return (MemorySegment) MSG_ID.invokeExact(receiver, ObjC.sel(selector));
   }
 
   /** Sends {@code selector} to {@code receiver}: {@code id -[receiver selector:CGFloat]}. */
   @SneakyThrows
   public MemorySegment send(MemorySegment receiver, String selector, double argument) {
-    return (MemorySegment) MSG_ID_DOUBLE.invokeExact(receiver, sel(selector), argument);
+    return (MemorySegment) MSG_ID_DOUBLE.invokeExact(receiver, ObjC.sel(selector), argument);
   }
 
   /** Sends {@code selector} to {@code receiver}: {@code id -[receiver selector:NSInteger]}. */
   @SneakyThrows
   public MemorySegment send(MemorySegment receiver, String selector, long argument) {
-    return (MemorySegment) MSG_ID_LONG.invokeExact(receiver, sel(selector), argument);
+    return (MemorySegment) MSG_ID_LONG.invokeExact(receiver, ObjC.sel(selector), argument);
   }
 
   /** Sends {@code selector} to {@code receiver}: {@code id -[receiver selector:BOOL]}. */
   @SneakyThrows
   public MemorySegment send(MemorySegment receiver, String selector, boolean argument) {
-    return (MemorySegment) MSG_ID_BOOL.invokeExact(receiver, sel(selector), argument);
+    return (MemorySegment) MSG_ID_BOOL.invokeExact(receiver, ObjC.sel(selector), argument);
   }
 
   /** Sends {@code selector} to {@code receiver}: {@code id -[receiver selector:id]}. */
   @SneakyThrows
   public MemorySegment send(MemorySegment receiver, String selector, MemorySegment argument) {
-    return (MemorySegment) MSG_ID_ID.invokeExact(receiver, sel(selector), argument);
+    return (MemorySegment) MSG_ID_ID.invokeExact(receiver, ObjC.sel(selector), argument);
   }
 
   /** Sends {@code selector} to {@code receiver}: {@code id -[receiver selector:id:id]}. */
   @SneakyThrows
   public MemorySegment send(
       MemorySegment receiver, String selector, MemorySegment first, MemorySegment second) {
-    return (MemorySegment) MSG_ID_ID_ID.invokeExact(receiver, sel(selector), first, second);
+    return (MemorySegment) MSG_ID_ID_ID.invokeExact(receiver, ObjC.sel(selector), first, second);
   }
 
   /** Sends {@code selector} to {@code receiver}: {@code id -[receiver selector:id:NSInteger]}. */
   @SneakyThrows
   public MemorySegment send(
       MemorySegment receiver, String selector, MemorySegment bytes, long length) {
-    return (MemorySegment) MSG_ID_POINTER_LONG.invokeExact(receiver, sel(selector), bytes, length);
+    return (MemorySegment)
+        MSG_ID_POINTER_LONG.invokeExact(receiver, ObjC.sel(selector), bytes, length);
   }
 
   /**
@@ -297,7 +298,7 @@ public class ObjC {
       MemorySegment second,
       long third) {
     return (MemorySegment)
-        MSG_ID_ID_ID_LONG.invokeExact(receiver, sel(selector), first, second, third);
+        MSG_ID_ID_ID_LONG.invokeExact(receiver, ObjC.sel(selector), first, second, third);
   }
 
   /** Sends {@code selector} to {@code receiver}: {@code id -[receiver selector:id:id:id]}. */
@@ -309,7 +310,7 @@ public class ObjC {
       MemorySegment second,
       MemorySegment third) {
     return (MemorySegment)
-        MSG_ID_ID_ID_ID.invokeExact(receiver, sel(selector), first, second, third);
+        MSG_ID_ID_ID_ID.invokeExact(receiver, ObjC.sel(selector), first, second, third);
   }
 
   /**
@@ -325,7 +326,8 @@ public class ObjC {
       MemorySegment third,
       long fourth) {
     return (MemorySegment)
-        MSG_ID_ID_ID_ID_LONG.invokeExact(receiver, sel(selector), first, second, third, fourth);
+        MSG_ID_ID_ID_ID_LONG.invokeExact(
+            receiver, ObjC.sel(selector), first, second, third, fourth);
   }
 
   /**
@@ -335,7 +337,7 @@ public class ObjC {
   public MemorySegment send(
       MemorySegment receiver, String selector, MemorySegment first, long second, boolean third) {
     return (MemorySegment)
-        MSG_ID_ID_LONG_BOOL.invokeExact(receiver, sel(selector), first, second, third);
+        MSG_ID_ID_LONG_BOOL.invokeExact(receiver, ObjC.sel(selector), first, second, third);
   }
 
   /**
@@ -349,7 +351,7 @@ public class ObjC {
       long second,
       MemorySegment third) {
     return (MemorySegment)
-        MSG_ID_ID_LONG_ID.invokeExact(receiver, sel(selector), first, second, third);
+        MSG_ID_ID_LONG_ID.invokeExact(receiver, ObjC.sel(selector), first, second, third);
   }
 
   /**
@@ -364,7 +366,8 @@ public class ObjC {
       long third,
       MemorySegment fourth) {
     return (MemorySegment)
-        MSG_ID_ID_ID_LONG_ID.invokeExact(receiver, sel(selector), first, second, third, fourth);
+        MSG_ID_ID_ID_LONG_ID.invokeExact(
+            receiver, ObjC.sel(selector), first, second, third, fourth);
   }
 
   /**
@@ -379,7 +382,8 @@ public class ObjC {
       MemorySegment third,
       MemorySegment fourth) {
     return (MemorySegment)
-        MSG_ID_ID_LONG_ID_ID.invokeExact(receiver, sel(selector), first, second, third, fourth);
+        MSG_ID_ID_LONG_ID_ID.invokeExact(
+            receiver, ObjC.sel(selector), first, second, third, fourth);
   }
 
   /**
@@ -396,7 +400,7 @@ public class ObjC {
       MemorySegment third) {
     return (MemorySegment)
         MSG_ID_ID_ID_ID_POINTER.invokeExact(
-            receiver, sel(selector), first, second, third, MemorySegment.NULL);
+            receiver, ObjC.sel(selector), first, second, third, MemorySegment.NULL);
   }
 
   /**
@@ -413,52 +417,52 @@ public class ObjC {
       boolean defer) {
     return (MemorySegment)
         MSG_ID_RECT_LONG_LONG_BOOL.invokeExact(
-            receiver, sel(selector), rect, styleMask, backing, defer);
+            receiver, ObjC.sel(selector), rect, styleMask, backing, defer);
   }
 
   /** Sends {@code selector} to {@code receiver}: {@code id -[receiver selector:id:id]}. */
   @SneakyThrows
   public MemorySegment sendWithRect(
       MemorySegment receiver, String selector, MemorySegment rect, MemorySegment argument) {
-    return (MemorySegment) MSG_ID_RECT_ID.invokeExact(receiver, sel(selector), rect, argument);
+    return (MemorySegment) MSG_ID_RECT_ID.invokeExact(receiver, ObjC.sel(selector), rect, argument);
   }
 
   /** Sends {@code selector} to {@code receiver}: {@code void -[receiver selector]}. */
   @SneakyThrows
   public void sendVoid(MemorySegment receiver, String selector) {
-    MSG_VOID.invokeExact(receiver, sel(selector));
+    MSG_VOID.invokeExact(receiver, ObjC.sel(selector));
   }
 
   /** Sends {@code selector} to {@code receiver}: {@code void -[receiver selector:id]}. */
   @SneakyThrows
   public void sendVoid(MemorySegment receiver, String selector, MemorySegment argument) {
-    MSG_VOID_ID.invokeExact(receiver, sel(selector), argument);
+    MSG_VOID_ID.invokeExact(receiver, ObjC.sel(selector), argument);
   }
 
   /** Sends {@code selector} to {@code receiver}: {@code void -[receiver selector:id:id]}. */
   @SneakyThrows
   public void sendVoid(
       MemorySegment receiver, String selector, MemorySegment first, MemorySegment second) {
-    MSG_VOID_ID_ID.invokeExact(receiver, sel(selector), first, second);
+    MSG_VOID_ID_ID.invokeExact(receiver, ObjC.sel(selector), first, second);
   }
 
   /** Sends {@code selector} to {@code receiver}: {@code void -[receiver selector:id:BOOL]}. */
   @SneakyThrows
   public void sendVoid(
       MemorySegment receiver, String selector, MemorySegment first, boolean second) {
-    MSG_VOID_ID_BOOL.invokeExact(receiver, sel(selector), first, second);
+    MSG_VOID_ID_BOOL.invokeExact(receiver, ObjC.sel(selector), first, second);
   }
 
   /** Sends {@code selector} to {@code receiver}: {@code void -[receiver selector:id:NSInteger]}. */
   @SneakyThrows
   public void sendVoid(MemorySegment receiver, String selector, MemorySegment buffer, long length) {
-    MSG_VOID_POINTER_LONG.invokeExact(receiver, sel(selector), buffer, length);
+    MSG_VOID_POINTER_LONG.invokeExact(receiver, ObjC.sel(selector), buffer, length);
   }
 
   /** Sends {@code selector} to {@code receiver}: {@code void -[receiver selector:NSInteger]}. */
   @SneakyThrows
   public void sendVoid(MemorySegment receiver, String selector, long argument) {
-    MSG_VOID_LONG.invokeExact(receiver, sel(selector), argument);
+    MSG_VOID_LONG.invokeExact(receiver, ObjC.sel(selector), argument);
   }
 
   /**
@@ -466,19 +470,19 @@ public class ObjC {
    */
   @SneakyThrows
   public void sendVoid(MemorySegment receiver, String selector, long first, MemorySegment second) {
-    MSG_VOID_LONG_ID.invokeExact(receiver, sel(selector), first, second);
+    MSG_VOID_LONG_ID.invokeExact(receiver, ObjC.sel(selector), first, second);
   }
 
   /** Sends {@code selector} to {@code receiver}: {@code void -[receiver selector:BOOL]}. */
   @SneakyThrows
   public void sendVoid(MemorySegment receiver, String selector, boolean argument) {
-    MSG_VOID_BOOL.invokeExact(receiver, sel(selector), argument);
+    MSG_VOID_BOOL.invokeExact(receiver, ObjC.sel(selector), argument);
   }
 
   /** Sends {@code selector} to {@code receiver}: {@code void -[receiver selector:id]}. */
   @SneakyThrows
   public void sendVoidSize(MemorySegment receiver, String selector, MemorySegment size) {
-    MSG_VOID_SIZE.invokeExact(receiver, sel(selector), size);
+    MSG_VOID_SIZE.invokeExact(receiver, ObjC.sel(selector), size);
   }
 
   /**
@@ -487,31 +491,31 @@ public class ObjC {
    */
   @SneakyThrows
   public long sendLong(MemorySegment receiver, String selector, MemorySegment buffer, long length) {
-    return (long) MSG_LONG_POINTER_LONG.invokeExact(receiver, sel(selector), buffer, length);
+    return (long) MSG_LONG_POINTER_LONG.invokeExact(receiver, ObjC.sel(selector), buffer, length);
   }
 
   /** Sends {@code selector} to {@code receiver}: {@code NSInteger -[receiver selector]}. */
   @SneakyThrows
   public long sendLong(MemorySegment receiver, String selector) {
-    return (long) MSG_LONG.invokeExact(receiver, sel(selector));
+    return (long) MSG_LONG.invokeExact(receiver, ObjC.sel(selector));
   }
 
   /** Sends {@code selector} to {@code receiver}: {@code BOOL -[receiver selector]}. */
   @SneakyThrows
   public boolean sendBool(MemorySegment receiver, String selector) {
-    return (boolean) MSG_BOOL.invokeExact(receiver, sel(selector));
+    return (boolean) MSG_BOOL.invokeExact(receiver, ObjC.sel(selector));
   }
 
   /** Sends {@code selector} to {@code receiver}: {@code BOOL -[receiver selector:id]}. */
   @SneakyThrows
   public boolean sendBool(MemorySegment receiver, String selector, MemorySegment argument) {
-    return (boolean) MSG_BOOL_ID.invokeExact(receiver, sel(selector), argument);
+    return (boolean) MSG_BOOL_ID.invokeExact(receiver, ObjC.sel(selector), argument);
   }
 
   /** Sends {@code selector} to {@code receiver}: {@code BOOL -[receiver selector:NSInteger]}. */
   @SneakyThrows
   public boolean sendBool(MemorySegment receiver, String selector, long argument) {
-    return (boolean) MSG_BOOL_LONG.invokeExact(receiver, sel(selector), argument);
+    return (boolean) MSG_BOOL_LONG.invokeExact(receiver, ObjC.sel(selector), argument);
   }
 
   /** The one eleven-argument send in the backend. See {@link AppKit#stopRunLoop}. */
@@ -531,7 +535,7 @@ public class ObjC {
     return (MemorySegment)
         MSG_OTHER_EVENT.invokeExact(
             receiver,
-            sel(selector),
+            ObjC.sel(selector),
             type,
             location,
             modifierFlags,

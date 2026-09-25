@@ -40,7 +40,7 @@ public abstract class RpcContractTest extends DisplayContractTest {
       Window window = application.open();
       window.handle("echo", call -> call.reply(call.body(), "application/octet-stream"));
       JsonNode result =
-          run(
+          RpcContractTest.run(
               window,
               """
               const data = new Uint8Array(262144);
@@ -70,7 +70,7 @@ public abstract class RpcContractTest extends DisplayContractTest {
           });
       window.handle("nothing", _ -> {});
       JsonNode result =
-          run(
+          RpcContractTest.run(
               window,
               """
               const greeting = await (await lwjwae.call("greet", "Ann")).text();
@@ -105,7 +105,7 @@ public abstract class RpcContractTest extends DisplayContractTest {
             }
           });
       JsonNode result =
-          run(
+          RpcContractTest.run(
               window,
               """
               const start = performance.now();
@@ -151,7 +151,7 @@ public abstract class RpcContractTest extends DisplayContractTest {
             }
           });
       JsonNode result =
-          run(
+          RpcContractTest.run(
               window,
               """
               const controller = new AbortController();
@@ -186,7 +186,7 @@ public abstract class RpcContractTest extends DisplayContractTest {
             throw new IllegalStateException("Boom");
           });
       JsonNode result =
-          run(
+          RpcContractTest.run(
               window,
               """
               const outcome = async (name) => {
@@ -217,15 +217,16 @@ public abstract class RpcContractTest extends DisplayContractTest {
       own.handle("who", call -> call.reply("window"));
       Window other = application.open();
       String script = "return { who: await (await lwjwae.call(\"who\")).text() };";
-      Assertions.assertEquals("window", run(own, script).path("who").asText());
-      Assertions.assertEquals("application", run(other, script).path("who").asText());
+      Assertions.assertEquals("window", RpcContractTest.run(own, script).path("who").asText());
+      Assertions.assertEquals(
+          "application", RpcContractTest.run(other, script).path("who").asText());
     }
   }
 
   @Test
   void developmentServerMayCallAndOtherOriginsMayNot() throws Exception {
-    HttpServer development = pageServer();
-    HttpServer stranger = pageServer();
+    HttpServer development = RpcContractTest.pageServer();
+    HttpServer stranger = RpcContractTest.pageServer();
     String developmentUrl = "http://127.0.0.1:" + development.getAddress().getPort();
     ApplicationParameters parameters =
         ApplicationParameters.builder().devServerUrl(developmentUrl).build();
@@ -236,10 +237,11 @@ public abstract class RpcContractTest extends DisplayContractTest {
           try { return { answer: await (await lwjwae.call("ping")).text(), origin: location.origin }; }
           catch (error) { return { status: error.status, code: error.code, origin: location.origin }; }
           """;
-      JsonNode allowed = run(application.open(), script, developmentUrl + "/rpc/blank.html");
+      JsonNode allowed =
+          RpcContractTest.run(application.open(), script, developmentUrl + "/rpc/blank.html");
       Assertions.assertEquals("pong", allowed.path("answer").asText(), allowed.toString());
       JsonNode refused =
-          run(
+          RpcContractTest.run(
               application.open(),
               script,
               "http://127.0.0.1:" + stranger.getAddress().getPort() + "/rpc/blank.html");
@@ -278,7 +280,7 @@ public abstract class RpcContractTest extends DisplayContractTest {
             }
           });
       JsonNode result =
-          run(
+          RpcContractTest.run(
               window,
               """
               const time = async (count, call) => {
@@ -315,7 +317,7 @@ public abstract class RpcContractTest extends DisplayContractTest {
    * result.
    */
   private static JsonNode run(Window window, String body) throws Exception {
-    return run(window, body, null);
+    return RpcContractTest.run(window, body, null);
   }
 
   /**
@@ -343,7 +345,7 @@ public abstract class RpcContractTest extends DisplayContractTest {
             + body
             + "})()); } catch (error) { window.__report = JSON.stringify({ failed: String(error)"
             + " }); } })();");
-    JsonNode result = JSON.readTree(awaitReport(window));
+    JsonNode result = JSON.readTree(RpcContractTest.awaitReport(window));
     Assertions.assertFalse(result.has("failed"), "the page script failed: " + result);
     return result;
   }

@@ -56,12 +56,12 @@ public class Shell32 {
   private final MethodHandle SHELL_NOTIFY_ICON =
       NativeLibraries.downcall(SHELL32, "Shell_NotifyIconW", Signatures.INT_INT_POINTER);
 
-  private final VarHandle CB_SIZE = field("cbSize");
-  private final VarHandle HWND = field("hWnd");
-  private final VarHandle ID = field("uID");
-  private final VarHandle FLAGS = field("uFlags");
-  private final VarHandle CALLBACK_MESSAGE = field("uCallbackMessage");
-  private final VarHandle ICON = field("hIcon");
+  private final VarHandle CB_SIZE = Shell32.field("cbSize");
+  private final VarHandle HWND = Shell32.field("hWnd");
+  private final VarHandle ID = Shell32.field("uID");
+  private final VarHandle FLAGS = Shell32.field("uFlags");
+  private final VarHandle CALLBACK_MESSAGE = Shell32.field("uCallbackMessage");
+  private final VarHandle ICON = Shell32.field("hIcon");
   private final long TIP_OFFSET =
       Signatures.NOTIFYICONDATAW.byteOffset(MemoryLayout.PathElement.groupElement("szTip"));
 
@@ -116,21 +116,21 @@ public class Shell32 {
    * @throws IllegalStateException If the shell refuses, for example with no taskbar running.
    */
   public void add(MemorySegment hwnd, int id, int callbackMessage, MemorySegment icon, String tip) {
-    notify(NIM_ADD, hwnd, id, NIF_MESSAGE | NIF_ICON | NIF_TIP, callbackMessage, icon, tip);
+    Shell32.notify(NIM_ADD, hwnd, id, NIF_MESSAGE | NIF_ICON | NIF_TIP, callbackMessage, icon, tip);
   }
 
   /**
    * Changes the parts of the icon that {@code flags} names: {@link #NIF_ICON}, {@link #NIF_TIP}.
    */
   public void modify(MemorySegment hwnd, int id, int flags, MemorySegment icon, String tip) {
-    notify(NIM_MODIFY, hwnd, id, flags, 0, icon, tip);
+    Shell32.notify(NIM_MODIFY, hwnd, id, flags, 0, icon, tip);
   }
 
   /** Removes the icon. A missing icon is not an error: the shell may have dropped it already. */
   @SneakyThrows
   public void delete(MemorySegment hwnd, int id) {
     try (Arena arena = Arena.ofConfined()) {
-      MemorySegment data = header(arena, hwnd, id, 0);
+      MemorySegment data = Shell32.header(arena, hwnd, id, 0);
       int _ = (int) SHELL_NOTIFY_ICON.invokeExact(NIM_DELETE, data);
     }
   }
@@ -145,7 +145,7 @@ public class Shell32 {
       MemorySegment icon,
       String tip) {
     try (Arena arena = Arena.ofConfined()) {
-      MemorySegment data = header(arena, hwnd, id, flags);
+      MemorySegment data = Shell32.header(arena, hwnd, id, flags);
       CALLBACK_MESSAGE.set(data, 0L, callbackMessage);
       ICON.set(data, 0L, icon == null ? MemorySegment.NULL : icon);
       String text = tip == null ? "" : tip;

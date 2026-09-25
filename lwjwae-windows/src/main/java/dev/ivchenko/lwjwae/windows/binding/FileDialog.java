@@ -154,7 +154,7 @@ public class FileDialog {
       Com.check("GetResult", Com.call(dialog, GET_RESULT, out));
       MemorySegment item = Com.pointerAt(out);
       try {
-        return path(item);
+        return FileDialog.path(item);
       } finally {
         Com.release(item);
       }
@@ -176,7 +176,7 @@ public class FileDialog {
           Com.check("GetItemAt", Com.call(array, ARRAY_GET_ITEM_AT, index, itemOut));
           MemorySegment item = Com.pointerAt(itemOut);
           try {
-            paths.add(path(item));
+            paths.add(FileDialog.path(item));
           } finally {
             Com.release(item);
           }

@@ -63,13 +63,14 @@ class MacDialogs {
     ObjC.sendVoid(panel, "setCanChooseFiles:", !parameters.directories());
     ObjC.sendVoid(panel, "setCanChooseDirectories:", parameters.directories());
     ObjC.sendVoid(panel, "setAllowsMultipleSelection:", parameters.multiple());
-    setUp(panel, parameters.title(), parameters.directory(), parameters.fileTypes());
-    present(
+    MacDialogs.setUp(panel, parameters.title(), parameters.directory(), parameters.fileTypes());
+    MacDialogs.present(
         window,
         panel,
         panel,
         completion,
-        response -> completion.complete(response == RESPONSE_OK ? paths(panel) : List.of()));
+        response ->
+            completion.complete(response == RESPONSE_OK ? MacDialogs.paths(panel) : List.of()));
   }
 
   /** Shows the panel that saves a file as a sheet of {@code window}. */
@@ -81,8 +82,8 @@ class MacDialogs {
     if (parameters.fileName() != null) {
       ObjC.sendVoid(panel, "setNameFieldStringValue:", Foundation.string(parameters.fileName()));
     }
-    setUp(panel, parameters.title(), parameters.directory(), parameters.fileTypes());
-    present(
+    MacDialogs.setUp(panel, parameters.title(), parameters.directory(), parameters.fileTypes());
+    MacDialogs.present(
         window,
         panel,
         panel,
@@ -90,7 +91,8 @@ class MacDialogs {
         response ->
             completion.complete(
                 response == RESPONSE_OK
-                    ? Optional.of(Path.of(Foundation.string(pathOf(ObjC.send(panel, "URL")))))
+                    ? Optional.of(
+                        Path.of(Foundation.string(MacDialogs.pathOf(ObjC.send(panel, "URL")))))
                     : Optional.empty()));
   }
 
@@ -122,7 +124,7 @@ class MacDialogs {
     for (String title : buttons) {
       MemorySegment _ = ObjC.send(alert, "addButtonWithTitle:", Foundation.string(title));
     }
-    present(
+    MacDialogs.present(
         window,
         alert,
         ObjC.send(alert, "window"),
@@ -151,7 +153,7 @@ class MacDialogs {
     // stands for every file.
     boolean everyFile = fileTypes.stream().anyMatch(type -> type.extensions().isEmpty());
     if (!extensions.isEmpty() && !everyFile) {
-      ObjC.sendVoid(panel, "setAllowedFileTypes:", array(extensions));
+      ObjC.sendVoid(panel, "setAllowedFileTypes:", MacDialogs.array(extensions));
     }
   }
 
@@ -196,7 +198,8 @@ class MacDialogs {
     long count = ObjC.sendLong(urls, "count");
     List<Path> paths = new ArrayList<>();
     for (long index = 0; index < count; index++) {
-      paths.add(Path.of(Foundation.string(pathOf(ObjC.send(urls, "objectAtIndex:", index)))));
+      paths.add(
+          Path.of(Foundation.string(MacDialogs.pathOf(ObjC.send(urls, "objectAtIndex:", index)))));
     }
     return paths;
   }
