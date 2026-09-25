@@ -1,5 +1,7 @@
 package dev.ivchenko.lwjwae.notification;
 
+import dev.ivchenko.lwjwae.exception.ResourceNotFoundException;
+import dev.ivchenko.lwjwae.util.ResourceUtil;
 import java.util.List;
 import lombok.Builder;
 
@@ -15,14 +17,16 @@ import lombok.Builder;
  * Notification.builder()
  *     .title("Export finished")
  *     .body("report.pdf, 12 pages")
- *     .actions(List.of(new NotificationAction("Open folder", this::openFolder)))
+ *     .icon("app/export.png")
+ *     .actions(new NotificationAction("Open folder", this::openFolder))
  *     .onActivate(window::show)
  *     .build()
  * }</pre>
  *
  * @param title The first line, in bold on most desktops. Required.
  * @param body The text under the title. Default: none.
- * @param icon The PNG bytes of an image to show next to the text. Default: none.
+ * @param icon The PNG bytes of an image to show next to the text, or a PNG among the resources of
+ *     the application through the builder. Default: none.
  * @param actions The buttons, in order. Desktops show a few at most, often two or three, and some
  *     none. Default: none.
  * @param onActivate What happens when the user clicks the notification itself rather than a button,
@@ -42,5 +46,43 @@ public record Notification(
       actions = List.of();
     }
     actions = List.copyOf(actions);
+  }
+
+  /** A notification with a title and a body, and nothing else. */
+  public static Notification of(String title, String body) {
+    return Notification.builder().title(title).body(body).build();
+  }
+
+  /**
+   * The builder, which also takes the image from the resources of the application and the buttons
+   * as separate entries. Lombok leaves out a method whose name is already here, so the plain ones
+   * are here too.
+   */
+  public static class NotificationBuilder {
+    /** The PNG bytes of the image. */
+    public NotificationBuilder icon(byte[] icon) {
+      this.icon = icon;
+      return this;
+    }
+
+    /**
+     * A PNG among the resources of the application, such as {@code "app/export.png"}.
+     *
+     * @throws ResourceNotFoundException If the classpath has no such resource.
+     */
+    public NotificationBuilder icon(String resource) {
+      return this.icon(ResourceUtil.read(resource));
+    }
+
+    /** The buttons, in order. */
+    public NotificationBuilder actions(List<NotificationAction> actions) {
+      this.actions = actions;
+      return this;
+    }
+
+    /** The same as {@link #actions(List)}. */
+    public NotificationBuilder actions(NotificationAction... actions) {
+      return this.actions(List.of(actions));
+    }
   }
 }

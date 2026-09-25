@@ -244,6 +244,19 @@ class AbstractWindowTest {
   }
 
   @Test
+  void handlerRepliesWithResourceOfTheTypeOfItsExtension() throws Exception {
+    try (FakeApplication application = new FakeApplication()) {
+      FakeWindow window = application.openFake();
+      window.handle("hello", call -> call.replyResource("fixtures/hello.txt"));
+      window.call(6, "hello", "");
+      RpcReply reply = window.awaitReply(6);
+      Assertions.assertEquals(200, reply.status());
+      Assertions.assertTrue(reply.contentType().startsWith("text/plain"), reply.contentType());
+      Assertions.assertEquals("hello from the classpath", reply.body().strip());
+    }
+  }
+
+  @Test
   void anUnknownNameIsRejectedOnThePageSide() throws Exception {
     try (FakeApplication application = new FakeApplication()) {
       FakeWindow window = application.openFake();

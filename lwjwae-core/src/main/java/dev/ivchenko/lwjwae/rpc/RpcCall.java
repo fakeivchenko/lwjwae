@@ -1,6 +1,9 @@
 package dev.ivchenko.lwjwae.rpc;
 
 import dev.ivchenko.lwjwae.Window;
+import dev.ivchenko.lwjwae.exception.ResourceNotFoundException;
+import dev.ivchenko.lwjwae.util.MimeTypeUtil;
+import dev.ivchenko.lwjwae.util.ResourceUtil;
 
 /**
  * One call from a page: the body that it sent, and the way to answer it.
@@ -39,6 +42,16 @@ public interface RpcCall {
 
   /** Answers with {@code text}, as {@code text/plain} in UTF-8. */
   void reply(String text);
+
+  /**
+   * Answers with a file among the resources of the application, such as {@code "app/report.pdf"},
+   * of the media type that its extension names.
+   *
+   * @throws ResourceNotFoundException If the classpath has no such resource.
+   */
+  default void replyResource(String resource) {
+    this.reply(ResourceUtil.read(resource), MimeTypeUtil.of(resource));
+  }
 
   /**
    * Answers with {@code value} encoded by the codec of the application: what {@code lwjwae.invoke}
