@@ -243,7 +243,16 @@ public class MacWindow extends AbstractWindow {
 
   @Override
   public void size(int width, int height) {
-    this.dispatcher().run(() -> AppKit.setContentSize(this.window(), width, height));
+    // AppKit keeps only the user within the limits, not setContentSize:.
+    WindowSize minimum = this.minimumSize;
+    WindowSize maximum = this.maximumSize;
+    this.dispatcher()
+        .run(
+            () ->
+                AppKit.setContentSize(
+                    this.window(),
+                    clamp(width, minimum.width(), maximum.width()),
+                    clamp(height, minimum.height(), maximum.height())));
   }
 
   @Override

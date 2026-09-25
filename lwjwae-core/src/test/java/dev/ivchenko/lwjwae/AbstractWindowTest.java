@@ -607,7 +607,8 @@ class AbstractWindowTest {
           List.of(FileType.of("Images", "png", "jpg"), FileType.of("Text", "txt")),
           parameters.fileTypes());
       open.answer(List.of(Path.of("/home/a.png"), Path.of("/home/b.png")));
-      Assertions.assertEquals("/home/a.png" + SEP + "/home/b.png", window.awaitReply(1).body());
+      Assertions.assertEquals(
+          Path.of("/home/a.png") + SEP + Path.of("/home/b.png"), window.awaitReply(1).body());
 
       window.call(2, BridgeProtocol.DIALOG_CALL, String.join(SEP, "save", "", "", "a.txt", ""));
       PresentedDialog save = window.dialogs.poll(5, TimeUnit.SECONDS);
