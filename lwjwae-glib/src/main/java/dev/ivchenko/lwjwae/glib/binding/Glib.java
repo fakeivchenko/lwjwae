@@ -55,6 +55,15 @@ public class Glib {
       NativeLibraries.downcall(GOBJECT, "g_type_check_instance_is_a", Signatures.INT_POINTER_LONG);
   private final MethodHandle OBJECT_UNREF =
       NativeLibraries.downcall(GOBJECT, "g_object_unref", Signatures.VOID_POINTER);
+  private final MethodHandle VALUE_INIT =
+      NativeLibraries.downcall(GOBJECT, "g_value_init", Signatures.POINTER_POINTER_LONG);
+  private final MethodHandle VALUE_GET_STRING =
+      NativeLibraries.downcall(GOBJECT, "g_value_get_string", Signatures.POINTER_POINTER);
+  private final MethodHandle VALUE_UNSET =
+      NativeLibraries.downcall(GOBJECT, "g_value_unset", Signatures.VOID_POINTER);
+  private final MethodHandle OBJECT_GET_PROPERTY =
+      NativeLibraries.downcall(
+          GOBJECT, "g_object_get_property", Signatures.VOID_POINTER_POINTER_POINTER);
   private final MethodHandle MALLOC =
       NativeLibraries.downcall(GLIB, "g_malloc", Signatures.POINTER_LONG);
   private final MethodHandle QUARK_FROM_STRING =
@@ -119,6 +128,32 @@ public class Glib {
   @SneakyThrows
   public boolean typeCheckInstanceIsA(MemorySegment instance, long type) {
     return (int) TYPE_CHECK_INSTANCE_IS_A.invokeExact(instance, type) != 0;
+  }
+
+  /** {@code G_TYPE_STRING}: fundamental type 16, shifted as GObject stores fundamentals. */
+  private final long TYPE_STRING = 16L << 2;
+
+  /** {@code sizeof(GValue)}: the type, and two 8-byte words of data. */
+  private final long VALUE_SIZE = 24;
+
+  /**
+   * Reads a string property of a GObject through {@code g_object_get_property}, which takes a
+   * {@code GValue} where {@code g_object_get} would need a variadic call.
+   *
+   * @return The value, or {@code null} when the property is unset.
+   */
+  @SneakyThrows
+  public String stringProperty(MemorySegment object, String name) {
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment value = arena.allocate(VALUE_SIZE, 8);
+      MemorySegment _ = (MemorySegment) VALUE_INIT.invokeExact(value, TYPE_STRING);
+      try {
+        OBJECT_GET_PROPERTY.invokeExact(object, arena.allocateFrom(name), value);
+        return NativeLibraries.string((MemorySegment) VALUE_GET_STRING.invokeExact(value));
+      } finally {
+        VALUE_UNSET.invokeExact(value);
+      }
+    }
   }
 
   /** Calls {@code g_object_unref}. */

@@ -41,6 +41,17 @@ import lombok.Builder;
  *     maximized, from one run of the application to the next, in {@link
  *     ApplicationParameters#dataDirectory()}. What it remembers wins over the size and the position
  *     here. Default: none, and the window opens as these parameters say every time.
+ * @param decorated Whether the window has a title bar. Without one, the page draws its own and
+ *     marks where the user can grab the window with {@code data-lwjwae-drag}; the window keeps its
+ *     shadow, its corners, and its resize edges where the platform has them. Default: {@code true}.
+ * @param closable Whether the user can close the window: its close button, and the shortcut and the
+ *     menus of the desktop. {@link Window#close()} and {@code window.lwjwae.close()} still close
+ *     it. Default: {@code true}.
+ * @param minimizable Whether the title bar has a minimize button. {@link Window#minimize()} works
+ *     either way. Default: {@code true}.
+ * @param maximizable Whether the title bar has a maximize button, and a double click on it or on a
+ *     drag region of the page maximizes the window. {@link Window#maximize()} works either way.
+ *     Default: {@code true}.
  */
 @Builder(toBuilder = true)
 public record WindowParameters(
@@ -56,7 +67,11 @@ public record WindowParameters(
     WindowSize minimumSize,
     WindowSize maximumSize,
     boolean alwaysOnTop,
-    String stateKey) {
+    String stateKey,
+    Boolean decorated,
+    Boolean closable,
+    Boolean minimizable,
+    Boolean maximizable) {
   private static final String DEFAULT_TITLE = "Application";
   private static final int DEFAULT_WIDTH = 1024;
   private static final int DEFAULT_HEIGHT = 768;
@@ -92,6 +107,18 @@ public record WindowParameters(
     }
     if (stateKey != null && stateKey.isBlank()) {
       stateKey = null;
+    }
+    if (decorated == null) {
+      decorated = true;
+    }
+    if (closable == null) {
+      closable = true;
+    }
+    if (minimizable == null) {
+      minimizable = true;
+    }
+    if (maximizable == null) {
+      maximizable = true;
     }
   }
 

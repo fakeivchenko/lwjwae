@@ -78,6 +78,68 @@ public class Gtk {
       NativeLibraries.downcall(GTK, "gtk_widget_set_visible", Signatures.VOID_POINTER_INT);
   private final MethodHandle WIDGET_GET_VISIBLE =
       NativeLibraries.downcall(GTK, "gtk_widget_get_visible", Signatures.INT_POINTER);
+  private final MethodHandle WINDOW_SET_TITLEBAR =
+      NativeLibraries.downcall(GTK, "gtk_window_set_titlebar", Signatures.VOID_POINTER_POINTER);
+  private final MethodHandle WINDOW_SET_DELETABLE =
+      NativeLibraries.downcall(GTK, "gtk_window_set_deletable", Signatures.VOID_POINTER_INT);
+  private final MethodHandle BOX_NEW =
+      NativeLibraries.downcall(GTK, "gtk_box_new", Signatures.POINTER_INT_INT);
+  private final MethodHandle HEADER_BAR_NEW =
+      NativeLibraries.downcall(GTK, "gtk_header_bar_new", Signatures.POINTER_VOID);
+  private final MethodHandle HEADER_BAR_SET_DECORATION_LAYOUT =
+      NativeLibraries.downcall(
+          GTK, "gtk_header_bar_set_decoration_layout", Signatures.VOID_POINTER_POINTER);
+  private final MethodHandle WIDGET_ADD_CSS_CLASS =
+      NativeLibraries.downcall(GTK, "gtk_widget_add_css_class", Signatures.VOID_POINTER_POINTER);
+  private final MethodHandle SETTINGS_GET_DEFAULT =
+      NativeLibraries.downcall(GTK, "gtk_settings_get_default", Signatures.POINTER_VOID);
+  private final MethodHandle DISPLAY_GET_DEFAULT =
+      NativeLibraries.downcall(GTK, "gdk_display_get_default", Signatures.POINTER_VOID);
+  private final MethodHandle DISPLAY_GET_DEFAULT_SEAT =
+      NativeLibraries.downcall(GTK, "gdk_display_get_default_seat", Signatures.POINTER_POINTER);
+  private final MethodHandle SEAT_GET_POINTER =
+      NativeLibraries.downcall(GTK, "gdk_seat_get_pointer", Signatures.POINTER_POINTER);
+  private final MethodHandle SURFACE_GET_DEVICE_POSITION =
+      NativeLibraries.downcall(
+          GTK, "gdk_surface_get_device_position", Signatures.GDK_SURFACE_GET_DEVICE_POSITION);
+  private final MethodHandle TOPLEVEL_BEGIN_MOVE =
+      NativeLibraries.downcall(GTK, "gdk_toplevel_begin_move", Signatures.GDK_TOPLEVEL_BEGIN_MOVE);
+  private final MethodHandle TOPLEVEL_BEGIN_RESIZE =
+      NativeLibraries.downcall(
+          GTK, "gdk_toplevel_begin_resize", Signatures.GDK_TOPLEVEL_BEGIN_RESIZE);
+
+  /** {@code GTK_ORIENTATION_HORIZONTAL}. */
+  public final int ORIENTATION_HORIZONTAL = 0;
+
+  /** {@code GDK_SURFACE_EDGE_NORTH_WEST}; the other edges follow clockwise from the west ones. */
+  public final int EDGE_NORTH_WEST = 0;
+
+  /** {@code GDK_SURFACE_EDGE_NORTH}. */
+  public final int EDGE_NORTH = 1;
+
+  /** {@code GDK_SURFACE_EDGE_NORTH_EAST}. */
+  public final int EDGE_NORTH_EAST = 2;
+
+  /** {@code GDK_SURFACE_EDGE_WEST}. */
+  public final int EDGE_WEST = 3;
+
+  /** {@code GDK_SURFACE_EDGE_EAST}. */
+  public final int EDGE_EAST = 4;
+
+  /** {@code GDK_SURFACE_EDGE_SOUTH_WEST}. */
+  public final int EDGE_SOUTH_WEST = 5;
+
+  /** {@code GDK_SURFACE_EDGE_SOUTH}. */
+  public final int EDGE_SOUTH = 6;
+
+  /** {@code GDK_SURFACE_EDGE_SOUTH_EAST}. */
+  public final int EDGE_SOUTH_EAST = 7;
+
+  /** {@code GDK_BUTTON1_MASK}: the first button is down. */
+  private final int BUTTON1_MASK = 1 << 8;
+
+  /** {@code GDK_CURRENT_TIME}. */
+  private final int CURRENT_TIME = 0;
 
   /**
    * Calls {@code gtk_init_check()}: initializes GTK on the calling thread, which becomes the GTK
@@ -275,5 +337,108 @@ public class Gtk {
   @SneakyThrows
   public MemorySegment windowSurface(MemorySegment window) {
     return (MemorySegment) NATIVE_GET_SURFACE.invokeExact(window);
+  }
+
+  /**
+   * Calls {@code gtk_window_set_titlebar}: the widget takes the place of the title bar, and the
+   * window draws its own decorations. Before the window is shown.
+   */
+  @SneakyThrows
+  public void windowSetTitlebar(MemorySegment window, MemorySegment titlebar) {
+    WINDOW_SET_TITLEBAR.invokeExact(window, titlebar);
+  }
+
+  /** Calls {@code gtk_window_set_deletable}: whether the title bar has a close button. */
+  @SneakyThrows
+  public void windowSetDeletable(MemorySegment window, boolean deletable) {
+    WINDOW_SET_DELETABLE.invokeExact(window, deletable ? 1 : 0);
+  }
+
+  /** Calls {@code gtk_box_new}. */
+  @SneakyThrows
+  public MemorySegment boxNew(int orientation, int spacing) {
+    return (MemorySegment) BOX_NEW.invokeExact(orientation, spacing);
+  }
+
+  /** Calls {@code gtk_header_bar_new}: a bar that shows the title of its window. */
+  @SneakyThrows
+  public MemorySegment headerBarNew() {
+    return (MemorySegment) HEADER_BAR_NEW.invokeExact();
+  }
+
+  /** Calls {@code gtk_header_bar_set_decoration_layout}: which window buttons, on which side. */
+  @SneakyThrows
+  public void headerBarSetDecorationLayout(MemorySegment headerBar, String layout) {
+    try (Arena arena = Arena.ofConfined()) {
+      HEADER_BAR_SET_DECORATION_LAYOUT.invokeExact(headerBar, arena.allocateFrom(layout));
+    }
+  }
+
+  /** Calls {@code gtk_widget_add_css_class}. */
+  @SneakyThrows
+  public void widgetAddCssClass(MemorySegment widget, String cssClass) {
+    try (Arena arena = Arena.ofConfined()) {
+      WIDGET_ADD_CSS_CLASS.invokeExact(widget, arena.allocateFrom(cssClass));
+    }
+  }
+
+  /** Calls {@code gtk_settings_get_default}: the settings of the desktop, which GTK owns. */
+  @SneakyThrows
+  public MemorySegment settingsGetDefault() {
+    return (MemorySegment) SETTINGS_GET_DEFAULT.invokeExact();
+  }
+
+  /**
+   * Hands the pointer to the window manager, which moves the window until the first button is
+   * released: {@code gdk_toplevel_begin_move} with the pointer of the default seat, where it is on
+   * the surface. Does nothing once the button is up, as it may be after a quick click: a window
+   * manager of X11 would start a move all the same and keep it until the next click.
+   */
+  @SneakyThrows
+  public void toplevelBeginMove(MemorySegment surface) {
+    MemorySegment pointer = defaultPointer();
+    try (Arena arena = Arena.ofConfined()) {
+      double[] position = pressedPosition(arena, surface, pointer);
+      if (position != null) {
+        TOPLEVEL_BEGIN_MOVE.invokeExact(
+            surface, pointer, 1, position[0], position[1], CURRENT_TIME);
+      }
+    }
+  }
+
+  /**
+   * The same as {@link #toplevelBeginMove} for a resize from a {@code GdkSurfaceEdge}: {@code
+   * gdk_toplevel_begin_resize}.
+   */
+  @SneakyThrows
+  public void toplevelBeginResize(MemorySegment surface, int edge) {
+    MemorySegment pointer = defaultPointer();
+    try (Arena arena = Arena.ofConfined()) {
+      double[] position = pressedPosition(arena, surface, pointer);
+      if (position != null) {
+        TOPLEVEL_BEGIN_RESIZE.invokeExact(
+            surface, edge, pointer, 1, position[0], position[1], CURRENT_TIME);
+      }
+    }
+  }
+
+  @SneakyThrows
+  private MemorySegment defaultPointer() {
+    MemorySegment display = (MemorySegment) DISPLAY_GET_DEFAULT.invokeExact();
+    MemorySegment seat = (MemorySegment) DISPLAY_GET_DEFAULT_SEAT.invokeExact(display);
+    return (MemorySegment) SEAT_GET_POINTER.invokeExact(seat);
+  }
+
+  /** Where the pointer is on the surface, or {@code null} when its first button is up. */
+  @SneakyThrows
+  private double[] pressedPosition(Arena arena, MemorySegment surface, MemorySegment device) {
+    MemorySegment x = arena.allocate(Signatures.C_DOUBLE);
+    MemorySegment y = arena.allocate(Signatures.C_DOUBLE);
+    MemorySegment mask = arena.allocate(Signatures.C_INT);
+    int _ = (int) SURFACE_GET_DEVICE_POSITION.invokeExact(surface, device, x, y, mask);
+    if ((mask.get(Signatures.C_INT, 0) & BUTTON1_MASK) == 0) {
+      return null;
+    }
+    return new double[] {x.get(Signatures.C_DOUBLE, 0), y.get(Signatures.C_DOUBLE, 0)};
   }
 }

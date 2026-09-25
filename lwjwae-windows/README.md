@@ -200,6 +200,20 @@ the window only posts the answers:
   own size, which runs it through the limits.
 - **On top and focus.** `HWND_TOPMOST` and `WS_EX_TOPMOST`; `SetForegroundWindow` and
   `GetForegroundWindow`.
+- **Without a title bar.** The window keeps `WS_OVERLAPPEDWINDOW`, so it snaps and animates as any
+  other, and answers `WM_NCCALCSIZE` with the frame that `DefWindowProc` works out minus the part
+  above the client area. The resize edges on the left, the right, and at the bottom stay outside
+  the client area, where the web view doesn't reach; the top edge is a strip that the page lays over
+  itself. A maximized window reaches past its monitor by the width of its frame, which the client
+  area leaves out at the top too. The frame of `resizeClient` and of the limits has nothing above
+  the client area then.
+- **Buttons.** No `WS_MINIMIZEBOX` or `WS_MAXIMIZEBOX` for a window that may not have them, and
+  `Close` grayed out in its system menu, which grays out the close button and takes away `Alt+F4`;
+  `WM_CLOSE` is refused as well, since the taskbar sends it all the same.
+- **Drags from the page.** `ReleaseCapture`, then `WM_NCLBUTTONDOWN` posted with `HTCAPTION` to move
+  or `HTLEFT` and the like to resize: Windows runs the loop it runs for a press on the frame. Only
+  while the primary button is down, by `GetAsyncKeyState`: after a quick click, the loop would wait
+  for the next one.
 
 ## Evaluating scripts
 

@@ -1,6 +1,7 @@
 package dev.ivchenko.lwjwae.macos;
 
 import dev.ivchenko.lwjwae.AbstractWindow;
+import dev.ivchenko.lwjwae.WindowEdge;
 import dev.ivchenko.lwjwae.WindowParameters;
 import dev.ivchenko.lwjwae.WindowPosition;
 import dev.ivchenko.lwjwae.WindowSize;
@@ -122,13 +123,15 @@ public class MacWindow extends AbstractWindow {
   private volatile String reportedFailure;
   private volatile WindowSize minimumSize = WindowSize.NONE;
   private volatile WindowSize maximumSize = WindowSize.NONE;
+  private final boolean minimizable;
 
   /**
    * Creates the window and the web view on the main thread and returns when they exist. The window
    * is hidden until {@link #show()}.
    */
   MacWindow(MacApplication application, long id, WindowParameters parameters) {
-    super(application, id);
+    super(application, id, parameters);
+    this.minimizable = parameters.minimizable();
     this.dispatcher().run(() -> this.createWindow(parameters));
   }
 
@@ -148,7 +151,14 @@ public class MacWindow extends AbstractWindow {
     WebKit.setNavigationDelegate(newWebView, newDelegate);
 
     MemorySegment newWindow =
-        AppKit.window(parameters.width(), parameters.height(), parameters.title());
+        AppKit.window(
+            parameters.width(), parameters.height(), parameters.title(), styleMask(parameters));
+    if (!parameters.decorated()) {
+      AppKit.hideTitleBar(newWindow);
+    }
+    if (!parameters.maximizable()) {
+      AppKit.disableZoomButton(newWindow);
+    }
     AppKit.setContentView(newWindow, newWebView);
     AppKit.setDelegate(newWindow, newDelegate);
     // AppKit.window centers; a requested position wins over that, a requested center is a no-op.
@@ -165,6 +175,24 @@ public class MacWindow extends AbstractWindow {
             + CONTEXT_MENU_FLAG
             + ") event.preventDefault(); });");
     this.installBridge();
+  }
+
+  /**
+   * A titled, resizable window, with the close and minimize buttons that it may have. Without a
+   * title bar, the content reaches under it, and {@link AppKit#hideTitleBar} hides what's left.
+   */
+  private static long styleMask(WindowParameters parameters) {
+    long styleMask = AppKit.STYLE_TITLED | AppKit.STYLE_RESIZABLE;
+    if (parameters.closable()) {
+      styleMask |= AppKit.STYLE_CLOSABLE;
+    }
+    if (parameters.minimizable()) {
+      styleMask |= AppKit.STYLE_MINIATURIZABLE;
+    }
+    if (!parameters.decorated()) {
+      styleMask |= AppKit.STYLE_FULL_SIZE_CONTENT_VIEW;
+    }
+    return styleMask;
   }
 
   @Override
@@ -211,6 +239,33 @@ public class MacWindow extends AbstractWindow {
   @Override
   public void center() {
     this.dispatcher().run(() -> AppKit.center(this.window()));
+  }
+
+  @Override
+  protected void beginMove() {
+    this.dispatcher().run(() -> AppKit.performWindowDrag(this.window()));
+  }
+
+  /**
+   * Does nothing: a window on macOS keeps its resize edges without a title bar, and AppKit has no
+   * way to start a resize from code.
+   */
+  @Override
+  protected void beginResize(WindowEdge edge) {
+    this.checkOpen();
+  }
+
+  /** Does what the user chose for a double click on a title bar in the settings of the system. */
+  @Override
+  protected void titleBarDoubleClicked() {
+    String action = this.dispatcher().call(AppKit::titleBarDoubleClickAction);
+    if ("Minimize".equals(action)) {
+      if (this.minimizable) {
+        this.minimize();
+      }
+    } else if (!"None".equals(action)) {
+      super.titleBarDoubleClicked();
+    }
   }
 
   @Override
@@ -594,8 +649,9 @@ public class MacWindow extends AbstractWindow {
   // ---
 
   /**
-   * The user asked to close the window. {@code NO} cancels the close; with {@link
-   * dev.ivchenko.lwjwae.CloseAction#HIDE}, the window is ordered out instead.
+   * The user asked to close the window. {@code NO} cancels the close: a window that isn't closable
+   * refuses it, and with {@link dev.ivchenko.lwjwae.CloseAction#HIDE}, the window is ordered out
+   * instead.
    *
    * <p>Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
    * binds it by name, so no Java code calls it and the compiler sees a dead private method. {@code
@@ -608,6 +664,9 @@ public class MacWindow extends AbstractWindow {
       MemorySegment self, MemorySegment command, MemorySegment sender) {
     try {
       MacWindow window = windowOf(self);
+      if (window != null && window.refusesCloseRequest()) {
+        return false;
+      }
       if (window != null && window.hidesOnCloseRequest()) {
         AppKit.hide(window.window);
         return false;

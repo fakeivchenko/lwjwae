@@ -28,7 +28,31 @@ public class Signatures {
   /** Any {@code T*}. */
   public final AddressLayout C_POINTER = Layouts.C_POINTER;
 
+  /** {@code double}. */
+  public final ValueLayout.OfDouble C_DOUBLE = Layouts.C_DOUBLE;
+
   // --- shapes ---
+
+  /**
+   * {@code void f(GdkToplevel*, GdkDevice*, gint button, double x, double y, guint32 timestamp)}:
+   * {@code gdk_toplevel_begin_move}.
+   */
+  public final FunctionDescriptor GDK_TOPLEVEL_BEGIN_MOVE =
+      FunctionDescriptor.ofVoid(C_POINTER, C_POINTER, C_INT, C_DOUBLE, C_DOUBLE, C_INT);
+
+  /**
+   * {@code void f(GdkToplevel*, GdkSurfaceEdge, GdkDevice*, gint button, double x, double y,
+   * guint32 timestamp)}: {@code gdk_toplevel_begin_resize}.
+   */
+  public final FunctionDescriptor GDK_TOPLEVEL_BEGIN_RESIZE =
+      FunctionDescriptor.ofVoid(C_POINTER, C_INT, C_POINTER, C_INT, C_DOUBLE, C_DOUBLE, C_INT);
+
+  /**
+   * {@code gboolean f(GdkSurface*, GdkDevice*, double* x, double* y, GdkModifierType* mask)}:
+   * {@code gdk_surface_get_device_position}.
+   */
+  public final FunctionDescriptor GDK_SURFACE_GET_DEVICE_POSITION =
+      FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER);
 
   /** {@code T* f(void)}. */
   public final FunctionDescriptor POINTER_VOID = FunctionDescriptor.of(C_POINTER);
@@ -74,6 +98,9 @@ public class Signatures {
   /** {@code void f(T*, guint, const gchar*)}: {@code webkit_uri_scheme_response_set_status}. */
   public final FunctionDescriptor VOID_POINTER_INT_POINTER =
       FunctionDescriptor.ofVoid(C_POINTER, C_INT, C_POINTER);
+
+  /** {@code T* f(gint, gint)}: {@code gtk_box_new}. */
+  public final FunctionDescriptor POINTER_INT_INT = FunctionDescriptor.of(C_POINTER, C_INT, C_INT);
 
   /** {@code T* f(U*, gboolean)}: {@code g_main_loop_new}. */
   public final FunctionDescriptor POINTER_POINTER_INT =

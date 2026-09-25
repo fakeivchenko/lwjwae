@@ -15,10 +15,11 @@ on it as an API, so an application gets it with the backend and never names it.
 | [`GlibDispatcher`](src/main/java/dev/ivchenko/lwjwae/glib/GlibDispatcher.java) | The UI thread on the default GLib main context: posted work arrives through `g_idle_add`. A GTK module adds the initialization and the loop of its toolkit. |
 | [`FreedesktopNotifier`](src/main/java/dev/ivchenko/lwjwae/glib/FreedesktopNotifier.java), [`FreedesktopNotification`](src/main/java/dev/ivchenko/lwjwae/glib/FreedesktopNotification.java) | Notifications, through `org.freedesktop.Notifications`. |
 | [`StatusNotifierTray`](src/main/java/dev/ivchenko/lwjwae/glib/StatusNotifierTray.java) | A tray icon: a StatusNotifierItem and a dbusmenu, served over D-Bus. |
-| [`binding.Glib`](src/main/java/dev/ivchenko/lwjwae/glib/binding/Glib.java) | `g_*` functions: the main loop, signals, idle sources, memory streams, errors. |
+| [`binding.Glib`](src/main/java/dev/ivchenko/lwjwae/glib/binding/Glib.java) | `g_*` functions: the main loop, signals, idle sources, memory streams, errors, string properties. |
 | [`binding.Dbus`](src/main/java/dev/ivchenko/lwjwae/glib/binding/Dbus.java) | GDBus: calls, signals, exported objects, and the `GVariant` values they carry. |
 | [`binding.GdkPixbuf`](src/main/java/dev/ivchenko/lwjwae/glib/binding/GdkPixbuf.java) | A PNG decoded into the ARGB32 pixels of a tray icon. |
 | [`binding.Signatures`](src/main/java/dev/ivchenko/lwjwae/glib/binding/Signatures.java) | Every `FunctionDescriptor` the module binds, named by shape. |
+| [`util.DecorationLayoutUtil`](src/main/java/dev/ivchenko/lwjwae/glib/util/DecorationLayoutUtil.java) | The `gtk-decoration-layout` of the desktop without the buttons that a window may not have. |
 
 The toolkit bindings stay in the GTK modules on purpose. They hold `static final` method handles
 from one library, `libwebkit2gtk-4.1` or `libwebkitgtk-6.0`, and a shared class would have to keep

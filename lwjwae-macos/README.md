@@ -147,6 +147,14 @@ sent only when the state differs. On top is the floating window level; focus is 
 `setContentMinSize:` and `setContentMaxSize:` set the limits, and a window outside them is resized
 into them, since AppKit only keeps the user within them.
 
+A window without a title bar stays titled, with `NSWindowStyleMaskFullSizeContentView`, a
+transparent title bar, a hidden title, and hidden buttons, the way Electron makes a frameless
+window: a borderless one would lose the rounded corners and the shadow, and couldn't become the key
+window without a subclass. `closable` and `minimizable` are bits of the style mask; `maximizable`
+grays out the zoom button, which `zoom:` enables for the moment it zooms. A drag region moves the
+window with `performWindowDragWithEvent:` and the mouse event being handled, and a double click on
+one does what `AppleActionOnDoubleClick` says.
+
 ## Evaluating scripts
 
 `evaluateJavaScript:completionHandler:` takes a block. The backend builds one by hand:

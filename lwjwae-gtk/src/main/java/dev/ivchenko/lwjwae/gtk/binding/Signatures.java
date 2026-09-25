@@ -51,6 +51,9 @@ public class Signatures {
   /** {@code T* f(gint)}. */
   public final FunctionDescriptor POINTER_INT = FunctionDescriptor.of(C_POINTER, C_INT);
 
+  /** {@code T* f(gint, gint)}: {@code gtk_box_new}. */
+  public final FunctionDescriptor POINTER_INT_INT = FunctionDescriptor.of(C_POINTER, C_INT, C_INT);
+
   /** {@code gint f(T*)}. */
   public final FunctionDescriptor INT_POINTER = FunctionDescriptor.of(C_INT, C_POINTER);
 
@@ -86,6 +89,21 @@ public class Signatures {
   /** {@code void f(T*, gint, gint)}. */
   public final FunctionDescriptor VOID_POINTER_INT_INT =
       FunctionDescriptor.ofVoid(C_POINTER, C_INT, C_INT);
+
+  /** {@code void f(T*, U*, V*, W*)}: {@code gdk_device_get_position}. */
+  public final FunctionDescriptor VOID_POINTER_POINTER_POINTER_POINTER =
+      FunctionDescriptor.ofVoid(C_POINTER, C_POINTER, C_POINTER, C_POINTER);
+
+  /** {@code void f(T*, gint, gint, gint, guint32)}: {@code gtk_window_begin_move_drag}. */
+  public final FunctionDescriptor VOID_POINTER_INT_INT_INT_INT =
+      FunctionDescriptor.ofVoid(C_POINTER, C_INT, C_INT, C_INT, C_INT);
+
+  /**
+   * {@code void f(T*, GdkWindowEdge, gint, gint, gint, guint32)}: {@code
+   * gtk_window_begin_resize_drag}.
+   */
+  public final FunctionDescriptor VOID_POINTER_INT_INT_INT_INT_INT =
+      FunctionDescriptor.ofVoid(C_POINTER, C_INT, C_INT, C_INT, C_INT, C_INT);
 
   /** {@code void f(T*, U*, V*, gint)}: {@code gtk_window_set_geometry_hints}. */
   public final FunctionDescriptor VOID_POINTER_POINTER_POINTER_INT =

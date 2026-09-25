@@ -417,6 +417,81 @@ class AbstractWindowTest {
   }
 
   @Test
+  void thePageControlsItsWindow() throws Exception {
+    try (FakeApplication application = new FakeApplication()) {
+      FakeWindow window = application.openFake();
+      window.call(1, BridgeProtocol.CONTROL_CALL, "maximize");
+      Assertions.assertEquals(204, window.awaitReply(1).status());
+      Assertions.assertTrue(window.isMaximized());
+      window.call(2, BridgeProtocol.CONTROL_CALL, "toggle-maximize");
+      window.awaitReply(2);
+      Assertions.assertFalse(window.isMaximized());
+      window.call(3, BridgeProtocol.CONTROL_CALL, "minimize");
+      window.awaitReply(3);
+      Assertions.assertTrue(window.isMinimized());
+      window.call(4, BridgeProtocol.CONTROL_CALL, "restore");
+      window.awaitReply(4);
+      Assertions.assertFalse(window.isMinimized());
+      window.call(5, BridgeProtocol.CONTROL_CALL, "fullscreen" + SEP + "1");
+      window.awaitReply(5);
+      Assertions.assertTrue(window.isFullscreen());
+
+      window.call(6, BridgeProtocol.CONTROL_CALL, "move");
+      window.awaitReply(6);
+      window.call(7, BridgeProtocol.CONTROL_CALL, "resize" + SEP + "top-left");
+      window.awaitReply(7);
+      Assertions.assertEquals(List.of("move", "top-left"), window.drags);
+      window.call(8, BridgeProtocol.CONTROL_CALL, "resize" + SEP + "middle");
+      Assertions.assertEquals(400, window.awaitReply(8).status());
+      window.call(9, BridgeProtocol.CONTROL_CALL, "explode");
+      Assertions.assertEquals(400, window.awaitReply(9).status());
+
+      window.call(10, BridgeProtocol.CONTROL_CALL, "state");
+      RpcReply state = window.awaitReply(10);
+      Assertions.assertEquals(200, state.status());
+      Assertions.assertEquals(
+          "{\"width\":1024,\"height\":768,\"x\":0,\"y\":0,\"minimized\":false,"
+              + "\"maximized\":false,\"fullscreen\":true,\"focused\":false,\"resizable\":true}",
+          state.body());
+
+      window.call(11, BridgeProtocol.CONTROL_CALL, "close");
+      // The window is gone before the answer could reach the page.
+      while (!window.isClosed()) {
+        Thread.onSpinWait();
+      }
+    }
+  }
+
+  @Test
+  void aDoubleClickOnADragRegionMaximizesOnlyAMaximizableWindow() throws Exception {
+    try (FakeApplication application = new FakeApplication()) {
+      FakeWindow window = application.openFake();
+      window.call(1, BridgeProtocol.CONTROL_CALL, "title-bar-double-click");
+      window.awaitReply(1);
+      Assertions.assertTrue(window.isMaximized());
+
+      FakeWindow fixed =
+          application.openFake(WindowParameters.builder().maximizable(false).build());
+      fixed.call(1, BridgeProtocol.CONTROL_CALL, "title-bar-double-click");
+      fixed.awaitReply(1);
+      Assertions.assertFalse(fixed.isMaximized());
+      fixed.maximize();
+      Assertions.assertTrue(fixed.isMaximized(), "Java still maximizes it");
+    }
+  }
+
+  @Test
+  void aWindowThatIsNotClosableRefusesTheUserButNotJava() {
+    try (FakeApplication application = new FakeApplication()) {
+      FakeWindow window = application.openFake(WindowParameters.builder().closable(false).build());
+      window.requestClose();
+      Assertions.assertFalse(window.isClosed());
+      window.close();
+      Assertions.assertTrue(window.isClosed());
+    }
+  }
+
+  @Test
   void loadResourceServesFromTheJarByDefault() {
     try (FakeApplication application = new FakeApplication()) {
       FakeWindow window = application.openFake();

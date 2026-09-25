@@ -7,6 +7,7 @@
     const post = ${post};
     const codec = ${codec};
     const rpc = ${rpc};
+    const resizeEdges = ${resizeEdges};
     // Only a document of an origin that the window trusts learns the token, which is what lets a
     // message through on the Java side. The check runs before any script of the document does.
     const trusted = ${trusted}.includes(location.origin)
@@ -272,15 +273,18 @@
     }
 
     // Windows. open resolves to the id of the new window; close ends this document, so it never
-    // resolves. Options mirror WindowParameters: title, width, height, x, y, centered, url, resource.
+    // resolves. Options mirror WindowParameters: title, width, height, x, y, centered, url, resource,
+    // decorated, closable, minimizable, maximizable.
     const field = (value) => value === undefined || value === null ? "" : String(value);
     // Java reads whole numbers; a size such as innerWidth / 2 is rounded rather than rejected.
     const number = (value) => value === undefined || value === null ? "" : String(Math.round(value));
+    const flag = (value) => value === undefined || value === null ? "" : value ? "1" : "0";
     const open = (options = {}) =>
         callText("${openCall}", [
             field(options.title), number(options.width), number(options.height),
             number(options.x), number(options.y), options.centered ? "1" : "",
-            field(options.url), field(options.resource)
+            field(options.url), field(options.resource), flag(options.decorated),
+            flag(options.closable), flag(options.minimizable), flag(options.maximizable)
         ].join(separator)).then(({ text }) => Number(text));
     const close = () => callText("${closeCall}", "").then(() => undefined);
 
@@ -288,9 +292,104 @@
     // The changes of the window: handler({ type, width, height, x, y }), where type is resized,
     // moved, focused, blurred, minimized, unminimized, maximized, unmaximized, fullscreenEntered,
     // or fullscreenExited.
+    const control = (action, argument) =>
+        callText("${controlCall}", argument === undefined ? action : action + separator + argument);
+    const done = () => undefined;
     const windowApi = {
-        listen: (handler) => listen("${windowEvent}", (event) => handler(JSON.parse(event.payload)))
+        listen: (handler) => listen("${windowEvent}", (event) => handler(JSON.parse(event.payload))),
+        minimize: () => control("minimize").then(done),
+        maximize: () => control("maximize").then(done),
+        restore: () => control("restore").then(done),
+        toggleMaximize: () => control("toggle-maximize").then(done),
+        fullscreen: (on = true) => control("fullscreen", on ? "1" : "0").then(done),
+        // The way the close button does: the window may hide instead, or refuse.
+        close: () => control("close").then(done),
+        // For a press that the page handles itself: call it from mousedown, while the button is down.
+        startMove: () => control("move").then(done),
+        startResize: (edge) => control("resize", edge).then(done),
+        // { width, height, x, y, minimized, maximized, fullscreen, focused, resizable }
+        state: () => control("state").then(({ text }) => JSON.parse(text))
     };
+    const reportFailure = (error) => console.error("lwjwae window:", error);
+
+    // Drag regions stand in for the title bar of a window without one: a press on an element with
+    // data-lwjwae-drag, or inside one, moves the window once the pointer moves a few pixels with
+    // the button down, and a double click maximizes it, as on a title bar. A click alone stays with
+    // the page: the window manager takes the pointer only for a move, and a window manager of X11
+    // that took it for a click would take the next click with it. A control inside the region, or
+    // an element with data-lwjwae-drag="false", keeps the press to itself, and so does a press that
+    // the page has already handled.
+    const noDrag = "a[href],button,input,select,textarea,label,summary,[contenteditable]:not([contenteditable=false]),[data-lwjwae-drag=false]";
+    const dragThreshold = 4;
+    if (token !== null && window.top === window) {
+        window.addEventListener("mousedown", (event) => {
+            if (event.button !== 0 || event.defaultPrevented || !(event.target instanceof Element)) return;
+            const region = event.target.closest("[data-lwjwae-drag]");
+            if (!region) return;
+            const exempt = event.target.closest(noDrag);
+            if (exempt && region.contains(exempt)) return;
+            event.preventDefault();
+            if (event.detail === 2) {
+                control("title-bar-double-click").catch(reportFailure);
+                return;
+            }
+            const { screenX, screenY } = event;
+            const stop = () => {
+                window.removeEventListener("mousemove", follow, true);
+                window.removeEventListener("mouseup", stop, true);
+            };
+            const follow = (move) => {
+                if ((move.buttons & 1) === 0) return stop();
+                if (Math.abs(move.screenX - screenX) < dragThreshold && Math.abs(move.screenY - screenY) < dragThreshold) return;
+                stop();
+                control("move").catch(reportFailure);
+            };
+            window.addEventListener("mousemove", follow, true);
+            window.addEventListener("mouseup", stop, true);
+        });
+    }
+
+    // Resize edges that the platform doesn't draw for a window without a title bar: a strip along
+    // each, above the page, in a shadow root of its own so that the styles of the page can't reach
+    // it. They step aside while the window is maximized, in full screen, or not resizable.
+    if (token !== null && window.top === window && resizeEdges.length > 0) {
+        const thickness = 5, corner = 10;
+        const shapes = {
+            "top": ["ns-resize", `top:0;left:${corner}px;right:${corner}px;height:${thickness}px`],
+            "bottom": ["ns-resize", `bottom:0;left:${corner}px;right:${corner}px;height:${thickness}px`],
+            "left": ["ew-resize", `left:0;top:${corner}px;bottom:${corner}px;width:${thickness}px`],
+            "right": ["ew-resize", `right:0;top:${corner}px;bottom:${corner}px;width:${thickness}px`],
+            "top-left": ["nwse-resize", `top:0;left:0;width:${corner}px;height:${thickness}px`],
+            "top-right": ["nesw-resize", `top:0;right:0;width:${corner}px;height:${thickness}px`],
+            "bottom-left": ["nesw-resize", `bottom:0;left:0;width:${corner}px;height:${thickness}px`],
+            "bottom-right": ["nwse-resize", `bottom:0;right:0;width:${corner}px;height:${thickness}px`]
+        };
+        const host = document.createElement("lwjwae-resize-edges");
+        host.style.cssText = "all:initial;position:fixed;inset:0;pointer-events:none;z-index:2147483647;display:none";
+        const root = host.attachShadow({ mode: "closed" });
+        for (const edge of resizeEdges) {
+            const [cursor, place] = shapes[edge];
+            const strip = document.createElement("div");
+            strip.style.cssText = `position:absolute;pointer-events:auto;cursor:${cursor};${place}`;
+            strip.addEventListener("mousedown", (event) => {
+                if (event.button !== 0) return;
+                event.preventDefault();
+                event.stopPropagation();
+                control("resize", edge).catch(reportFailure);
+            });
+            root.append(strip);
+        }
+        const update = () => windowApi.state().then((state) => {
+            host.style.display = state.maximized || state.fullscreen || !state.resizable ? "none" : "block";
+        }, reportFailure);
+        const attach = () => { document.documentElement.append(host); update(); };
+        if (document.documentElement) attach();
+        else document.addEventListener("DOMContentLoaded", attach, { once: true });
+        const states = ["maximized", "unmaximized", "fullscreenEntered", "fullscreenExited"];
+        listen("${windowEvent}", (event) => {
+            if (states.includes(JSON.parse(event.payload).type)) update();
+        });
+    }
 
     window.${pageApi} = { listen, once, emit, open, close, call: callRpc, invoke: rpcInvoke, RpcError, window: windowApi };
 })();

@@ -89,6 +89,36 @@ public class Gtk {
       NativeLibraries.downcall(GTK, "gtk_window_present", Signatures.VOID_POINTER);
   private final MethodHandle WINDOW_CLOSE =
       NativeLibraries.downcall(GTK, "gtk_window_close", Signatures.VOID_POINTER);
+  private final MethodHandle WINDOW_SET_TITLEBAR =
+      NativeLibraries.downcall(GTK, "gtk_window_set_titlebar", Signatures.VOID_POINTER_POINTER);
+  private final MethodHandle WINDOW_SET_DELETABLE =
+      NativeLibraries.downcall(GTK, "gtk_window_set_deletable", Signatures.VOID_POINTER_INT);
+  private final MethodHandle WINDOW_BEGIN_MOVE_DRAG =
+      NativeLibraries.downcall(
+          GTK, "gtk_window_begin_move_drag", Signatures.VOID_POINTER_INT_INT_INT_INT);
+  private final MethodHandle WINDOW_BEGIN_RESIZE_DRAG =
+      NativeLibraries.downcall(
+          GTK, "gtk_window_begin_resize_drag", Signatures.VOID_POINTER_INT_INT_INT_INT_INT);
+  private final MethodHandle WIDGET_SET_NO_SHOW_ALL =
+      NativeLibraries.downcall(GTK, "gtk_widget_set_no_show_all", Signatures.VOID_POINTER_INT);
+  private final MethodHandle BOX_NEW =
+      NativeLibraries.downcall(GTK, "gtk_box_new", Signatures.POINTER_INT_INT);
+  private final MethodHandle HEADER_BAR_NEW =
+      NativeLibraries.downcall(GTK, "gtk_header_bar_new", Signatures.POINTER_VOID);
+  private final MethodHandle HEADER_BAR_SET_TITLE =
+      NativeLibraries.downcall(GTK, "gtk_header_bar_set_title", Signatures.VOID_POINTER_POINTER);
+  private final MethodHandle HEADER_BAR_SET_SHOW_CLOSE_BUTTON =
+      NativeLibraries.downcall(
+          GTK, "gtk_header_bar_set_show_close_button", Signatures.VOID_POINTER_INT);
+  private final MethodHandle HEADER_BAR_SET_DECORATION_LAYOUT =
+      NativeLibraries.downcall(
+          GTK, "gtk_header_bar_set_decoration_layout", Signatures.VOID_POINTER_POINTER);
+  private final MethodHandle WIDGET_GET_STYLE_CONTEXT =
+      NativeLibraries.downcall(GTK, "gtk_widget_get_style_context", Signatures.POINTER_POINTER);
+  private final MethodHandle STYLE_CONTEXT_ADD_CLASS =
+      NativeLibraries.downcall(GTK, "gtk_style_context_add_class", Signatures.VOID_POINTER_POINTER);
+  private final MethodHandle SETTINGS_GET_DEFAULT =
+      NativeLibraries.downcall(GTK, "gtk_settings_get_default", Signatures.POINTER_VOID);
   private final MethodHandle WIDGET_SET_SENSITIVE =
       NativeLibraries.downcall(GTK, "gtk_widget_set_sensitive", Signatures.VOID_POINTER_INT);
 
@@ -365,6 +395,100 @@ public class Gtk {
   @SneakyThrows
   public void windowPresent(MemorySegment window) {
     WINDOW_PRESENT.invokeExact(window);
+  }
+
+  /** {@code GTK_ORIENTATION_HORIZONTAL}. */
+  public final int ORIENTATION_HORIZONTAL = 0;
+
+  /**
+   * Calls {@code gtk_window_set_titlebar}: the widget takes the place of the title bar, and the
+   * window draws its own decorations, on X11 too. Before the window is shown.
+   */
+  @SneakyThrows
+  public void windowSetTitlebar(MemorySegment window, MemorySegment titlebar) {
+    WINDOW_SET_TITLEBAR.invokeExact(window, titlebar);
+  }
+
+  /** Calls {@code gtk_window_set_deletable}: whether the title bar has a close button. */
+  @SneakyThrows
+  public void windowSetDeletable(MemorySegment window, boolean deletable) {
+    WINDOW_SET_DELETABLE.invokeExact(window, deletable ? 1 : 0);
+  }
+
+  /**
+   * Calls {@code gtk_window_begin_move_drag}: the window manager moves the window with the pointer
+   * until the button is released. On Wayland, the compositor takes the pointer only while the
+   * button that started the drag is still down.
+   */
+  @SneakyThrows
+  public void windowBeginMoveDrag(MemorySegment window, int button, int rootX, int rootY) {
+    WINDOW_BEGIN_MOVE_DRAG.invokeExact(window, button, rootX, rootY, Gdk.CURRENT_TIME);
+  }
+
+  /**
+   * Calls {@code gtk_window_begin_resize_drag} with a {@code GdkWindowEdge}: the window manager
+   * resizes the window from that edge until the button is released.
+   */
+  @SneakyThrows
+  public void windowBeginResizeDrag(
+      MemorySegment window, int edge, int button, int rootX, int rootY) {
+    WINDOW_BEGIN_RESIZE_DRAG.invokeExact(window, edge, button, rootX, rootY, Gdk.CURRENT_TIME);
+  }
+
+  /** Calls {@code gtk_widget_set_no_show_all}: {@code gtk_widget_show_all} passes the widget by. */
+  @SneakyThrows
+  public void widgetSetNoShowAll(MemorySegment widget, boolean noShowAll) {
+    WIDGET_SET_NO_SHOW_ALL.invokeExact(widget, noShowAll ? 1 : 0);
+  }
+
+  /** Calls {@code gtk_box_new}. The box is floating until a container takes it. */
+  @SneakyThrows
+  public MemorySegment boxNew(int orientation, int spacing) {
+    return (MemorySegment) BOX_NEW.invokeExact(orientation, spacing);
+  }
+
+  /** Calls {@code gtk_header_bar_new}. The bar is floating until a window takes it. */
+  @SneakyThrows
+  public MemorySegment headerBarNew() {
+    return (MemorySegment) HEADER_BAR_NEW.invokeExact();
+  }
+
+  /** Calls {@code gtk_header_bar_set_title}. */
+  @SneakyThrows
+  public void headerBarSetTitle(MemorySegment headerBar, String title) {
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment value = title == null ? MemorySegment.NULL : arena.allocateFrom(title);
+      HEADER_BAR_SET_TITLE.invokeExact(headerBar, value);
+    }
+  }
+
+  /** Calls {@code gtk_header_bar_set_show_close_button}: whether the bar has the window buttons. */
+  @SneakyThrows
+  public void headerBarSetShowCloseButton(MemorySegment headerBar, boolean show) {
+    HEADER_BAR_SET_SHOW_CLOSE_BUTTON.invokeExact(headerBar, show ? 1 : 0);
+  }
+
+  /** Calls {@code gtk_header_bar_set_decoration_layout}: which window buttons, on which side. */
+  @SneakyThrows
+  public void headerBarSetDecorationLayout(MemorySegment headerBar, String layout) {
+    try (Arena arena = Arena.ofConfined()) {
+      HEADER_BAR_SET_DECORATION_LAYOUT.invokeExact(headerBar, arena.allocateFrom(layout));
+    }
+  }
+
+  /** Adds a CSS class to the style context of a widget. */
+  @SneakyThrows
+  public void widgetAddCssClass(MemorySegment widget, String cssClass) {
+    MemorySegment context = (MemorySegment) WIDGET_GET_STYLE_CONTEXT.invokeExact(widget);
+    try (Arena arena = Arena.ofConfined()) {
+      STYLE_CONTEXT_ADD_CLASS.invokeExact(context, arena.allocateFrom(cssClass));
+    }
+  }
+
+  /** Calls {@code gtk_settings_get_default}: the settings of the desktop, which GTK owns. */
+  @SneakyThrows
+  public MemorySegment settingsGetDefault() {
+    return (MemorySegment) SETTINGS_GET_DEFAULT.invokeExact();
   }
 
   /** Calls {@code gtk_widget_set_sensitive}: an insensitive widget is grayed out. */

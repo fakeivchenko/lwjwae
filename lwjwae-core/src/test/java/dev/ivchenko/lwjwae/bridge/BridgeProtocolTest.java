@@ -1,5 +1,6 @@
 package dev.ivchenko.lwjwae.bridge;
 
+import dev.ivchenko.lwjwae.WindowEdge;
 import dev.ivchenko.lwjwae.WindowParameters;
 import dev.ivchenko.lwjwae.event.Event;
 import java.util.List;
@@ -20,7 +21,9 @@ class BridgeProtocolTest {
             "fakeCodec",
             "{base:\"app://local/__lwjwae/rpc/\"}",
             "secret",
-            List.of("app://local", "http://localhost:5173"));
+            List.of("app://local", "http://localhost:5173"),
+            List.of(WindowEdge.TOP, WindowEdge.TOP_LEFT));
+    Assertions.assertTrue(script.contains("const resizeEdges = [\"top\",\"top-left\"];"));
     Assertions.assertTrue(script.contains("const post = (m) => host.post(m);"));
     Assertions.assertTrue(script.contains("const codec = fakeCodec;"));
     Assertions.assertTrue(script.contains("const rpc = {base:\"app://local/__lwjwae/rpc/\"};"));
@@ -41,6 +44,7 @@ class BridgeProtocolTest {
             BridgeProtocol.EVENTS_CALL,
             BridgeProtocol.OPEN_CALL,
             BridgeProtocol.CLOSE_CALL,
+            BridgeProtocol.CONTROL_CALL,
             BridgeProtocol.WINDOW_EVENT)) {
       Assertions.assertTrue(script.contains("\"" + reserved + "\""), reserved);
     }
@@ -80,7 +84,20 @@ class BridgeProtocolTest {
     String sep = BridgeProtocol.SEPARATOR;
     WindowParameters full =
         BridgeProtocol.parseWindowParameters(
-            String.join(sep, "Docs", "640", "480", "10", "20", "1", "https://x", "app/i.html"));
+            String.join(
+                sep,
+                "Docs",
+                "640",
+                "480",
+                "10",
+                "20",
+                "1",
+                "https://x",
+                "app/i.html",
+                "0",
+                "0",
+                "0",
+                "0"));
     Assertions.assertEquals("Docs", full.title());
     Assertions.assertEquals(640, full.width());
     Assertions.assertEquals(480, full.height());
@@ -89,13 +106,18 @@ class BridgeProtocolTest {
     Assertions.assertTrue(full.centered());
     Assertions.assertEquals("https://x", full.url());
     Assertions.assertEquals("app/i.html", full.resource());
+    Assertions.assertFalse(full.decorated());
+    Assertions.assertFalse(full.closable());
+    Assertions.assertFalse(full.minimizable());
+    Assertions.assertFalse(full.maximizable());
 
-    WindowParameters empty = BridgeProtocol.parseWindowParameters(sep.repeat(7));
+    WindowParameters empty = BridgeProtocol.parseWindowParameters(sep.repeat(11));
     Assertions.assertEquals(WindowParameters.createDefault(), empty);
 
     Assertions.assertNull(BridgeProtocol.parseWindowParameters("garbage"));
     Assertions.assertNull(
-        BridgeProtocol.parseWindowParameters(String.join(sep, "", "wide", "", "", "", "", "", "")));
+        BridgeProtocol.parseWindowParameters(
+            String.join(sep, "", "wide", "", "", "", "", "", "", "", "", "", "")));
   }
 
   @Test

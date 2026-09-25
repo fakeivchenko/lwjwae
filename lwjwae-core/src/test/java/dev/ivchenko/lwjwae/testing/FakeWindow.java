@@ -2,6 +2,7 @@ package dev.ivchenko.lwjwae.testing;
 
 import dev.ivchenko.lwjwae.AbstractApplication;
 import dev.ivchenko.lwjwae.AbstractWindow;
+import dev.ivchenko.lwjwae.WindowEdge;
 import dev.ivchenko.lwjwae.WindowParameters;
 import dev.ivchenko.lwjwae.WindowPosition;
 import dev.ivchenko.lwjwae.WindowSize;
@@ -37,6 +38,9 @@ public class FakeWindow extends AbstractWindow {
   public final List<String> navigated = new CopyOnWriteArrayList<>();
   public final List<String> posted = new CopyOnWriteArrayList<>();
 
+  /** Every drag that the page handed to the window manager: {@code move}, or the resize edge. */
+  public final List<String> drags = new CopyOnWriteArrayList<>();
+
   private String title;
   private int left;
   private int top;
@@ -58,7 +62,7 @@ public class FakeWindow extends AbstractWindow {
   private final Condition evaluatedScript = this.evaluations.newCondition();
 
   FakeWindow(AbstractApplication application, long id, WindowParameters parameters) {
-    super(application, id);
+    super(application, id, parameters);
     this.title = parameters.title();
     this.width = parameters.width();
     this.height = parameters.height();
@@ -394,9 +398,22 @@ public class FakeWindow extends AbstractWindow {
     return this.shown;
   }
 
-  /** Plays the part of the close button: hides or closes, as the close action says. */
+  @Override
+  protected void beginMove() {
+    this.drags.add("move");
+  }
+
+  @Override
+  protected void beginResize(WindowEdge edge) {
+    this.drags.add(edge.pageName());
+  }
+
+  /** Plays the part of the close button: refuses, hides, or closes, as the window says. */
   @Override
   public void requestClose() {
+    if (this.refusesCloseRequest()) {
+      return;
+    }
     if (this.hidesOnCloseRequest()) {
       this.hide();
     } else {

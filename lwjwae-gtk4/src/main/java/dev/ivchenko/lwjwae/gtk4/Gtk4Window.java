@@ -1,6 +1,7 @@
 package dev.ivchenko.lwjwae.gtk4;
 
 import dev.ivchenko.lwjwae.AbstractWindow;
+import dev.ivchenko.lwjwae.WindowEdge;
 import dev.ivchenko.lwjwae.WindowParameters;
 import dev.ivchenko.lwjwae.WindowPosition;
 import dev.ivchenko.lwjwae.WindowSize;
@@ -10,6 +11,7 @@ import dev.ivchenko.lwjwae.event.LoadState;
 import dev.ivchenko.lwjwae.foreign.CallbackRegistry;
 import dev.ivchenko.lwjwae.foreign.NativeLibraries;
 import dev.ivchenko.lwjwae.glib.binding.Glib;
+import dev.ivchenko.lwjwae.glib.util.DecorationLayoutUtil;
 import dev.ivchenko.lwjwae.gtk4.binding.Gtk;
 import dev.ivchenko.lwjwae.gtk4.binding.Signatures;
 import dev.ivchenko.lwjwae.gtk4.binding.WebKit;
@@ -143,7 +145,7 @@ public class Gtk4Window extends AbstractWindow {
    */
   @SuppressWarnings("resource")
   Gtk4Window(Gtk4Application application, long id, WindowParameters parameters) {
-    super(application, id);
+    super(application, id, parameters);
     this.callbackId = WINDOWS.register(this);
     try {
       this.dispatcher().run(() -> this.createWindow(parameters));
@@ -158,6 +160,19 @@ public class Gtk4Window extends AbstractWindow {
     MemorySegment newWindow = Gtk.windowNew();
     Gtk.windowSetTitle(newWindow, parameters.title());
     Gtk.windowSetDefaultSize(newWindow, parameters.width(), parameters.height());
+    if (!parameters.decorated()) {
+      // A title bar that never shows rather than gtk_window_set_decorated(FALSE): the window keeps
+      // the frame that it draws itself, the shadow and the resize edges in it, and loses only the
+      // bar.
+      MemorySegment none = Gtk.boxNew(Gtk.ORIENTATION_HORIZONTAL, 0);
+      Gtk.widgetSetVisible(none, false);
+      Gtk.windowSetTitlebar(newWindow, none);
+    } else if (!parameters.minimizable() || !parameters.maximizable()) {
+      Gtk.windowSetTitlebar(newWindow, titleBar(parameters));
+    }
+    if (!parameters.closable()) {
+      Gtk.windowSetDeletable(newWindow, false);
+    }
 
     MemorySegment userData = CallbackRegistry.userData(this.callbackId);
 
@@ -185,6 +200,21 @@ public class Gtk4Window extends AbstractWindow {
     BY_WEB_VIEW.put(newWebView.address(), this);
     this.userContentManager = manager;
     this.installBridge();
+  }
+
+  /**
+   * A title bar like the one that GTK draws by default, minus the buttons that the window may not
+   * have: GTK's own bar can't drop the minimize button alone. It shows the title of the window.
+   */
+  private static MemorySegment titleBar(WindowParameters parameters) {
+    MemorySegment bar = Gtk.headerBarNew();
+    String layout = Glib.stringProperty(Gtk.settingsGetDefault(), "gtk-decoration-layout");
+    Gtk.headerBarSetDecorationLayout(
+        bar,
+        DecorationLayoutUtil.without(layout, !parameters.minimizable(), !parameters.maximizable()));
+    // The class of GTK's own bar, which is slimmer than a header bar of an application.
+    Gtk.widgetAddCssClass(bar, "default-decoration");
+    return bar;
   }
 
   @Override
@@ -239,6 +269,34 @@ public class Gtk4Window extends AbstractWindow {
   @Override
   public void center() {
     this.checkOpen();
+  }
+
+  @Override
+  protected void beginMove() {
+    this.dispatcher().run(() -> Gtk.toplevelBeginMove(Gtk.windowSurface(this.window())));
+  }
+
+  @Override
+  protected void beginResize(WindowEdge edge) {
+    int gdkEdge =
+        switch (edge) {
+          case TOP -> Gtk.EDGE_NORTH;
+          case BOTTOM -> Gtk.EDGE_SOUTH;
+          case LEFT -> Gtk.EDGE_WEST;
+          case RIGHT -> Gtk.EDGE_EAST;
+          case TOP_LEFT -> Gtk.EDGE_NORTH_WEST;
+          case TOP_RIGHT -> Gtk.EDGE_NORTH_EAST;
+          case BOTTOM_LEFT -> Gtk.EDGE_SOUTH_WEST;
+          case BOTTOM_RIGHT -> Gtk.EDGE_SOUTH_EAST;
+        };
+    this.dispatcher()
+        .run(
+            () -> {
+              MemorySegment current = this.window();
+              if (Gtk.isWindowResizable(current)) {
+                Gtk.toplevelBeginResize(Gtk.windowSurface(current), gdkEdge);
+              }
+            });
   }
 
   @Override
@@ -491,7 +549,8 @@ public class Gtk4Window extends AbstractWindow {
 
   /**
    * The user asked to close the window, from the title bar or the desktop. {@code TRUE} cancels the
-   * close; with {@link dev.ivchenko.lwjwae.CloseAction#HIDE}, the window is hidden instead.
+   * close: a window that isn't closable refuses it, and with {@link
+   * dev.ivchenko.lwjwae.CloseAction#HIDE}, the window is hidden instead.
    *
    * <p>Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
    * binds it by name, so no Java code calls it and the compiler sees a dead private method. {@code
@@ -503,6 +562,9 @@ public class Gtk4Window extends AbstractWindow {
   private static int onCloseRequest(MemorySegment widget, MemorySegment userData) {
     try {
       Gtk4Window window = WINDOWS.lookup(userData);
+      if (window != null && window.refusesCloseRequest()) {
+        return 1;
+      }
       if (window != null && window.hidesOnCloseRequest()) {
         Gtk.widgetSetVisible(widget, false);
         return 1;

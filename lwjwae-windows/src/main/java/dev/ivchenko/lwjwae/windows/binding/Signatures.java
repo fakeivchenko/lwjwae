@@ -135,6 +135,13 @@ public class Signatures {
   public final FunctionDescriptor INT_INT_INT_INT =
       FunctionDescriptor.of(C_INT, C_INT, C_INT, C_INT);
 
+  /** {@code SHORT f(int)}: {@code GetAsyncKeyState}. */
+  public final FunctionDescriptor SHORT_INT = FunctionDescriptor.of(C_SHORT, C_INT);
+
+  /** {@code BOOL f(T*, UINT, UINT)}: {@code EnableMenuItem}. */
+  public final FunctionDescriptor INT_POINTER_INT_INT =
+      FunctionDescriptor.of(C_INT, C_POINTER, C_INT, C_INT);
+
   /** {@code int f(int)}: {@code GetSystemMetrics}. */
   public final FunctionDescriptor INT_INT = FunctionDescriptor.of(C_INT, C_INT);
 

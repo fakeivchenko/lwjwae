@@ -106,6 +106,46 @@ application named after `ApplicationParameters.name`; without a name and a direc
 does nothing. Where the platform never reports a position, on Wayland and GTK 4, none is saved, and
 the window opens where the desktop puts it.
 
+### A window without a title bar
+
+`WindowParameters.decorated(false)` takes the title bar away, and the page draws its own. The
+window keeps what a window has around its title bar: the shadow, the rounded corners, and resize
+edges, native wherever the platform has them. `closable`, `minimizable`, and `maximizable` take a
+button off the title bar; `closable(false)` also refuses the close of the user, from the shortcut
+or a menu of the desktop, while `close()` from Java still closes. Java's `minimize()` and
+`maximize()` work either way.
+
+The page marks where the user grabs the window:
+
+```html
+<header data-lwjwae-drag>
+  <span>My app</span>
+  <button onclick="lwjwae.window.minimize()">_</button>
+  <button onclick="lwjwae.window.toggleMaximize()">□</button>
+  <button onclick="lwjwae.window.close()">×</button>
+</header>
+```
+
+A press inside an element with `data-lwjwae-drag` moves the window once the pointer moves a few
+pixels with the button down, and a double click maximizes it, as a title bar does, or does what
+macOS is set to do. A control inside the region (a button, a link, a field) keeps the press, and so
+does an element with `data-lwjwae-drag="false"` and a press that the page already handled with
+`preventDefault()`. A click alone never reaches the window manager: one of X11 that took the
+pointer for a click would take the next click with it.
+
+`window.lwjwae.window` has what a title bar of the page needs: `minimize()`, `maximize()`,
+`restore()`, `toggleMaximize()`, `fullscreen(on)`, `close()`, which is `requestClose()` and so
+hides or refuses as the window says, `state()`, which resolves to `{ width, height, x, y,
+minimized, maximized, fullscreen, focused, resizable }`, and, for a page that handles the pointer
+itself, `startMove()` and `startResize(edge)`, called while the button is down, with `edge` as
+`top`, `bottom-left`, and so on. These are calls under the reserved name `lwjwae:control`.
+
+| Platform | Without a title bar |
+|---|---|
+| GTK 3, GTK 4 | A title bar that never shows: the window keeps the frame it draws itself, with its shadow, and resizes from it. With a button off, the window draws its own bar, like GTK's own, with the layout of the desktop minus that button. |
+| Windows | `WM_NCCALCSIZE` gives the whole window to the client area except the resize edges on the left, the right, and at the bottom; the style stays, and with it snapping and the animations. The top edge is a strip that the page lays over itself and resizes from. |
+| macOS | A titled window with its content under a transparent title bar, and no buttons: rounded corners, a shadow, resize edges, and the keyboard, which a borderless window can't take. `startResize` does nothing: AppKit resizes only from the edges. |
+
 Where the platform can't, the call does what it can and the reads say so:
 
 | Platform      | What's missing                                                                                                   |
@@ -256,9 +296,9 @@ name before the first. A listener that throws is reported and the others still r
 ### Windows from the page
 
 `window.lwjwae.open(options)` and `window.lwjwae.close()` go through the same path as a call, under
-the reserved names `lwjwae:open` and `lwjwae:close`. The options travel as the components of
-`WindowParameters` in declaration order, separated by the unit separator, an empty field for one the
-page left out, so no codec is needed. The window opens through `Application.open`, is shown, and
+the reserved names `lwjwae:open` and `lwjwae:close`. The options travel as fields separated by the
+unit separator: the title, the size, the position, `centered`, `url`, `resource`, and the four flags
+of the frame, an empty field for one the page left out, so no codec is needed. The window opens through `Application.open`, is shown, and
 its ID resolves the promise. `close` closes the window of the page, so its promise never settles.
 
 ### Typed calls

@@ -90,6 +90,16 @@ it, once per process, because neither can be undone:
 
 The window stays hidden until `show()`, which calls `gtk_widget_show_all`.
 
+A window without a title bar gets a title bar that never shows, an empty box that
+`gtk_widget_set_no_show_all` keeps out of `gtk_widget_show_all`. The window draws its own frame
+then, on X11 too, with the shadow and the resize edges in it; `gtk_window_set_decorated(FALSE)`
+would take those away, and an empty box that shows would still take the height that the theme
+gives a title bar. A window without its minimize or maximize button gets a `GtkHeaderBar` with the
+style class of GTK's own bar and the `gtk-decoration-layout` of the desktop minus those buttons:
+neither the window manager of X11 nor GTK's own bar drops one of them alone. A drag from the page
+is `gtk_window_begin_move_drag` or `gtk_window_begin_resize_drag`, only while the first button is
+down: a window manager of X11 would otherwise take the next click.
+
 ## Callbacks
 
 Every signal handler follows the same shape: look up the window by user data, do the work, catch

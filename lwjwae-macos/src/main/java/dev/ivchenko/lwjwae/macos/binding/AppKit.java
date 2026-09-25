@@ -17,7 +17,22 @@ public class AppKit {
   /** {@code NSWindowStyleMaskResizable}. */
   public final long STYLE_RESIZABLE = 1 << 3;
 
-  private final long STYLE_TITLED_CLOSABLE_MINIATURIZABLE = 1 | (1 << 1) | (1 << 2);
+  /** {@code NSWindowStyleMaskTitled}. */
+  public final long STYLE_TITLED = 1;
+
+  /** {@code NSWindowStyleMaskClosable}. */
+  public final long STYLE_CLOSABLE = 1 << 1;
+
+  /** {@code NSWindowStyleMaskMiniaturizable}. */
+  public final long STYLE_MINIATURIZABLE = 1 << 2;
+
+  /** {@code NSWindowStyleMaskFullSizeContentView}: the content reaches under the title bar. */
+  public final long STYLE_FULL_SIZE_CONTENT_VIEW = 1 << 15;
+
+  private final long WINDOW_TITLE_HIDDEN = 1;
+  private final long ZOOM_BUTTON = 2;
+  private final long EVENT_TYPE_LEFT_MOUSE_DOWN = 1;
+  private final long EVENT_TYPE_LEFT_MOUSE_DRAGGED = 6;
   private final long ACTIVATION_POLICY_REGULAR = 0;
   private final long BACKING_STORE_BUFFERED = 2;
   private final long EVENT_TYPE_APPLICATION_DEFINED = 15;
@@ -87,10 +102,10 @@ public class AppKit {
   }
 
   /**
-   * A titled, closable, resizable window that owns its content rect. The caller retains it, not its
-   * closing.
+   * A window of {@code styleMask} that owns its content rect, centered. The caller retains it, not
+   * its closing.
    */
-  public MemorySegment window(int width, int height, String title) {
+  public MemorySegment window(int width, int height, String title, long styleMask) {
     MemorySegment window;
     try (Arena arena = Arena.ofConfined()) {
       window =
@@ -98,7 +113,7 @@ public class AppKit {
               ObjC.send(ObjC.cls("NSWindow"), "alloc"),
               "initWithContentRect:styleMask:backing:defer:",
               Foundation.rect(arena, 0, 0, width, height),
-              STYLE_TITLED_CLOSABLE_MINIATURIZABLE | STYLE_RESIZABLE,
+              styleMask,
               BACKING_STORE_BUFFERED,
               false);
     }
@@ -196,12 +211,18 @@ public class AppKit {
 
   /**
    * Zooms the window, the way the green button does with the Option key: to fill the screen, or
-   * back. {@code -[NSWindow zoom:]} toggles, so it's sent only when the state differs.
+   * back. {@code -[NSWindow zoom:]} toggles, so it's sent only when the state differs, and it acts
+   * as the button does, so a button that {@link #disableZoomButton} grayed out is enabled for it.
    */
   public void setZoomed(MemorySegment window, boolean zoomed) {
-    if (isZoomed(window) != zoomed) {
-      ObjC.sendVoid(window, "zoom:", MemorySegment.NULL);
+    if (isZoomed(window) == zoomed) {
+      return;
     }
+    MemorySegment button = ObjC.send(window, "standardWindowButton:", ZOOM_BUTTON);
+    boolean enabled = ObjC.sendBool(button, "isEnabled");
+    ObjC.sendVoid(button, "setEnabled:", true);
+    ObjC.sendVoid(window, "zoom:", MemorySegment.NULL);
+    ObjC.sendVoid(button, "setEnabled:", enabled);
   }
 
   /** Calls {@code -[NSWindow isZoomed]}. */
@@ -268,6 +289,53 @@ public class AppKit {
   /** Calls {@code -[NSWindow setContentView:]}: the window retains the view. */
   public void setContentView(MemorySegment window, MemorySegment view) {
     ObjC.sendVoid(window, "setContentView:", view);
+  }
+
+  /**
+   * Takes the title bar of a window with {@link #STYLE_FULL_SIZE_CONTENT_VIEW} out of sight: no
+   * background, no title, and no buttons. The window stays titled, which keeps its rounded corners,
+   * its shadow, its resize edges, and the keyboard, which a borderless window can't take.
+   */
+  public void hideTitleBar(MemorySegment window) {
+    ObjC.sendVoid(window, "setTitlebarAppearsTransparent:", true);
+    ObjC.sendVoid(window, "setTitleVisibility:", WINDOW_TITLE_HIDDEN);
+    for (long button = 0; button <= ZOOM_BUTTON; button++) {
+      ObjC.sendVoid(ObjC.send(window, "standardWindowButton:", button), "setHidden:", true);
+    }
+  }
+
+  /** Grays out the zoom button, the green one, which maximizes and enters full screen. */
+  public void disableZoomButton(MemorySegment window) {
+    ObjC.sendVoid(ObjC.send(window, "standardWindowButton:", ZOOM_BUTTON), "setEnabled:", false);
+  }
+
+  /**
+   * Moves the window with the pointer until the button is released, the way a drag on the title bar
+   * does: {@code -[NSWindow performWindowDragWithEvent:]} with the mouse event being handled. Does
+   * nothing when that isn't a press or a drag of the left button, or the button is already up.
+   */
+  public void performWindowDrag(MemorySegment window) {
+    if ((ObjC.sendLong(ObjC.cls("NSEvent"), "pressedMouseButtons") & 1) == 0) {
+      return;
+    }
+    MemorySegment event = ObjC.send(application(), "currentEvent");
+    if (ObjC.isNull(event)) {
+      return;
+    }
+    long type = ObjC.sendLong(event, "type");
+    if (type == EVENT_TYPE_LEFT_MOUSE_DOWN || type == EVENT_TYPE_LEFT_MOUSE_DRAGGED) {
+      ObjC.sendVoid(window, "performWindowDragWithEvent:", event);
+    }
+  }
+
+  /**
+   * What the user chose in the Desktop and Dock settings for a double click on a title bar: {@code
+   * Maximize}, {@code Minimize}, {@code None}, or {@code null} for the default, which zooms.
+   */
+  public String titleBarDoubleClickAction() {
+    MemorySegment defaults = ObjC.send(ObjC.cls("NSUserDefaults"), "standardUserDefaults");
+    return Foundation.string(
+        ObjC.send(defaults, "stringForKey:", Foundation.string("AppleActionOnDoubleClick")));
   }
 
   /** Calls {@code -[NSWindow makeKeyAndOrderFront:]}: shows the window and gives it focus. */

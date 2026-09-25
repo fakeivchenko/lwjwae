@@ -23,6 +23,7 @@ public class User32 {
   public final int WS_OVERLAPPEDWINDOW = 0x00CF0000;
   public final int WS_THICKFRAME = 0x00040000;
   public final int WS_MAXIMIZEBOX = 0x00010000;
+  public final int WS_MINIMIZEBOX = 0x00020000;
   public final int CW_USEDEFAULT = 0x80000000;
   public final int SW_HIDE = 0;
   public final int SW_SHOW = 5;
@@ -55,6 +56,24 @@ public class User32 {
   public final int WM_ACTIVATE = 0x0006;
   public final int WM_CLOSE = 0x0010;
   public final int WM_GETMINMAXINFO = 0x0024;
+  public final int WM_NCCALCSIZE = 0x0083;
+  private final int WM_NCLBUTTONDOWN = 0x00A1;
+
+  // --- hit-test codes of WM_NCHITTEST, what a press on the frame means ---
+  public final int HTCAPTION = 2;
+  public final int HTLEFT = 10;
+  public final int HTRIGHT = 11;
+  public final int HTTOP = 12;
+  public final int HTTOPLEFT = 13;
+  public final int HTTOPRIGHT = 14;
+  public final int HTBOTTOM = 15;
+  public final int HTBOTTOMLEFT = 16;
+  public final int HTBOTTOMRIGHT = 17;
+
+  private final int SC_CLOSE = 0xF060;
+  private final int VK_LBUTTON = 0x01;
+  private final int SM_SWAPBUTTON = 23;
+  private final int VK_RBUTTON = 0x02;
   public final int WM_NULL = 0x0000;
   public final int WM_CONTEXTMENU = 0x007B;
   public final int WM_LBUTTONUP = 0x0202;
@@ -133,6 +152,14 @@ public class User32 {
       NativeLibraries.downcall(USER32, "DestroyMenu", Signatures.INT_POINTER);
   private final MethodHandle GET_CURSOR_POS =
       NativeLibraries.downcall(USER32, "GetCursorPos", Signatures.INT_POINTER);
+  private final MethodHandle GET_ASYNC_KEY_STATE =
+      NativeLibraries.downcall(USER32, "GetAsyncKeyState", Signatures.SHORT_INT);
+  private final MethodHandle RELEASE_CAPTURE =
+      NativeLibraries.downcall(USER32, "ReleaseCapture", Signatures.INT_VOID);
+  private final MethodHandle GET_SYSTEM_MENU =
+      NativeLibraries.downcall(USER32, "GetSystemMenu", Signatures.POINTER_POINTER_INT);
+  private final MethodHandle ENABLE_MENU_ITEM =
+      NativeLibraries.downcall(USER32, "EnableMenuItem", Signatures.INT_POINTER_INT_INT);
   private final MethodHandle GET_SYSTEM_METRICS =
       NativeLibraries.downcall(USER32, "GetSystemMetrics", Signatures.INT_INT);
   private final MethodHandle CREATE_ICON_FROM_RESOURCE_EX =
@@ -227,14 +254,22 @@ public class User32 {
   }
 
   /**
-   * A hidden top-level window of {@code className}. {@code show} makes it visible. {@code x} and
-   * {@code y} place the frame; {@code CW_USEDEFAULT} for both lets Windows choose. {@code topmost}
-   * creates it above the windows that aren't, with {@code WS_EX_TOPMOST}: later, {@link
-   * #topmost(MemorySegment, boolean)} works only for the process in the foreground.
+   * A hidden top-level window of {@code className}, with {@code style}, a subset of {@code
+   * WS_OVERLAPPEDWINDOW}. {@code show} makes it visible. {@code x} and {@code y} place the frame;
+   * {@code CW_USEDEFAULT} for both lets Windows choose. {@code topmost} creates it above the
+   * windows that aren't, with {@code WS_EX_TOPMOST}: later, {@link #topmost(MemorySegment,
+   * boolean)} works only for the process in the foreground.
    */
   @SneakyThrows
   public MemorySegment createWindow(
-      String className, String title, int x, int y, int width, int height, boolean topmost) {
+      String className,
+      String title,
+      int x,
+      int y,
+      int width,
+      int height,
+      int style,
+      boolean topmost) {
     try (Arena arena = Arena.ofConfined()) {
       MemorySegment hwnd =
           (MemorySegment)
@@ -242,7 +277,7 @@ public class User32 {
                   topmost ? (int) WS_EX_TOPMOST : 0,
                   Wide.allocate(arena, className),
                   Wide.allocate(arena, title),
-                  WS_OVERLAPPEDWINDOW,
+                  style,
                   x,
                   y,
                   width,
@@ -648,10 +683,13 @@ public class User32 {
     }
   }
 
-  /** Resizes the window so that its client area is {@code width} by {@code height}. */
+  /**
+   * Resizes the window so that its client area is {@code width} by {@code height}. {@code titleBar}
+   * is {@code false} for a window whose title bar {@link #removeTitleBar} takes away.
+   */
   @SneakyThrows
-  public void resizeClient(MemorySegment hwnd, int width, int height) {
-    int[] frame = frameSize(hwnd, width, height);
+  public void resizeClient(MemorySegment hwnd, int width, int height, boolean titleBar) {
+    int[] frame = frameSize(hwnd, width, height, titleBar);
     int _ =
         (int)
             SET_WINDOW_POS.invokeExact(
@@ -666,10 +704,11 @@ public class User32 {
 
   /**
    * {@code {width, height}} of the frame around a client area of {@code width} by {@code height},
-   * with the current style of the window, by {@code AdjustWindowRectEx}.
+   * with the current style of the window, by {@code AdjustWindowRectEx}. Without the title bar, the
+   * frame has nothing above the client area.
    */
   @SneakyThrows
-  public int[] frameSize(MemorySegment hwnd, int width, int height) {
+  public int[] frameSize(MemorySegment hwnd, int width, int height, boolean titleBar) {
     try (Arena arena = Arena.ofConfined()) {
       MemorySegment rect = arena.allocate(Signatures.RECT);
       RECT_RIGHT.set(rect, 0L, width);
@@ -677,8 +716,67 @@ public class User32 {
       int _ = (int) ADJUST_WINDOW_RECT_EX.invokeExact(rect, (int) style(hwnd), 0, 0);
       return new int[] {
         (int) RECT_RIGHT.get(rect, 0L) - (int) RECT_LEFT.get(rect, 0L),
-        (int) RECT_BOTTOM.get(rect, 0L) - (int) RECT_TOP.get(rect, 0L)
+        (int) RECT_BOTTOM.get(rect, 0L) - (titleBar ? (int) RECT_TOP.get(rect, 0L) : 0)
       };
+    }
+  }
+
+  /**
+   * Answers {@code WM_NCCALCSIZE} for a window without a title bar: the frame that {@code
+   * DefWindowProc} works out, minus the part above the client area. The window keeps its resize
+   * edges on the other sides, its shadow, and everything that its style gives a window with a title
+   * bar: snapping, and the animations of minimize and maximize. A maximized window reaches past its
+   * monitor by the width of its frame, which the client area leaves out at the top too.
+   *
+   * @param parameters The {@code NCCALCSIZE_PARAMS} of the message, whose first rectangle is the
+   *     proposed window on the way in and the client area on the way out.
+   * @return What the window procedure returns.
+   */
+  @SneakyThrows
+  public long removeTitleBar(MemorySegment hwnd, long wordParameter, long parameters) {
+    MemorySegment rect =
+        MemorySegment.ofAddress(parameters).reinterpret(Signatures.RECT.byteSize());
+    int windowLeft = (int) RECT_LEFT.get(rect, 0L);
+    int windowTop = (int) RECT_TOP.get(rect, 0L);
+    long _ = defWindowProc(hwnd, WM_NCCALCSIZE, wordParameter, parameters);
+    int frame = isMaximized(hwnd) ? (int) RECT_LEFT.get(rect, 0L) - windowLeft : 0;
+    RECT_TOP.set(rect, 0L, windowTop + frame);
+    return 0;
+  }
+
+  /**
+   * Grays out {@code Close} in the system menu of the window, which grays out the close button of
+   * the title bar too and takes away {@code Alt+F4}.
+   */
+  @SneakyThrows
+  public void disableClose(MemorySegment hwnd) {
+    MemorySegment menu = (MemorySegment) GET_SYSTEM_MENU.invokeExact(hwnd, 0);
+    int _ = (int) ENABLE_MENU_ITEM.invokeExact(menu, SC_CLOSE, MF_GRAYED);
+  }
+
+  /**
+   * Hands the pointer to Windows, which moves or resizes the window the way a press on its frame at
+   * {@code hitTest} does, until the button is released: {@code WM_NCLBUTTONDOWN}, posted after the
+   * web view lets the pointer go. Does nothing once the primary button is up, as it may be after a
+   * quick click: the loop would then wait for the next one.
+   *
+   * @param hitTest {@link #HTCAPTION} to move, {@link #HTLEFT} and the like to resize.
+   */
+  @SneakyThrows
+  public void beginFrameDrag(MemorySegment hwnd, int hitTest) {
+    int primary =
+        (int) GET_SYSTEM_METRICS.invokeExact(SM_SWAPBUTTON) != 0 ? VK_RBUTTON : VK_LBUTTON;
+    if (((short) GET_ASYNC_KEY_STATE.invokeExact(primary) & 0x8000) == 0) {
+      return;
+    }
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment point = arena.allocate(Signatures.C_INT, 2);
+      int _ = (int) GET_CURSOR_POS.invokeExact(point);
+      long position =
+          (point.getAtIndex(Signatures.C_INT, 0) & 0xFFFFL)
+              | ((point.getAtIndex(Signatures.C_INT, 1) & 0xFFFFL) << 16);
+      int _ = (int) RELEASE_CAPTURE.invokeExact();
+      int _ = (int) POST_MESSAGE.invokeExact(hwnd, WM_NCLBUTTONDOWN, (long) hitTest, position);
     }
   }
 

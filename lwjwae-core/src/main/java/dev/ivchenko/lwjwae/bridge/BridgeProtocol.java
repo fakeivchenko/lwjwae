@@ -1,5 +1,6 @@
 package dev.ivchenko.lwjwae.bridge;
 
+import dev.ivchenko.lwjwae.WindowEdge;
 import dev.ivchenko.lwjwae.WindowParameters;
 import dev.ivchenko.lwjwae.event.Event;
 import dev.ivchenko.lwjwae.util.ScriptUtil;
@@ -71,6 +72,13 @@ public class BridgeProtocol {
   public final String CLOSE_CALL = "lwjwae:close";
 
   /**
+   * The name under which a page controls its own window, through {@code window.lwjwae.window}:
+   * minimizes it, maximizes it, moves it from a drag region, and so on. Reserved like {@link
+   * #EVENT_CALL}. The body is an action and, for some, an argument after {@link #SEPARATOR}.
+   */
+  public final String CONTROL_CALL = "lwjwae:control";
+
+  /**
    * The media type of a value that the codec encoded: what {@code lwjwae.invoke} and a typed
    * binding send, and what {@code RpcCall.replyValue} answers with, so the page half decodes it.
    */
@@ -121,15 +129,23 @@ public class BridgeProtocol {
    * @param token The secret of the window that a call message carries.
    * @param trustedOrigins The origins whose documents get the token; a top-level {@code
    *     about:blank}, what {@code Window.html} shows on WebView2, gets it too.
+   * @param resizeEdges The edges at which the page offers to resize a window without native resize
+   *     edges there, none for most windows.
    */
   public String bootstrapScript(
       String postMessage,
       String pageCodec,
       String rpcTransport,
       String token,
-      List<String> trustedOrigins) {
+      List<String> trustedOrigins,
+      List<WindowEdge> resizeEdges) {
     String origins =
         trustedOrigins.stream().map(ScriptUtil::quote).collect(Collectors.joining(",", "[", "]"));
+    String edges =
+        resizeEdges.stream()
+            .map(WindowEdge::pageName)
+            .map(ScriptUtil::quote)
+            .collect(Collectors.joining(",", "[", "]"));
     return BOOTSTRAP_TEMPLATE
         .replace("${channel}", CHANNEL)
         .replace("${pageApi}", PAGE_API)
@@ -138,6 +154,8 @@ public class BridgeProtocol {
         .replace("${windowEvent}", WINDOW_EVENT)
         .replace("${openCall}", OPEN_CALL)
         .replace("${closeCall}", CLOSE_CALL)
+        .replace("${controlCall}", CONTROL_CALL)
+        .replace("${resizeEdges}", edges)
         .replace("${separator}", "\u001f")
         .replace("${post}", postMessage)
         .replace("${codec}", pageCodec)
@@ -181,16 +199,17 @@ public class BridgeProtocol {
   }
 
   /**
-   * Parses the payload of an {@link #OPEN_CALL}: the components of {@link WindowParameters} in
-   * declaration order, separated by {@link #SEPARATOR}, an empty field for one that the page left
-   * unset, and {@code 1} for a set flag.
+   * Parses the payload of an {@link #OPEN_CALL}: the title, the size, the position, {@code
+   * centered}, the URL, the resource, and the four flags of the frame, separated by {@link
+   * #SEPARATOR}, an empty field for one that the page left unset, {@code 1} for a set flag, and
+   * {@code 0} for a flag of the frame that the page turned off.
    *
    * @return The parameters, defaults applied, or {@code null} if the text doesn't have the shape or
    *     a number doesn't parse.
    */
   public WindowParameters parseWindowParameters(String payload) {
     String[] parts = payload.split(SEPARATOR, -1);
-    if (parts.length != 8) {
+    if (parts.length != 12) {
       return null;
     }
     try {
@@ -203,6 +222,10 @@ public class BridgeProtocol {
           .centered(parts[5].equals("1"))
           .url(parts[6])
           .resource(parts[7])
+          .decorated(flag(parts[8]))
+          .closable(flag(parts[9]))
+          .minimizable(flag(parts[10]))
+          .maximizable(flag(parts[11]))
           .build();
     } catch (NumberFormatException _) {
       return null;
@@ -230,6 +253,11 @@ public class BridgeProtocol {
     if (name == null || !RPC_NAME.matcher(name).matches()) {
       throw new IllegalArgumentException("Not an RPC name: " + name);
     }
+  }
+
+  /** A flag of the frame: {@code null}, the default, unless the page set it. */
+  private Boolean flag(String text) {
+    return text.isEmpty() ? null : text.equals("1");
   }
 
   /** A number field, or {@code 0}, which the window parameters read as their default. */

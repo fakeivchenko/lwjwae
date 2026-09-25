@@ -85,6 +85,9 @@ WebKitGTK 6.0 differ, and what the backend does about each.
   GTK 4 has no minimum size of a window. There's no maximum size and no way to keep a window on
   top, so `maximumSize` and `alwaysOnTop` do nothing. Minimizing is `gtk_window_minimize`, and
   whether a window is minimized comes from the state of its `GdkToplevel`.
+- **Frame.** A window without a title bar gets one that never shows, as in GTK 3, but GTK 4 has
+  `gtk_widget_set_visible` for that. A drag from the page goes to `gdk_toplevel_begin_move` and
+  `gdk_toplevel_begin_resize`, with the pointer of the default seat and its place on the surface.
 - **Placement.** GTK 4 can't move a window or tell where it is, on X11 as on Wayland. The position in
   `WindowParameters` is ignored, `position()` answers `0, 0`, and `position(x, y)` and `center()` do
   nothing: what the API promises for Wayland, everywhere.

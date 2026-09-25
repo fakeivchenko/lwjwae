@@ -468,6 +468,20 @@
           "jint",
           "jint"
         ]
+      },
+      {
+        "returnType": "jshort",
+        "parameterTypes": [
+          "jint"
+        ]
+      },
+      {
+        "returnType": "jint",
+        "parameterTypes": [
+          "void*",
+          "jint",
+          "jint"
+        ]
       }
     ]
   }

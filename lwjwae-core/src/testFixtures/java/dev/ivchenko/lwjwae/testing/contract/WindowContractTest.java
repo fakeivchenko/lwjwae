@@ -389,6 +389,80 @@ public abstract class WindowContractTest extends DisplayContractTest {
     }
   }
 
+  @Test
+  void windowWithoutATitleBarIsControlledFromThePage() throws Exception {
+    try (Application application = Application.create()) {
+      Window window =
+          application.open(
+              WindowParameters.builder()
+                  .title("lwjwae :: frameless")
+                  .width(400)
+                  .height(300)
+                  .decorated(false)
+                  .build());
+      final var loaded = Loads.expectFinished(window);
+      window.loadResource("test-app/index.html");
+      window.show();
+      loaded.get(30, TimeUnit.SECONDS);
+      awaitTrue(window::isVisible, "the window must show");
+      Screenshots.capture("window-frameless");
+
+      Loads.eval(
+          window,
+          "lwjwae.window.state().then((state) => window.__state = JSON.stringify(state));"
+              + " undefined;");
+      String state = Loads.awaitValue(window, "window.__state");
+      Assertions.assertTrue(state.contains("\"maximized\":false"), state);
+      Assertions.assertTrue(state.contains("\"resizable\":true"), state);
+
+      Loads.eval(window, "lwjwae.window.maximize(); undefined;");
+      awaitTrue(window::isMaximized, "the page must maximize its window");
+      Loads.eval(window, "lwjwae.window.toggleMaximize(); undefined;");
+      awaitTrue(() -> !window.isMaximized(), "the page must bring its window back");
+
+      // With no button down, a move has nothing to follow and must leave the window as it is.
+      Loads.eval(
+          window,
+          "lwjwae.window.startMove().then(() => window.__moved = 'done', (error) =>"
+              + " window.__moved = String(error)); undefined;");
+      Assertions.assertEquals("done", Loads.awaitValue(window, "window.__moved"));
+      Assertions.assertFalse(window.isClosed());
+      Assertions.assertFalse(window.isMaximized());
+    }
+  }
+
+  @Test
+  void windowWithoutButtonsKeepsWhatJavaAsksFor() throws Exception {
+    WindowParameters parameters =
+        WindowParameters.builder()
+            .title("lwjwae :: buttons")
+            .width(400)
+            .height(300)
+            .closable(false)
+            .minimizable(false)
+            .maximizable(false)
+            .build();
+    try (Application application = Application.create()) {
+      Window window = application.open(parameters);
+      window.show();
+      awaitTrue(window::isVisible, "the window must show");
+      Screenshots.capture("window-without-buttons");
+      Assertions.assertEquals("lwjwae :: buttons", window.title());
+
+      window.requestClose();
+      Thread.sleep(500);
+      Assertions.assertFalse(window.isClosed(), "a window that isn't closable refuses the user");
+
+      window.maximize();
+      awaitTrue(window::isMaximized, "Java maximizes a window without a maximize button");
+      window.restore();
+      awaitTrue(() -> !window.isMaximized(), "and brings it back");
+
+      window.close();
+      Assertions.assertTrue(window.isClosed(), "Java closes a window without a close button");
+    }
+  }
+
   /** Waits for an event of {@code type}, passing over the others, and returns it. */
   private static WindowEvent awaitEvent(BlockingQueue<WindowEvent> heard, WindowEventType type)
       throws InterruptedException {

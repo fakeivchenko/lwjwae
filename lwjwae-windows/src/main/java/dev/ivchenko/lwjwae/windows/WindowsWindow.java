@@ -1,6 +1,7 @@
 package dev.ivchenko.lwjwae.windows;
 
 import dev.ivchenko.lwjwae.AbstractWindow;
+import dev.ivchenko.lwjwae.WindowEdge;
 import dev.ivchenko.lwjwae.WindowParameters;
 import dev.ivchenko.lwjwae.WindowPosition;
 import dev.ivchenko.lwjwae.WindowSize;
@@ -30,6 +31,7 @@ import java.lang.foreign.MemorySegment;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 import java.time.Duration;
+import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
@@ -48,6 +50,8 @@ import java.util.function.Supplier;
  */
 public class WindowsWindow extends AbstractWindow {
   private volatile boolean sharedBuffers = true;
+  private final boolean titleBar;
+  private final boolean maximizable;
 
   // --- window state that Windows keeps no getter for ---
   private volatile WindowSize minimumSize = WindowSize.NONE;
@@ -101,8 +105,10 @@ public class WindowsWindow extends AbstractWindow {
    */
   @SuppressWarnings("resource")
   WindowsWindow(WindowsApplication application, long id, WindowParameters parameters) {
-    super(application, id);
+    super(application, id, parameters);
     this.application = application;
+    this.titleBar = parameters.decorated();
+    this.maximizable = parameters.maximizable();
     this.callbackId = WINDOWS.register(this);
     try {
       this.dispatcher().run(() -> this.createWindow(parameters));
@@ -128,10 +134,18 @@ public class WindowsWindow extends AbstractWindow {
             placed ? parameters.y() : User32.CW_USEDEFAULT,
             parameters.width(),
             parameters.height(),
+            windowStyle(parameters),
             parameters.alwaysOnTop());
     User32.userData(window, this.callbackId);
     this.hwnd = window;
-    User32.resizeClient(window, parameters.width(), parameters.height());
+    if (!this.titleBar) {
+      // The frame was worked out before the window procedure could find this window: again.
+      User32.style(window, User32.style(window));
+    }
+    if (!parameters.closable()) {
+      User32.disableClose(window);
+    }
+    User32.resizeClient(window, parameters.width(), parameters.height(), this.titleBar);
     if (parameters.centered()) {
       centerWindow(window);
     }
@@ -140,6 +154,22 @@ public class WindowsWindow extends AbstractWindow {
         ComCallback.completion(WebView2.IID_CONTROLLER_COMPLETED, this::onControllerCreated);
     WebView2.createController(this.application.environment(), window, handler);
     Com.release(handler);
+  }
+
+  /**
+   * {@code WS_OVERLAPPEDWINDOW} without the buttons that the window may not have. A window without
+   * a title bar keeps the whole style: {@link User32#removeTitleBar} takes the bar away, and the
+   * style keeps what Windows gives a window with one, snapping and the animations included.
+   */
+  private static int windowStyle(WindowParameters parameters) {
+    int style = User32.WS_OVERLAPPEDWINDOW;
+    if (!parameters.minimizable()) {
+      style &= ~User32.WS_MINIMIZEBOX;
+    }
+    if (!parameters.maximizable()) {
+      style &= ~User32.WS_MAXIMIZEBOX;
+    }
+    return style;
   }
 
   @Override
@@ -164,7 +194,7 @@ public class WindowsWindow extends AbstractWindow {
 
   @Override
   public void size(int width, int height) {
-    this.dispatcher().run(() -> User32.resizeClient(this.window(), width, height));
+    this.dispatcher().run(() -> User32.resizeClient(this.window(), width, height, this.titleBar));
   }
 
   @Override
@@ -210,7 +240,7 @@ public class WindowsWindow extends AbstractWindow {
         .run(
             () -> {
               long style = User32.style(this.window());
-              long resizing = User32.WS_THICKFRAME | User32.WS_MAXIMIZEBOX;
+              long resizing = User32.WS_THICKFRAME | (this.maximizable ? User32.WS_MAXIMIZEBOX : 0);
               User32.style(this.window(), resizable ? style | resizing : style & ~resizing);
             });
   }
@@ -241,7 +271,7 @@ public class WindowsWindow extends AbstractWindow {
   private void enforceSizeLimits() {
     MemorySegment hwnd = this.window();
     int[] client = User32.clientSize(hwnd);
-    User32.resizeClient(hwnd, client[0], client[1]);
+    User32.resizeClient(hwnd, client[0], client[1], this.titleBar);
   }
 
   /** Answers {@code WM_GETMINMAXINFO}: the limits of the client area, as frame sizes. */
@@ -256,7 +286,9 @@ public class WindowsWindow extends AbstractWindow {
 
   /** The frame size around {@code limit}, with {@code unlimited} for a dimension without one. */
   private int[] frameLimit(MemorySegment hwnd, WindowSize limit, int unlimited) {
-    int[] frame = User32.frameSize(hwnd, Math.max(limit.width(), 1), Math.max(limit.height(), 1));
+    int[] frame =
+        User32.frameSize(
+            hwnd, Math.max(limit.width(), 1), Math.max(limit.height(), 1), this.titleBar);
     return new int[] {
       limit.width() > 0 ? frame[0] : unlimited, limit.height() > 0 ? frame[1] : unlimited
     };
@@ -350,6 +382,45 @@ public class WindowsWindow extends AbstractWindow {
                 User32.placement(hwnd, this.placementBeforeFullscreen);
               }
             });
+  }
+
+  @Override
+  protected void beginMove() {
+    this.dispatcher().run(() -> User32.beginFrameDrag(this.window(), User32.HTCAPTION));
+  }
+
+  @Override
+  protected void beginResize(WindowEdge edge) {
+    int hitTest =
+        switch (edge) {
+          case TOP -> User32.HTTOP;
+          case BOTTOM -> User32.HTBOTTOM;
+          case LEFT -> User32.HTLEFT;
+          case RIGHT -> User32.HTRIGHT;
+          case TOP_LEFT -> User32.HTTOPLEFT;
+          case TOP_RIGHT -> User32.HTTOPRIGHT;
+          case BOTTOM_LEFT -> User32.HTBOTTOMLEFT;
+          case BOTTOM_RIGHT -> User32.HTBOTTOMRIGHT;
+        };
+    this.dispatcher()
+        .run(
+            () -> {
+              MemorySegment current = this.window();
+              if ((User32.style(current) & User32.WS_THICKFRAME) != 0) {
+                User32.beginFrameDrag(current, hitTest);
+              }
+            });
+  }
+
+  /**
+   * The top edge of a window without a title bar: the web view covers the client area up to the top
+   * of the window, where the other edges keep a strip of frame that Windows resizes from.
+   */
+  @Override
+  protected List<WindowEdge> pageResizeEdges() {
+    return this.titleBar
+        ? List.of()
+        : List.of(WindowEdge.TOP, WindowEdge.TOP_LEFT, WindowEdge.TOP_RIGHT);
   }
 
   @Override
@@ -797,6 +868,14 @@ public class WindowsWindow extends AbstractWindow {
           window.windowChanged();
         } else if (message == User32.WM_MOVE || message == User32.WM_ACTIVATE) {
           window.windowChanged();
+        } else if (message == User32.WM_NCCALCSIZE
+            && wordParameter != 0
+            && !window.titleBar
+            && !window.fullscreen) {
+          return User32.removeTitleBar(hwnd, wordParameter, longParameter);
+        } else if (message == User32.WM_CLOSE && window.refusesCloseRequest()) {
+          // Not passed on: DefWindowProc would destroy the window.
+          return 0;
         } else if (message == User32.WM_CLOSE && window.hidesOnCloseRequest()) {
           // Not passed on: DefWindowProc would destroy the window.
           window.hideNow();

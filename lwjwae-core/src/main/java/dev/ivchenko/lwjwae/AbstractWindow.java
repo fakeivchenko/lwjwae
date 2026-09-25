@@ -73,6 +73,8 @@ public abstract class AbstractWindow implements Window {
   private final PageEvents pageEvents = new PageEvents();
   private final WindowEvents windowEvents = new WindowEvents(this, this::sendToPage);
   private final String token = newToken();
+  private final boolean closable;
+  private final boolean maximizable;
 
   private volatile MessageRpcCalls messageCalls;
 
@@ -84,10 +86,14 @@ public abstract class AbstractWindow implements Window {
    *
    * @param application The application that opens the window.
    * @param id The ID that {@link AbstractApplication#createWindow} was given.
+   * @param parameters What the window starts with; the core keeps the parts of the frame that it
+   *     acts on itself.
    */
-  protected AbstractWindow(AbstractApplication application, long id) {
+  protected AbstractWindow(AbstractApplication application, long id, WindowParameters parameters) {
     this.application = Objects.requireNonNull(application, "application");
     this.id = id;
+    this.closable = parameters.closable();
+    this.maximizable = parameters.maximizable();
   }
 
   /** The UI thread of the toolkit, the one of the application. */
@@ -320,6 +326,7 @@ public abstract class AbstractWindow implements Window {
       case BridgeProtocol.EVENT_CALL -> this::emitFromPage;
       case BridgeProtocol.OPEN_CALL -> this::openFromPage;
       case BridgeProtocol.CLOSE_CALL -> _ -> this.close();
+      case BridgeProtocol.CONTROL_CALL -> this::controlFromPage;
       default -> null;
     };
   }
@@ -369,7 +376,8 @@ public abstract class AbstractWindow implements Window {
             pageCodec,
             this.rpcTransportScript(),
             this.token,
-            this.trustedOrigins()));
+            this.trustedOrigins(),
+            this.pageResizeEdges()));
   }
 
   /**
@@ -408,6 +416,96 @@ public abstract class AbstractWindow implements Window {
     Window opened = this.application.open(parameters);
     opened.show();
     call.reply(Long.toString(opened.id()));
+  }
+
+  /**
+   * {@code window.lwjwae.window}: the body is an action and, for some, an argument after {@link
+   * BridgeProtocol#SEPARATOR}. {@code state} answers with JSON; the others answer with nothing once
+   * the window has taken the request.
+   */
+  private void controlFromPage(RpcCall call) {
+    String[] parts = call.text().split(BridgeProtocol.SEPARATOR, 2);
+    String argument = parts.length > 1 ? parts[1] : "";
+    switch (parts[0]) {
+      case "minimize" -> this.minimize();
+      case "maximize" -> this.maximize();
+      case "restore" -> this.restore();
+      case "toggle-maximize" -> this.toggleMaximize();
+      case "fullscreen" -> this.fullscreen("1".equals(argument));
+      case "close" -> this.requestClose();
+      case "move" -> this.beginMove();
+      case "resize" -> {
+        WindowEdge edge = WindowEdge.ofPageName(argument);
+        if (edge == null) {
+          throw RpcException.badRequest("malformed-edge", "No such edge: " + argument);
+        }
+        this.beginResize(edge);
+      }
+      case "title-bar-double-click" -> this.titleBarDoubleClicked();
+      case "state" -> call.reply(this.dispatcher().call(this::stateJson));
+      default -> throw RpcException.badRequest("malformed-control", "No such action: " + parts[0]);
+    }
+  }
+
+  private void toggleMaximize() {
+    if (this.isMaximized()) {
+      this.restore();
+    } else {
+      this.maximize();
+    }
+  }
+
+  /** What {@code window.lwjwae.window.state()} resolves to. Call on the UI thread. */
+  private String stateJson() {
+    WindowSize size = new WindowSize(this.width(), this.height());
+    WindowPosition position = this.position();
+    return ("{\"width\":%d,\"height\":%d,\"x\":%d,\"y\":%d,\"minimized\":%b,\"maximized\":%b,"
+            + "\"fullscreen\":%b,\"focused\":%b,\"resizable\":%b}")
+        .formatted(
+            size.width(),
+            size.height(),
+            position.x(),
+            position.y(),
+            this.isMinimized(),
+            this.isMaximized(),
+            this.isFullscreen(),
+            this.isFocused(),
+            this.isResizable());
+  }
+
+  /**
+   * A double click on a drag region of the page, which stands in for the title bar: toggles
+   * maximized, the way a double click on a title bar does, unless the window can't be maximized or
+   * resized. A backend whose desktop lets the user choose another action overrides it.
+   */
+  protected void titleBarDoubleClicked() {
+    if (this.maximizable && this.isResizable()) {
+      this.toggleMaximize();
+    }
+  }
+
+  /**
+   * Hands the pointer to the window manager, which moves the window until the user lets go of the
+   * button, the way a drag on the title bar does. The page calls this while the button is down,
+   * from a drag region; on any thread.
+   */
+  protected abstract void beginMove();
+
+  /**
+   * Hands the pointer to the window manager, which resizes the window from {@code edge} until the
+   * user lets go of the button. The page calls this while the button is down; on any thread. Does
+   * nothing when the window isn't resizable.
+   */
+  protected abstract void beginResize(WindowEdge edge);
+
+  /**
+   * The edges at which the page offers to resize the window, because the window has no native
+   * resize edges there: a strip along each edge takes the pointer and calls {@link #beginResize}.
+   * The default is none; a backend whose windows without a title bar lose some of their edges lists
+   * those.
+   */
+  protected List<WindowEdge> pageResizeEdges() {
+    return List.of();
   }
 
   /**
@@ -482,6 +580,16 @@ public abstract class AbstractWindow implements Window {
    */
   protected final boolean hidesOnCloseRequest() {
     return this.closeAction == CloseAction.HIDE && !this.closed && this.application.hasTrayIcon();
+  }
+
+  /**
+   * Whether a close that the user asked for should be refused, because the window isn't {@link
+   * WindowParameters#closable()}. A backend asks before {@link #hidesOnCloseRequest()}, and cancels
+   * the close when the answer is {@code true}, whatever the desktop let through: a shortcut, a menu
+   * of the taskbar, or a close button that the platform shows anyway.
+   */
+  protected final boolean refusesCloseRequest() {
+    return !this.closable;
   }
 
   private void publish(String name, BiFunction<Window, String, String> handler, boolean typed) {

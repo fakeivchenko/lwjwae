@@ -116,6 +116,9 @@ public class Signatures {
   public final FunctionDescriptor MSG_ID_DOUBLE =
       FunctionDescriptor.of(C_POINTER, C_POINTER, C_POINTER, C_DOUBLE);
 
+  /** {@code id -[receiver selector:NSInteger]}, the shape of {@code objc_allocateClassPair}. */
+  public final FunctionDescriptor MSG_ID_LONG = POINTER_POINTER_POINTER_LONG;
+
   /** {@code id -[receiver selector:BOOL]}. */
   public final FunctionDescriptor MSG_ID_BOOL =
       FunctionDescriptor.of(C_POINTER, C_POINTER, C_POINTER, C_BOOL);
