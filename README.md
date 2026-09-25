@@ -153,6 +153,9 @@ dependencies {
   a title, a body, an image, and buttons, and runs a handler on a click: a toast on Windows,
   `UNUserNotificationCenter` on macOS for an `.app` bundle, and the `org.freedesktop.Notifications`
   service on Linux.
+- **One instance.** `Application.createSingleInstance(parameters, args)` lets a second start hand
+  its arguments to the running process, whose window comes to the front, and end, having opened
+  nothing; `onSecondInstance` hears of it.
 - **Pages from the classpath.** `loadResource("app/index.html")` serves the files of the
   application under a custom scheme, so relative links, stylesheets, scripts, and `fetch` resolve
   as on a web server. During development, `LWJWAE_DEV_SERVER_URL` points every window at a Vite

@@ -199,6 +199,39 @@ whatever the system associates with it. It goes through `g_app_info_launch_defau
 Linux, the OpenURI portal inside a sandbox included, `ShellExecuteW` on Windows, and `NSWorkspace`
 on macOS.
 
+### One instance
+
+`Application.createSingleInstance(parameters, args)` in place of `create` keeps one process of the
+application running per user. The first start creates the application as `create` does. A later
+one hands its arguments and its working directory to the first and gets an empty `Optional`,
+having opened nothing, not even the toolkit, so `main` returns and the process ends:
+
+```java
+public static void main(String[] args) {
+  ApplicationParameters parameters = ApplicationParameters.builder().name("notes").build();
+  Optional<Application> created = Application.createSingleInstance(parameters, args);
+  if (created.isEmpty()) {
+    return;
+  }
+  try (Application application = created.get()) {
+    application.onSecondInstance(start -> openFiles(start.workingDirectory(), start.arguments()));
+    ...
+  }
+}
+```
+
+In the first process, the oldest window comes to the front, shown and restored if it was hidden or
+minimized, and then the `onSecondInstance` listeners get a `SecondInstanceEvent`. A listener runs
+on a virtual thread, and the later process waits until it returns, so it ends knowing that it was
+heard. A start that comes before any listener waits for the first one. Where the system doesn't
+let a process take the focus, on Wayland, the window comes back but may only ask for attention.
+
+The processes meet on a Unix domain socket named after a hash of the user and
+`ApplicationParameters.name()`, which is therefore required: in `$XDG_RUNTIME_DIR` on Linux, the
+temporary directory elsewhere, Windows 10 and later included. A lock file next to it lets only one
+of two processes that start at the same moment become the first. The socket file stays when the
+process ends, and the next first start replaces it. `quit()` gives the name up.
+
 Where the platform can't, the call does what it can and the reads say so:
 
 | Platform      | What's missing                                                                                                   |

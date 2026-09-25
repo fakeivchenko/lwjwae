@@ -2,6 +2,9 @@ package dev.ivchenko.lwjwae;
 
 import dev.ivchenko.lwjwae.bridge.BridgeProtocol;
 import dev.ivchenko.lwjwae.event.Event;
+import dev.ivchenko.lwjwae.event.SecondInstanceEvent;
+import dev.ivchenko.lwjwae.instance.InstanceLock;
+import dev.ivchenko.lwjwae.instance.InstanceLocks;
 import dev.ivchenko.lwjwae.notification.Notification;
 import dev.ivchenko.lwjwae.notification.NotificationHandle;
 import dev.ivchenko.lwjwae.testing.FakeApplication;
@@ -15,6 +18,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Assertions;
@@ -453,5 +457,62 @@ class AbstractApplicationTest {
       FakeWindow other = application.openFake();
       Assertions.assertEquals(1024, other.width(), "a window without a state key opens as asked");
     }
+  }
+
+  @Test
+  void secondInstanceBringsTheOldestWindowForwardAndReachesTheListeners(@TempDir Path directory)
+      throws Exception {
+    try (FakeApplication application = new FakeApplication()) {
+      final FakeWindow oldest = application.openFake();
+      final FakeWindow newer = application.openFake();
+      AbstractApplicationTest.serveInstances(application, directory);
+      BlockingQueue<SecondInstanceEvent> heard = new LinkedBlockingQueue<>();
+      application.onSecondInstance(heard::add);
+
+      SecondInstanceEvent second =
+          new SecondInstanceEvent(List.of("notes.txt"), Path.of("/home/user"));
+      Assertions.assertTrue(InstanceLocks.claim(directory, "app", second).isEmpty());
+
+      Assertions.assertEquals(second, heard.poll(), "heard before the second process ended");
+      Assertions.assertTrue(oldest.isFocused(), "the oldest window comes forward");
+      Assertions.assertFalse(newer.isFocused());
+    }
+  }
+
+  @Test
+  void startBeforeAnyListenerReachesTheFirstOne(@TempDir Path directory) {
+    try (FakeApplication application = new FakeApplication()) {
+      AbstractApplicationTest.serveInstances(application, directory);
+      SecondInstanceEvent early = new SecondInstanceEvent(List.of("early"), Path.of("/"));
+      Assertions.assertTrue(InstanceLocks.claim(directory, "app", early).isEmpty());
+
+      List<SecondInstanceEvent> heard = new CopyOnWriteArrayList<>();
+      application.onSecondInstance(heard::add);
+
+      Assertions.assertEquals(List.of(early), heard);
+    }
+  }
+
+  @Test
+  void quitGivesTheNameUp(@TempDir Path directory) {
+    try (FakeApplication application = new FakeApplication()) {
+      AbstractApplicationTest.serveInstances(application, directory);
+      application.quit();
+    }
+
+    try (InstanceLock next =
+        InstanceLocks.claim(directory, "app", AbstractApplicationTest.start()).orElseThrow()) {
+      Assertions.assertNotNull(next);
+    }
+  }
+
+  /** Claims "app" in {@code directory} for {@code application}, as createSingleInstance does. */
+  private static void serveInstances(AbstractApplication application, Path directory) {
+    application.serveInstances(
+        InstanceLocks.claim(directory, "app", AbstractApplicationTest.start()).orElseThrow());
+  }
+
+  private static SecondInstanceEvent start() {
+    return new SecondInstanceEvent(List.of(), Path.of("/"));
   }
 }

@@ -3,13 +3,17 @@ package dev.ivchenko.lwjwae;
 import dev.ivchenko.lwjwae.bridge.codec.BridgeCodec;
 import dev.ivchenko.lwjwae.event.Event;
 import dev.ivchenko.lwjwae.event.EventSubscription;
+import dev.ivchenko.lwjwae.event.SecondInstanceEvent;
 import dev.ivchenko.lwjwae.exception.BackendNotAvailableException;
+import dev.ivchenko.lwjwae.instance.InstanceLock;
 import dev.ivchenko.lwjwae.notification.Notification;
 import dev.ivchenko.lwjwae.notification.NotificationHandle;
 import dev.ivchenko.lwjwae.rpc.RpcHandler;
 import dev.ivchenko.lwjwae.tray.Tray;
 import dev.ivchenko.lwjwae.tray.TrayIcon;
 import dev.ivchenko.lwjwae.util.PlatformUtil;
+import java.io.UncheckedIOException;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -75,6 +79,60 @@ public interface Application extends AutoCloseable {
         Application.provider()
             .orElseThrow(() -> new BackendNotAvailableException(Application.noBackendMessage()));
     return provider.create(parameters);
+  }
+
+  /**
+   * Creates the application unless another process of it runs already. That one gets the arguments
+   * of this process, its oldest window comes to the front, and its {@link #onSecondInstance}
+   * listeners hear of it; this process gets nothing and should end, having opened nothing, not even
+   * the toolkit.
+   *
+   * <pre>{@code
+   * public static void main(String[] args) {
+   *   ApplicationParameters parameters = ApplicationParameters.builder().name("notes").build();
+   *   Optional<Application> created = Application.createSingleInstance(parameters, args);
+   *   if (created.isEmpty()) {
+   *     return;
+   *   }
+   *   try (Application application = created.get()) {
+   *     application.onSecondInstance(start -> openFiles(start.arguments()));
+   *     ...
+   *   }
+   * }
+   * }</pre>
+   *
+   * <p>The processes find each other by {@link ApplicationParameters#name()} and the user, so two
+   * users each run their own.
+   *
+   * @param parameters The parameters of the application, with a name.
+   * @param arguments The arguments of this process, as {@code main} received them.
+   * @return The application, or empty when another process of it runs and took over.
+   * @throws IllegalArgumentException If {@code parameters} has no name.
+   * @throws UncheckedIOException If the processes can't reach each other.
+   * @throws BackendNotAvailableException If no backend on the classpath supports this machine.
+   */
+  static Optional<Application> createSingleInstance(
+      ApplicationParameters parameters, String... arguments) {
+    if (parameters.name() == null) {
+      throw new IllegalArgumentException("A single instance needs the name of the application");
+    }
+    SecondInstanceEvent start =
+        new SecondInstanceEvent(List.of(arguments), Path.of("").toAbsolutePath());
+    Optional<InstanceLock> claimed = InstanceLock.claim(parameters.name(), start);
+    if (claimed.isEmpty()) {
+      return Optional.empty();
+    }
+    InstanceLock lock = claimed.get();
+    Application application;
+    try {
+      application = Application.create(parameters);
+    } catch (RuntimeException | Error e) {
+      try (lock) {
+        throw e;
+      }
+    }
+    ((AbstractApplication) application).serveInstances(lock);
+    return Optional.of(application);
   }
 
   /**
@@ -266,6 +324,15 @@ public interface Application extends AutoCloseable {
    * @throws IllegalStateException If the application is closed.
    */
   NotificationHandle showNotification(Notification notification);
+
+  /**
+   * Listens to the starts of other processes of the application, when it was created by {@link
+   * #createSingleInstance}; before the listeners hear of one, the oldest window has come to the
+   * front. A listener runs on a virtual thread, and the process that started waits until every
+   * listener returned. A start that came before any listener reaches the first one on the thread
+   * that registers it.
+   */
+  EventSubscription onSecondInstance(Consumer<SecondInstanceEvent> listener);
 
   /**
    * Opens {@code url} where the system opens it: a web page in the default browser, a {@code

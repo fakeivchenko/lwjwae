@@ -25,8 +25,9 @@ import lombok.Builder;
  * @param codec The codec behind the typed bridge methods. The default is the first {@link
  *     BridgeCodec} on the classpath. When there is none, the value stays {@code null} and typed
  *     calls fail with a message.
- * @param name The name of the application, as the desktop shows it next to its notifications.
- *     Default: none, and the desktop shows its own placeholder.
+ * @param name The name of the application, as the desktop shows it next to its notifications, and
+ *     the one that the processes of {@link Application#createSingleInstance} meet under. Default:
+ *     none, and the desktop shows its own placeholder.
  * @param dataDirectory Where the application keeps what it remembers from one run to the next, such
  *     as the size and the place of its windows. Default: the directory that the platform has for
  *     the data of an application, named after {@code name}: {@code $XDG_CONFIG_HOME/NAME} or {@code

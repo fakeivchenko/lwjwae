@@ -4,6 +4,8 @@ import dev.ivchenko.lwjwae.bridge.BridgeProtocol;
 import dev.ivchenko.lwjwae.bridge.codec.BridgeCodec;
 import dev.ivchenko.lwjwae.event.Event;
 import dev.ivchenko.lwjwae.event.EventSubscription;
+import dev.ivchenko.lwjwae.event.SecondInstanceEvent;
+import dev.ivchenko.lwjwae.instance.InstanceLock;
 import dev.ivchenko.lwjwae.notification.Notification;
 import dev.ivchenko.lwjwae.notification.NotificationHandle;
 import dev.ivchenko.lwjwae.rpc.RpcHandler;
@@ -18,6 +20,7 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
@@ -69,6 +72,11 @@ public abstract class AbstractApplication implements Application {
   private final Condition idle = this.lifecycle.newCondition();
 
   private final AtomicBoolean closed = new AtomicBoolean();
+
+  // --- single instance, under the lock of the listener list ---
+  private final List<Consumer<SecondInstanceEvent>> secondInstanceListeners = new ArrayList<>();
+  private final List<SecondInstanceEvent> unheardStarts = new ArrayList<>();
+  private volatile InstanceLock instanceLock;
 
   /**
    * Creates an application on the UI thread of a toolkit. Opens no window.
@@ -333,6 +341,65 @@ public abstract class AbstractApplication implements Application {
   }
 
   @Override
+  public final EventSubscription onSecondInstance(Consumer<SecondInstanceEvent> listener) {
+    Objects.requireNonNull(listener, "listener");
+    List<SecondInstanceEvent> unheard;
+    synchronized (this.secondInstanceListeners) {
+      this.secondInstanceListeners.add(listener);
+      unheard = List.copyOf(this.unheardStarts);
+      this.unheardStarts.clear();
+    }
+    unheard.forEach(listener);
+    return () -> {
+      synchronized (this.secondInstanceListeners) {
+        this.secondInstanceListeners.remove(listener);
+      }
+    };
+  }
+
+  /**
+   * Takes over {@code lock}, whose name this application now holds, and answers the processes that
+   * start after it, until {@link #quit()}.
+   */
+  final void serveInstances(InstanceLock lock) {
+    this.instanceLock = lock;
+    lock.serve(this::secondInstanceStarted);
+    if (this.closed.get()) {
+      lock.close();
+    }
+  }
+
+  /**
+   * Another process of the application started and handed its start over: the oldest window comes
+   * to the front, and the listeners hear of it.
+   */
+  private void secondInstanceStarted(SecondInstanceEvent start) {
+    List<Window> open = this.windows();
+    if (!open.isEmpty()) {
+      try {
+        open.getFirst().focus();
+      } catch (Throwable t) {
+        ThrowableUtil.report(t);
+      }
+    }
+    List<Consumer<SecondInstanceEvent>> listeners;
+    synchronized (this.secondInstanceListeners) {
+      if (this.secondInstanceListeners.isEmpty()) {
+        this.unheardStarts.add(start);
+        return;
+      }
+      listeners = List.copyOf(this.secondInstanceListeners);
+    }
+    for (Consumer<SecondInstanceEvent> listener : listeners) {
+      try {
+        listener.accept(start);
+      } catch (Throwable t) {
+        ThrowableUtil.report(t);
+      }
+    }
+  }
+
+  @Override
   public final void openExternal(String url) {
     Objects.requireNonNull(url, "url");
     this.checkOpen();
@@ -453,6 +520,10 @@ public abstract class AbstractApplication implements Application {
       } catch (Throwable t) {
         ThrowableUtil.report(t);
       }
+    }
+    InstanceLock lock = this.instanceLock;
+    if (lock != null) {
+      lock.close();
     }
     this.listeners.shutdown();
     this.signalIdle();
