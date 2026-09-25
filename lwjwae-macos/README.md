@@ -252,5 +252,5 @@ stays, and another application can be created on it.
 ```
 
 With `-Dlwjwae.screenshots=true`, the display tests capture the screen with the `screencapture`
-tool of the system instead of `java.awt.Robot`, because AWT would bring a second `NSApplication`
-into a process that already runs one.
+tool of the system, as every platform does with its own tool: AWT would also bring a second
+`NSApplication` into a process that already runs one.

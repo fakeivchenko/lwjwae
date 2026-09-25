@@ -1,14 +1,14 @@
 package dev.ivchenko.lwjwae.testing;
 
 import dev.ivchenko.lwjwae.util.PlatformUtil;
-import java.awt.AWTException;
-import java.awt.GraphicsDevice;
-import java.awt.GraphicsEnvironment;
-import java.awt.Rectangle;
-import java.awt.Robot;
+import java.io.File;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import javax.imageio.ImageIO;
+import java.util.Base64;
+import java.util.List;
+import java.util.concurrent.TimeUnit;
 import lombok.SneakyThrows;
 import lombok.experimental.UtilityClass;
 
@@ -17,17 +17,17 @@ import lombok.experimental.UtilityClass;
  * engine drew.
  *
  * <p>Capturing is off unless {@code -Dlwjwae.screenshots=true} is set, because the desktop of a
- * developer isn't worth capturing. The whole virtual screen is captured instead of the window
- * alone. On Xvfb, the window is the only thing on the screen, and on a real desktop, the
- * surroundings help explain a failure. {@code java.awt.Robot} needs nothing beyond the X libraries
- * that WebKitGTK already depends on, plus {@code libXtst}. On macOS, the {@code screencapture} tool
- * of the system is used instead, because AWT would bring a second {@code NSApplication} into a
- * process that already runs one.
+ * developer isn't worth capturing. The whole screen is captured instead of the window alone. On
+ * Xvfb, the window is the only thing on the screen, and on a real desktop, the surroundings help
+ * explain a failure.
  *
- * <p>On X11, {@code Robot} captures through GTK when it can, and the GTK it loads is GTK 3. In a
- * process that runs GTK 4, the two register the same GDK types, GLib warns {@code cannot register
- * existing type 'GdkDisplayManager'}, and the process hangs soon after. {@code awt.robot.gtk=false}
- * makes {@code Robot} read the screen through Xlib instead, which works under either toolkit.
+ * <p>The picture comes from a tool of the system, never from {@code java.awt.Robot}: on Xvfb,
+ * {@code Robot} showed a GTK dialog as a black box that was drawn in full, and on macOS, AWT would
+ * bring a second {@code NSApplication} into a process that already runs one. X11 goes through
+ * {@code import} of ImageMagick, a wlroots compositor through {@code grim}, Windows through
+ * PowerShell and {@code System.Drawing}, and macOS through {@code screencapture}. A Wayland desktop
+ * without {@code grim}, such as GNOME or KDE, asks the user for every capture through its portal,
+ * so nothing is captured there.
  */
 @UtilityClass
 public class Screenshots {
@@ -35,50 +35,88 @@ public class Screenshots {
   private final Path DIRECTORY =
       Path.of(System.getProperty("lwjwae.screenshotsDir", "build/screenshots"));
   private final long PAINT_DELAY_MILLIS = 500;
+  private final long CAPTURE_TIMEOUT_SECONDS = 30;
 
-  static {
-    // Read once, when Robot's X11 peer loads: keep it from loading GTK 3 into a GTK 4 process.
-    if (System.getProperty("awt.robot.gtk") == null) {
-      System.setProperty("awt.robot.gtk", "false");
-    }
-  }
+  /**
+   * The virtual screen of Windows into the PNG file {@code $file}. The process declares itself aware
+   * of the DPI first, so that a scaled desktop is captured whole.
+   */
+  private final String WINDOWS_CAPTURE =
+      """
+      Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+      Add-Type -Namespace Lwjwae -Name Dpi -MemberDefinition '[DllImport("user32.dll")] public static extern bool SetProcessDPIAware();'
+      [Lwjwae.Dpi]::SetProcessDPIAware() | Out-Null
+      $screen = [System.Windows.Forms.SystemInformation]::VirtualScreen
+      $bitmap = New-Object System.Drawing.Bitmap $screen.Width, $screen.Height
+      $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+      $graphics.CopyFromScreen($screen.Left, $screen.Top, 0, 0, $bitmap.Size)
+      $bitmap.Save($file, [System.Drawing.Imaging.ImageFormat]::Png)
+      """;
 
   /**
    * Saves {@code NAME.png} into the screenshot directory. This method does nothing when screenshots
    * are off.
    *
-   * <p>A capture that the desktop refuses, for example on Wayland without a portal grant or in a
-   * locked session, is reported, not thrown. The picture is diagnostics; the assertions are the
-   * test. CI notices a missing picture through the artifact step instead.
+   * <p>A capture that fails, for want of the tool or of a screen, is reported, not thrown. The
+   * picture is diagnostics; the assertions are the test. CI notices a missing picture through the
+   * artifact step instead.
    */
   @SneakyThrows
   public void capture(String name) {
     if (!ENABLED) {
       return;
     }
-    if (PlatformUtil.isLinux() && System.getenv("WAYLAND_DISPLAY") != null) {
-      // Robot would go through the desktop portal, which asks the user on every capture; CI runs on
-      // Xvfb.
-      System.err.println("Screenshot '" + name + "' skipped: no capture on Wayland");
-      return;
-    }
-
     Thread.sleep(PAINT_DELAY_MILLIS);
     Files.createDirectories(DIRECTORY);
-    Path file = DIRECTORY.resolve(name + ".png");
-    if (PlatformUtil.isMacOs()) {
-      new ProcessBuilder("screencapture", "-x", file.toString()).inheritIO().start().waitFor();
+    Path file = DIRECTORY.resolve(name + ".png").toAbsolutePath();
+    List<String> command = command(file);
+    if (command == null) {
+      System.err.println("Screenshot '" + name + "' skipped: no capture tool for this desktop");
       return;
     }
     try {
-      Rectangle screen = new Rectangle();
-      for (GraphicsDevice device :
-          GraphicsEnvironment.getLocalGraphicsEnvironment().getScreenDevices()) {
-        screen = screen.union(device.getDefaultConfiguration().getBounds());
+      Process process = new ProcessBuilder(command).redirectErrorStream(true).start();
+      String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+      if (!process.waitFor(CAPTURE_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+        process.destroyForcibly();
+        System.err.println("Screenshot '" + name + "' skipped: " + command.getFirst() + " hung");
+      } else if (process.exitValue() != 0) {
+        System.err.println("Screenshot '" + name + "' skipped: " + output.strip());
       }
-      ImageIO.write(new Robot().createScreenCapture(screen), "png", file.toFile());
-    } catch (SecurityException | AWTException e) {
+    } catch (IOException e) {
       System.err.println("Screenshot '" + name + "' skipped: " + e.getMessage());
     }
+  }
+
+  /** The command that captures the screen into {@code file}, or {@code null} for none. */
+  private List<String> command(Path file) {
+    if (PlatformUtil.isMacOs()) {
+      return List.of("screencapture", "-x", file.toString());
+    }
+    if (PlatformUtil.isWindows()) {
+      // Encoded, the script reaches PowerShell whole: the command line of Windows would mangle the
+      // quotes in it.
+      String script = "$file = '" + file.toString().replace("'", "''") + "'\n" + WINDOWS_CAPTURE;
+      String encoded =
+          Base64.getEncoder().encodeToString(script.getBytes(StandardCharsets.UTF_16LE));
+      return List.of("powershell", "-NoProfile", "-NonInteractive", "-EncodedCommand", encoded);
+    }
+    if (System.getenv("WAYLAND_DISPLAY") != null) {
+      return isOnPath("grim") ? List.of("grim", file.toString()) : null;
+    }
+    return List.of("import", "-window", "root", file.toString());
+  }
+
+  private boolean isOnPath(String tool) {
+    String path = System.getenv("PATH");
+    if (path == null) {
+      return false;
+    }
+    for (String directory : path.split(File.pathSeparator)) {
+      if (Files.isExecutable(Path.of(directory, tool))) {
+        return true;
+      }
+    }
+    return false;
   }
 }
