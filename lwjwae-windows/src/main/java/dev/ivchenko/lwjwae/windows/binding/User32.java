@@ -49,6 +49,10 @@ public class User32 {
 
   private final int MAX_TRACK_SIZE_OFFSET = 32;
   public final int MONITOR_DEFAULTTONEAREST = 2;
+
+  /** {@code MONITORINFOF_PRIMARY}: the flag of the primary monitor in {@code MONITORINFO}. */
+  private final int MONITORINFOF_PRIMARY = 1;
+
   public final int PM_NOREMOVE = 0x0000;
   public final int WM_DESTROY = 0x0002;
   public final int WM_MOVE = 0x0003;
@@ -226,6 +230,8 @@ public class User32 {
       NativeLibraries.downcall(USER32, "MonitorFromWindow", Signatures.POINTER_POINTER_INT);
   private final MethodHandle GET_MONITOR_INFO =
       NativeLibraries.downcall(USER32, "GetMonitorInfoW", Signatures.INT_POINTER_POINTER);
+  private final MethodHandle ENUM_DISPLAY_MONITORS =
+      NativeLibraries.downcall(USER32, "EnumDisplayMonitors", Signatures.INT_POINTER_X3_LONG);
   private final MethodHandle SET_WINDOW_POS =
       NativeLibraries.downcall(USER32, "SetWindowPos", Signatures.INT_POINTER_POINTER_INT_X5);
   private final MethodHandle GET_WINDOW_LONG_PTR =
@@ -754,6 +760,39 @@ public class User32 {
         (int)
             SET_WINDOW_POS.invokeExact(
                 hwnd, MemorySegment.NULL, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+  }
+
+  /**
+   * Calls {@code callback}, a {@code MONITORENUMPROC}, for every monitor of the desktop, on the
+   * calling thread, before it returns.
+   */
+  @SneakyThrows
+  public void enumDisplayMonitors(MemorySegment callback) {
+    int _ =
+        (int)
+            ENUM_DISPLAY_MONITORS.invokeExact(MemorySegment.NULL, MemorySegment.NULL, callback, 0L);
+  }
+
+  /** The monitor that holds most of the window, or the nearest one. */
+  @SneakyThrows
+  public MemorySegment monitorOf(MemorySegment hwnd) {
+    return (MemorySegment) MONITOR_FROM_WINDOW.invokeExact(hwnd, MONITOR_DEFAULTTONEAREST);
+  }
+
+  /** What {@code GetMonitorInfoW} tells about {@code monitor}. */
+  @SneakyThrows
+  public MonitorInfo monitorInfo(MemorySegment monitor) {
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment info = arena.allocate(Signatures.MONITORINFOEX);
+      info.set(Signatures.C_INT, 0, (int) Signatures.MONITORINFOEX.byteSize());
+      int _ = (int) GET_MONITOR_INFO.invokeExact(monitor, info);
+      int[] fields = info.asSlice(0, Signatures.MONITORINFO.byteSize()).toArray(Signatures.C_INT);
+      return new MonitorInfo(
+          new int[] {fields[1], fields[2], fields[3], fields[4]},
+          new int[] {fields[5], fields[6], fields[7], fields[8]},
+          (fields[9] & MONITORINFOF_PRIMARY) != 0,
+          Wide.read(info.asSlice(Signatures.MONITORINFO.byteSize())));
+    }
   }
 
   /**

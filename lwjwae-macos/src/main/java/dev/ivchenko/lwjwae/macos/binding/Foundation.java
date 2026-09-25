@@ -129,6 +129,20 @@ public class Foundation {
     return rect;
   }
 
+  /**
+   * The {@code CGFloat} property {@code key} of {@code object}, through key-value coding, which
+   * wraps it in an {@code NSNumber}: no {@code objc_msgSend} returning a floating-point number is
+   * bound.
+   */
+  public double doubleValue(MemorySegment object, String key) {
+    MemorySegment value = ObjC.send(object, "valueForKey:", Foundation.string(key));
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment number = arena.allocate(Signatures.C_DOUBLE);
+      ObjC.sendVoid(value, "getValue:size:", number, Signatures.C_DOUBLE.byteSize());
+      return number.get(Signatures.C_DOUBLE, 0);
+    }
+  }
+
   /** An {@code NSSize} allocated from {@code arena}. */
   public MemorySegment size(Arena arena, double width, double height) {
     MemorySegment size = arena.allocate(Signatures.NSSIZE);

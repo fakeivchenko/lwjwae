@@ -7,6 +7,8 @@ import java.lang.foreign.MemoryLayout;
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.SymbolLookup;
 import java.lang.invoke.MethodHandle;
+import java.util.ArrayList;
+import java.util.List;
 import lombok.SneakyThrows;
 import lombok.experimental.UtilityClass;
 
@@ -35,6 +37,22 @@ public class Gdk {
           GDK, "gdk_display_get_monitor_at_window", Signatures.POINTER_POINTER_POINTER);
   private final MethodHandle MONITOR_GET_WORKAREA =
       NativeLibraries.downcall(GDK, "gdk_monitor_get_workarea", Signatures.VOID_POINTER_POINTER);
+  private final MethodHandle MONITOR_GET_GEOMETRY =
+      NativeLibraries.downcall(GDK, "gdk_monitor_get_geometry", Signatures.VOID_POINTER_POINTER);
+  private final MethodHandle MONITOR_GET_SCALE_FACTOR =
+      NativeLibraries.downcall(GDK, "gdk_monitor_get_scale_factor", Signatures.INT_POINTER);
+  private final MethodHandle MONITOR_IS_PRIMARY =
+      NativeLibraries.downcall(GDK, "gdk_monitor_is_primary", Signatures.INT_POINTER);
+  private final MethodHandle MONITOR_GET_MODEL =
+      NativeLibraries.downcall(GDK, "gdk_monitor_get_model", Signatures.POINTER_POINTER);
+  private final MethodHandle MONITOR_GET_MANUFACTURER =
+      NativeLibraries.downcall(GDK, "gdk_monitor_get_manufacturer", Signatures.POINTER_POINTER);
+  private final MethodHandle DISPLAY_GET_N_MONITORS =
+      NativeLibraries.downcall(GDK, "gdk_display_get_n_monitors", Signatures.INT_POINTER);
+  private final MethodHandle DISPLAY_GET_MONITOR =
+      NativeLibraries.downcall(GDK, "gdk_display_get_monitor", Signatures.POINTER_POINTER_INT);
+  private final MethodHandle DISPLAY_GET_PRIMARY_MONITOR =
+      NativeLibraries.downcall(GDK, "gdk_display_get_primary_monitor", Signatures.POINTER_POINTER);
   private final MethodHandle DISPLAY_GET_DEFAULT_SEAT =
       NativeLibraries.downcall(GDK, "gdk_display_get_default_seat", Signatures.POINTER_POINTER);
   private final MethodHandle SEAT_GET_POINTER =
@@ -158,5 +176,93 @@ public class Gdk {
     MemorySegment display = (MemorySegment) DISPLAY_GET_DEFAULT.invokeExact();
     long waylandType = (long) WAYLAND_DISPLAY_GET_TYPE.invokeExact();
     return Glib.typeCheckInstanceIsA(display, waylandType);
+  }
+
+  /** The monitors of the default display, which GDK owns. */
+  @SneakyThrows
+  public List<MemorySegment> monitors() {
+    MemorySegment display = (MemorySegment) DISPLAY_GET_DEFAULT.invokeExact();
+    int count = (int) DISPLAY_GET_N_MONITORS.invokeExact(display);
+    List<MemorySegment> monitors = new ArrayList<>(count);
+    for (int index = 0; index < count; index++) {
+      monitors.add((MemorySegment) DISPLAY_GET_MONITOR.invokeExact(display, index));
+    }
+    return monitors;
+  }
+
+  /**
+   * The monitor that holds most of {@code gdkWindow}, or the primary one, or the first, for a
+   * window that isn't realized yet.
+   */
+  @SneakyThrows
+  public MemorySegment monitorAt(MemorySegment gdkWindow) {
+    MemorySegment display = (MemorySegment) DISPLAY_GET_DEFAULT.invokeExact();
+    MemorySegment monitor =
+        gdkWindow.equals(MemorySegment.NULL)
+            ? MemorySegment.NULL
+            : (MemorySegment) DISPLAY_GET_MONITOR_AT_WINDOW.invokeExact(display, gdkWindow);
+    if (monitor.equals(MemorySegment.NULL)) {
+      monitor = (MemorySegment) DISPLAY_GET_PRIMARY_MONITOR.invokeExact(display);
+    }
+    if (monitor.equals(MemorySegment.NULL)) {
+      monitor = (MemorySegment) DISPLAY_GET_MONITOR.invokeExact(display, 0);
+    }
+    return monitor;
+  }
+
+  /** {@code {x, y, width, height}} of the whole monitor, in the pixels of GDK. */
+  @SneakyThrows
+  public int[] monitorGeometry(MemorySegment monitor) {
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment rectangle = arena.allocate(RECTANGLE);
+      MONITOR_GET_GEOMETRY.invokeExact(monitor, rectangle);
+      return Gdk.rectangle(rectangle);
+    }
+  }
+
+  /** {@code {x, y, width, height}} of the monitor minus panels and docks, where GDK knows them. */
+  @SneakyThrows
+  public int[] monitorWorkarea(MemorySegment monitor) {
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment rectangle = arena.allocate(RECTANGLE);
+      MONITOR_GET_WORKAREA.invokeExact(monitor, rectangle);
+      return Gdk.rectangle(rectangle);
+    }
+  }
+
+  /** The scale factor of the monitor, a whole number. */
+  @SneakyThrows
+  public int monitorScaleFactor(MemorySegment monitor) {
+    return (int) MONITOR_GET_SCALE_FACTOR.invokeExact(monitor);
+  }
+
+  /** Whether the monitor is the primary one; Wayland has none. */
+  @SneakyThrows
+  public boolean isPrimaryMonitor(MemorySegment monitor) {
+    return (int) MONITOR_IS_PRIMARY.invokeExact(monitor) != 0;
+  }
+
+  /**
+   * The manufacturer and the model of the monitor, as far as GDK knows them, or {@code null}.
+   * Either can be a code rather than a name, as the EDID of the monitor has it.
+   */
+  @SneakyThrows
+  public String monitorName(MemorySegment monitor) {
+    String manufacturer =
+        NativeLibraries.string((MemorySegment) MONITOR_GET_MANUFACTURER.invokeExact(monitor));
+    String model = NativeLibraries.string((MemorySegment) MONITOR_GET_MODEL.invokeExact(monitor));
+    if (manufacturer == null || manufacturer.isBlank()) {
+      return model;
+    }
+    return model == null || model.isBlank() ? manufacturer : manufacturer + " " + model;
+  }
+
+  private int[] rectangle(MemorySegment rectangle) {
+    return new int[] {
+      rectangle.get(Signatures.C_INT, 0),
+      rectangle.get(Signatures.C_INT, 4),
+      rectangle.get(Signatures.C_INT, 8),
+      rectangle.get(Signatures.C_INT, 12)
+    };
   }
 }

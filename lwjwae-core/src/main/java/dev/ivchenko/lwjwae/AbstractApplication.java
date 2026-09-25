@@ -57,6 +57,11 @@ import java.util.function.Function;
 public abstract class AbstractApplication implements Application {
   private static final Set<String> EXTERNAL_SCHEMES = Set.of("http", "https", "mailto");
 
+  /** How much of the top of a window must be on a screen for the user to grab it, in units. */
+  private static final int GRAB_WIDTH = 100;
+
+  private static final int GRAB_HEIGHT = 40;
+
   private final UiDispatcher dispatcher;
   private final ApplicationParameters parameters;
   private final Map<Long, AbstractWindow> windows = new ConcurrentHashMap<>();
@@ -148,7 +153,7 @@ public abstract class AbstractApplication implements Application {
     SavedWindowState saved = new WindowStateStore(directory).load(key).orElse(null);
     if (saved != null) {
       window.size(saved.width(), saved.height());
-      if (saved.hasPosition()) {
+      if (saved.hasPosition() && AbstractApplication.isReachable(saved, this.screens())) {
         window.position(saved.x(), saved.y());
       }
       if (saved.maximized()) {
@@ -158,6 +163,29 @@ public abstract class AbstractApplication implements Application {
     WindowStateTracker tracker = new WindowStateTracker(key, window, saved);
     window.onWindowEvent(tracker::update);
     this.stateTrackers.put(window.id(), tracker);
+  }
+
+  /**
+   * Whether a window put back where {@code saved} says would be within reach: the strip along its
+   * top, where a title bar is, lies on one of {@code screens} far enough for the user to grab it. A
+   * screen that was unplugged since, or a resolution that shrank, leaves it out, and the window
+   * opens where the platform puts it instead. Without a list of screens, it's taken as within
+   * reach.
+   */
+  private static boolean isReachable(SavedWindowState saved, List<Screen> screens) {
+    if (screens.isEmpty()) {
+      return true;
+    }
+    ScreenArea top =
+        new ScreenArea(saved.x(), saved.y(), saved.width(), Math.min(saved.height(), GRAB_HEIGHT));
+    for (Screen screen : screens) {
+      ScreenArea visible = top.intersection(screen.workArea());
+      if (visible.width() >= Math.min(top.width(), GRAB_WIDTH)
+          && visible.height() >= Math.min(top.height(), GRAB_HEIGHT / 2)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /** Applies what a window starts with beyond what the backend creates it with. */

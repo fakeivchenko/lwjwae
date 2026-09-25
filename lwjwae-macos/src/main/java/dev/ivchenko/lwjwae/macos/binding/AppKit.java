@@ -4,6 +4,8 @@ import dev.ivchenko.lwjwae.foreign.NativeLibraries;
 import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.SymbolLookup;
+import java.util.ArrayList;
+import java.util.List;
 import lombok.experimental.UtilityClass;
 
 /** AppKit: the application object, windows, the status bar, and menus. */
@@ -182,6 +184,50 @@ public class AppKit {
   /** Calls {@code -[NSWindow center]}. */
   public void center(MemorySegment window) {
     ObjC.sendVoid(window, "center");
+  }
+
+  /** {@code +[NSScreen screens]}: every screen, the primary one, with the menu bar, first. */
+  public List<MemorySegment> screens() {
+    MemorySegment screens = ObjC.send(ObjC.cls("NSScreen"), "screens");
+    long count = ObjC.sendLong(screens, "count");
+    List<MemorySegment> all = new ArrayList<>();
+    for (long index = 0; index < count; index++) {
+      all.add(ObjC.send(screens, "objectAtIndex:", index));
+    }
+    return all;
+  }
+
+  /** {@code -[NSWindow screen]}: the screen that holds most of the window, or {@code NULL}. */
+  public MemorySegment screenOf(MemorySegment window) {
+    return ObjC.send(window, "screen");
+  }
+
+  /**
+   * {@code {x, y, width, height}} of the {@code frame} or the {@code visibleFrame} of {@code
+   * screen}, from the top left of the primary screen, converted as {@link #framePosition} does.
+   */
+  public int[] screenArea(MemorySegment screen, boolean visible) {
+    double[] frame = Foundation.rect(screen, visible ? "visibleFrame" : "frame");
+    double primaryHeight = AppKit.primaryScreenFrame()[3];
+    return new int[] {
+      (int) Math.round(frame[0]),
+      (int) Math.round(primaryHeight - frame[1] - frame[3]),
+      (int) Math.round(frame[2]),
+      (int) Math.round(frame[3])
+    };
+  }
+
+  /** {@code -[NSScreen backingScaleFactor]}: 2.0 on a Retina screen. */
+  public double backingScaleFactor(MemorySegment screen) {
+    return Foundation.doubleValue(screen, "backingScaleFactor");
+  }
+
+  /** {@code -[NSScreen localizedName]}, from macOS 10.15 on, or {@code null} before. */
+  public String screenName(MemorySegment screen) {
+    if (!ObjC.sendBool(screen, "respondsToSelector:", ObjC.sel("localizedName"))) {
+      return null;
+    }
+    return Foundation.string(ObjC.send(screen, "localizedName"));
   }
 
   /**

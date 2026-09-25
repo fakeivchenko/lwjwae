@@ -1,6 +1,7 @@
 package dev.ivchenko.lwjwae.macos;
 
 import dev.ivchenko.lwjwae.AbstractWindow;
+import dev.ivchenko.lwjwae.Screen;
 import dev.ivchenko.lwjwae.WindowEdge;
 import dev.ivchenko.lwjwae.WindowParameters;
 import dev.ivchenko.lwjwae.WindowPosition;
@@ -296,6 +297,11 @@ public class MacWindow extends AbstractWindow {
   @Override
   public void position(int x, int y) {
     this.dispatcher().run(() -> AppKit.setFramePosition(this.window(), x, y));
+  }
+
+  @Override
+  public Screen screen() {
+    return this.dispatcher().call(() -> MacScreens.of(this.window()));
   }
 
   @Override

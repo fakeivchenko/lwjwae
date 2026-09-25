@@ -54,6 +54,9 @@ public class Signatures {
   public final FunctionDescriptor GDK_SURFACE_GET_DEVICE_POSITION =
       FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER);
 
+  /** {@code double f(T*)}: {@code gdk_monitor_get_scale}. */
+  public final FunctionDescriptor DOUBLE_POINTER = FunctionDescriptor.of(C_DOUBLE, C_POINTER);
+
   /** {@code T* f(void)}. */
   public final FunctionDescriptor POINTER_VOID = FunctionDescriptor.of(C_POINTER);
 

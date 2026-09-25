@@ -462,6 +462,58 @@ class AbstractApplicationTest {
   }
 
   @Test
+  void windowLeftOnScreenThatIsGoneOpensWhereThePlatformPutsIt(@TempDir Path directory)
+      throws Exception {
+    ApplicationParameters parameters =
+        ApplicationParameters.builder().dataDirectory(directory).build();
+    WindowParameters remembered = WindowParameters.builder().stateKey("main").build();
+    Screen left =
+        new Screen(
+            "Left", new ScreenArea(0, 0, 1920, 1080), new ScreenArea(0, 0, 1920, 1040), 1, true);
+    Screen right = new Screen("Right", new ScreenArea(1920, 0, 1920, 1080), null, 1, false);
+    try (FakeApplication application = new FakeApplication(parameters)) {
+      application.desktop = List.of(left, right);
+      FakeWindow window = (FakeWindow) application.open(remembered);
+      window.awaitUiThread();
+      window.size(800, 600);
+      window.position(2500, 100);
+      window.reportChange();
+      window.awaitUiThread();
+      Assertions.assertEquals(right, window.screen());
+      Thread.sleep(200);
+    }
+
+    try (FakeApplication application = new FakeApplication(parameters)) {
+      application.desktop = List.of(left);
+      FakeWindow window = (FakeWindow) application.open(remembered);
+
+      Assertions.assertEquals(new WindowSize(800, 600), window.size(), "the size still counts");
+      Assertions.assertNotEquals(
+          new WindowPosition(2500, 100), window.position(), "a place off every screen doesn't");
+    }
+
+    try (FakeApplication application = new FakeApplication(parameters)) {
+      application.desktop = List.of(left, right);
+      FakeWindow window = (FakeWindow) application.open(remembered);
+
+      Assertions.assertEquals(new WindowPosition(2500, 100), window.position());
+    }
+  }
+
+  @Test
+  void primaryScreenIsTheOneMarkedSoOrTheFirst() {
+    Screen first = new Screen("First", new ScreenArea(0, 0, 800, 600), null, 1, false);
+    Screen marked = new Screen("Marked", new ScreenArea(800, 0, 800, 600), null, 2, true);
+    try (FakeApplication application = new FakeApplication()) {
+      application.desktop = List.of(first, marked);
+      Assertions.assertEquals(marked, application.primaryScreen());
+
+      application.desktop = List.of(first);
+      Assertions.assertEquals(first, application.primaryScreen());
+    }
+  }
+
+  @Test
   void secondInstanceBringsTheOldestWindowForwardAndReachesTheListeners(
       @TempDir(factory = ShortTemporaryDirectories.class) Path directory) throws Exception {
     try (FakeApplication application = new FakeApplication()) {

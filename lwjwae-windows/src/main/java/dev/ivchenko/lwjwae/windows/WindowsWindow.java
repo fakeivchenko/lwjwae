@@ -1,6 +1,7 @@
 package dev.ivchenko.lwjwae.windows;
 
 import dev.ivchenko.lwjwae.AbstractWindow;
+import dev.ivchenko.lwjwae.Screen;
 import dev.ivchenko.lwjwae.WindowEdge;
 import dev.ivchenko.lwjwae.WindowParameters;
 import dev.ivchenko.lwjwae.WindowPosition;
@@ -217,6 +218,11 @@ public class WindowsWindow extends AbstractWindow {
   @Override
   public void position(int x, int y) {
     this.dispatcher().run(() -> User32.move(this.window(), x, y));
+  }
+
+  @Override
+  public Screen screen() {
+    return this.dispatcher().call(() -> WindowsScreens.of(User32.monitorOf(this.window())));
   }
 
   @Override

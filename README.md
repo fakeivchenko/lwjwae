@@ -154,6 +154,8 @@ dependencies {
 - **Windows under control.** Minimize, maximize, full screen, on top, focus, size limits, and events
   for every change of a window in Java and on the page. With a state key, a window opens the way it
   last closed.
+- **Screens.** `application.screens()` and `window.screen()` tell where the screens are, their work
+  areas and scales; a window that remembers its place doesn't open on a monitor that is gone.
 - **Native dialogs.** `showOpenDialog`, `showSaveDialog`, and `showMessageDialog` on a window, and
   `lwjwae.dialog` on the page: files and folders to open, a file to save, and a message, as the
   platform draws them, through the portal of the desktop inside a Linux sandbox.

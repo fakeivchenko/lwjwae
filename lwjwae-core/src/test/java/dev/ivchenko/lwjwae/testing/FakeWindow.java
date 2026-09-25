@@ -2,6 +2,7 @@ package dev.ivchenko.lwjwae.testing;
 
 import dev.ivchenko.lwjwae.AbstractApplication;
 import dev.ivchenko.lwjwae.AbstractWindow;
+import dev.ivchenko.lwjwae.Screen;
 import dev.ivchenko.lwjwae.WindowEdge;
 import dev.ivchenko.lwjwae.WindowParameters;
 import dev.ivchenko.lwjwae.WindowPosition;
@@ -279,6 +280,16 @@ public class FakeWindow extends AbstractWindow {
   public void size(int width, int height) {
     this.width = width;
     this.height = height;
+  }
+
+  /** The first screen of the application that holds the top left of the window, or the first. */
+  @Override
+  public Screen screen() {
+    List<Screen> screens = this.application().screens();
+    return screens.stream()
+        .filter(screen -> screen.bounds().contains(this.left, this.top))
+        .findFirst()
+        .orElse(screens.getFirst());
   }
 
   @Override

@@ -1,6 +1,7 @@
 package dev.ivchenko.lwjwae.gtk4;
 
 import dev.ivchenko.lwjwae.AbstractWindow;
+import dev.ivchenko.lwjwae.Screen;
 import dev.ivchenko.lwjwae.WindowEdge;
 import dev.ivchenko.lwjwae.WindowParameters;
 import dev.ivchenko.lwjwae.WindowPosition;
@@ -282,6 +283,11 @@ public class Gtk4Window extends AbstractWindow {
   }
 
   /** Does nothing: GTK 4 can't move a window, and the desktop places a new one. */
+  @Override
+  public Screen screen() {
+    return this.dispatcher().call(() -> Gtk4Screens.at(Gtk.windowSurface(this.window())));
+  }
+
   @Override
   public void center() {
     this.checkOpen();

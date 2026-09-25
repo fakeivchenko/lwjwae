@@ -3,6 +3,7 @@ package dev.ivchenko.lwjwae.testing.contract;
 import dev.ivchenko.lwjwae.Application;
 import dev.ivchenko.lwjwae.ApplicationParameters;
 import dev.ivchenko.lwjwae.CloseAction;
+import dev.ivchenko.lwjwae.Screen;
 import dev.ivchenko.lwjwae.Window;
 import dev.ivchenko.lwjwae.WindowParameters;
 import dev.ivchenko.lwjwae.WindowPosition;
@@ -642,6 +643,42 @@ public abstract class WindowContractTest extends DisplayContractTest {
 
     try (Application next = Application.createSingleInstance(parameters).orElseThrow()) {
       Assertions.assertFalse(next.isClosed(), "a closed instance gives the name up");
+    }
+  }
+
+  @Test
+  void screensDescribeTheDesktopAndOneHoldsTheWindow() throws Exception {
+    try (Application application = Application.create()) {
+      List<Screen> screens = application.screens();
+      Assertions.assertFalse(screens.isEmpty(), "a desktop has a screen");
+      for (Screen screen : screens) {
+        Assertions.assertTrue(screen.bounds().width() > 0, screen.toString());
+        Assertions.assertTrue(screen.bounds().height() > 0, screen.toString());
+        Assertions.assertEquals(
+            screen.workArea(),
+            screen.workArea().intersection(screen.bounds()),
+            "the work area lies on its screen: " + screen);
+        Assertions.assertTrue(screen.scale() >= 1, screen.toString());
+      }
+      Assertions.assertTrue(screens.contains(application.primaryScreen()));
+      Assertions.assertEquals(application.primaryScreen(), screens.getFirst());
+
+      Window window =
+          application.open(
+              WindowParameters.builder().title("lwjwae :: screens").size(400, 300).build());
+      window.show();
+      WindowContractTest.awaitTrue(window::isVisible, "the window must show");
+      Screen holder = window.screen();
+      Assertions.assertTrue(
+          screens.stream().anyMatch(screen -> screen.bounds().equals(holder.bounds())),
+          "the window is on one of the screens: " + holder);
+      if (this.canPlaceWindows()) {
+        WindowPosition position = window.position();
+        Assertions.assertTrue(
+            screens.stream()
+                .anyMatch(screen -> screen.bounds().contains(position.x() + 10, position.y() + 10)),
+            "a screen holds the window at " + position);
+      }
     }
   }
 

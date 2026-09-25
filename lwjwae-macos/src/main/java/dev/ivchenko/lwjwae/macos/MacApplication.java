@@ -3,6 +3,7 @@ package dev.ivchenko.lwjwae.macos;
 import dev.ivchenko.lwjwae.AbstractApplication;
 import dev.ivchenko.lwjwae.AbstractWindow;
 import dev.ivchenko.lwjwae.ApplicationParameters;
+import dev.ivchenko.lwjwae.Screen;
 import dev.ivchenko.lwjwae.WindowParameters;
 import dev.ivchenko.lwjwae.macos.binding.AppKit;
 import dev.ivchenko.lwjwae.macos.binding.WebKit;
@@ -10,6 +11,7 @@ import dev.ivchenko.lwjwae.notification.Notification;
 import dev.ivchenko.lwjwae.notification.NotificationHandle;
 import dev.ivchenko.lwjwae.tray.Tray;
 import dev.ivchenko.lwjwae.tray.TrayIcon;
+import java.util.List;
 import java.util.function.Consumer;
 
 /**
@@ -44,6 +46,11 @@ public class MacApplication extends AbstractApplication {
   @Override
   public String engine() {
     return this.dispatcher().call(() -> "WKWebView " + WebKit.version());
+  }
+
+  @Override
+  public List<Screen> screens() {
+    return this.dispatcher().call(MacScreens::all);
   }
 
   @Override

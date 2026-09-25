@@ -52,6 +52,15 @@ public class Signatures {
           C_INT.withName("workBottom"),
           C_INT.withName("flags"));
 
+  /**
+   * {@code struct MONITORINFOEXW}: {@link #MONITORINFO} followed by {@code WCHAR szDevice[32]}, the
+   * name of the display device.
+   */
+  public final MemoryLayout MONITORINFOEX =
+      MemoryLayout.structLayout(
+          MONITORINFO.withName("info"),
+          MemoryLayout.sequenceLayout(32, C_SHORT).withName("device"));
+
   /** {@code struct RECT { LONG left, top, right, bottom; }}. */
   public final MemoryLayout RECT =
       MemoryLayout.structLayout(
@@ -196,6 +205,17 @@ public class Signatures {
   /** {@code int f(T*, U*)}: {@code HRESULT (this, arg)}. */
   public final FunctionDescriptor INT_POINTER_POINTER =
       FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER);
+
+  /**
+   * {@code BOOL f(HDC, LPCRECT, MONITORENUMPROC, LPARAM)}: {@code EnumDisplayMonitors}, and {@code
+   * BOOL f(HMONITOR, HDC, LPRECT, LPARAM)}: the {@code MONITORENUMPROC} that it calls.
+   */
+  public final FunctionDescriptor INT_POINTER_X3_LONG =
+      FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_POINTER, C_LONG_PTR);
+
+  /** {@code HRESULT f(HMONITOR, int, UINT*, UINT*)}: {@code GetDpiForMonitor}. */
+  public final FunctionDescriptor INT_POINTER_INT_POINTER_POINTER =
+      FunctionDescriptor.of(C_INT, C_POINTER, C_INT, C_POINTER, C_POINTER);
 
   /** {@code int f(T*, U*, V*)}: {@code HRESULT (this, arg, arg)} and {@code QueryInterface}. */
   public final FunctionDescriptor INT_POINTER_POINTER_POINTER =

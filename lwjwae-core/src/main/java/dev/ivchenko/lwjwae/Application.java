@@ -311,6 +311,18 @@ public interface Application extends AutoCloseable {
     return window;
   }
 
+  /**
+   * The screens of the desktop, the primary one first, at the moment of the call: screens come and
+   * go, so a program that keeps the list reads it again when it needs it.
+   */
+  List<Screen> screens();
+
+  /** The primary screen: the one that holds the menu bar or the taskbar. */
+  default Screen primaryScreen() {
+    List<Screen> screens = this.screens();
+    return screens.stream().filter(Screen::primary).findFirst().orElse(screens.getFirst());
+  }
+
   /** The windows that are open right now, oldest first. */
   List<Window> windows();
 

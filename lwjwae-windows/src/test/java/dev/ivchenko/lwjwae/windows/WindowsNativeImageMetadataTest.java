@@ -7,6 +7,7 @@ import dev.ivchenko.lwjwae.windows.binding.Com;
 import dev.ivchenko.lwjwae.windows.binding.ComCallback;
 import dev.ivchenko.lwjwae.windows.binding.Kernel32;
 import dev.ivchenko.lwjwae.windows.binding.Ole32;
+import dev.ivchenko.lwjwae.windows.binding.Shcore;
 import dev.ivchenko.lwjwae.windows.binding.Shell32;
 import dev.ivchenko.lwjwae.windows.binding.Shlwapi;
 import dev.ivchenko.lwjwae.windows.binding.Toasts;
@@ -45,6 +46,8 @@ class WindowsNativeImageMetadataTest extends NativeImageMetadataContractTest {
         WindowsDispatcher.class,
         WindowsWindow.class,
         WindowsTray.class,
-        WindowsApplication.class);
+        WindowsApplication.class,
+        Shcore.class,
+        WindowsScreens.class);
   }
 }

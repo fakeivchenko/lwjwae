@@ -265,6 +265,20 @@ public class Glib {
   }
 
   /**
+   * The items of a {@code GListModel} that the caller doesn't own, each with a reference that the
+   * caller gives back with {@link #unref}.
+   */
+  @SneakyThrows
+  public List<MemorySegment> listItems(MemorySegment model) {
+    int count = (int) LIST_MODEL_GET_N_ITEMS.invokeExact(model);
+    List<MemorySegment> items = new ArrayList<>(count);
+    for (int index = 0; index < count; index++) {
+      items.add((MemorySegment) LIST_MODEL_GET_ITEM.invokeExact(model, index));
+    }
+    return items;
+  }
+
+  /**
    * The local paths of the {@code GFile} items of a {@code GListModel}, as {@code
    * gtk_file_chooser_get_files} of GTK 4 returns, which the caller owns: the model is released.
    * Items without a local path are left out.

@@ -1,6 +1,7 @@
 package dev.ivchenko.lwjwae.gtk;
 
 import dev.ivchenko.lwjwae.AbstractWindow;
+import dev.ivchenko.lwjwae.Screen;
 import dev.ivchenko.lwjwae.WindowEdge;
 import dev.ivchenko.lwjwae.WindowParameters;
 import dev.ivchenko.lwjwae.WindowPosition;
@@ -295,6 +296,11 @@ public class GtkWindow extends AbstractWindow {
    * neither the move nor the read of the position does anything, so only the first form has any
    * effect there, and only if the compositor honors it.
    */
+  @Override
+  public Screen screen() {
+    return this.dispatcher().call(() -> GtkScreens.at(Gtk.widgetGetWindow(this.window())));
+  }
+
   @Override
   public void center() {
     this.dispatcher()

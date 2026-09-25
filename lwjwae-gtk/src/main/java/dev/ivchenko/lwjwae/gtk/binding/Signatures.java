@@ -54,6 +54,10 @@ public class Signatures {
   /** {@code T* f(gint, gint)}: {@code gtk_box_new}. */
   public final FunctionDescriptor POINTER_INT_INT = FunctionDescriptor.of(C_POINTER, C_INT, C_INT);
 
+  /** {@code T* f(U*, int)}: {@code gdk_display_get_monitor}. */
+  public final FunctionDescriptor POINTER_POINTER_INT =
+      FunctionDescriptor.of(C_POINTER, C_POINTER, C_INT);
+
   /** {@code T* f(const gchar*, U*, gint, const gchar*, const gchar*)}: the native file chooser. */
   public final FunctionDescriptor GTK_FILE_CHOOSER_NATIVE_NEW =
       FunctionDescriptor.of(C_POINTER, C_POINTER, C_POINTER, C_INT, C_POINTER, C_POINTER);

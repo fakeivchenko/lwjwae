@@ -3,6 +3,7 @@ package dev.ivchenko.lwjwae.gtk;
 import dev.ivchenko.lwjwae.AbstractApplication;
 import dev.ivchenko.lwjwae.AbstractWindow;
 import dev.ivchenko.lwjwae.ApplicationParameters;
+import dev.ivchenko.lwjwae.Screen;
 import dev.ivchenko.lwjwae.WindowParameters;
 import dev.ivchenko.lwjwae.exception.ResourceNotFoundException;
 import dev.ivchenko.lwjwae.foreign.NativeLibraries;
@@ -23,6 +24,7 @@ import dev.ivchenko.lwjwae.util.ThrowableUtil;
 import java.lang.foreign.MemorySegment;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
+import java.util.List;
 import java.util.function.Consumer;
 
 /**
@@ -73,6 +75,11 @@ public class GtkApplication extends AbstractApplication {
   @Override
   public String engine() {
     return "WebKitGTK " + WebKit.version();
+  }
+
+  @Override
+  public List<Screen> screens() {
+    return this.dispatcher().call(GtkScreens::all);
   }
 
   @Override

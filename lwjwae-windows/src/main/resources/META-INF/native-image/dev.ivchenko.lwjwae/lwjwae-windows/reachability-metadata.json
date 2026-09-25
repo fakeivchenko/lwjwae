@@ -85,6 +85,20 @@
           ]
         }
       ]
+    },
+    {
+      "type": "dev.ivchenko.lwjwae.windows.WindowsScreens",
+      "methods": [
+        {
+          "name": "onMonitor",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "long"
+          ]
+        }
+      ]
     }
   ],
   "resources": [
@@ -170,6 +184,17 @@
           "void*",
           "jint",
           "jlong",
+          "jlong"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.windows.WindowsScreens",
+        "method": "onMonitor",
+        "returnType": "jint",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "void*",
           "jlong"
         ]
       }
@@ -552,6 +577,24 @@
         "parameterTypes": [
           "void*",
           "jlong"
+        ]
+      },
+      {
+        "returnType": "jint",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "void*",
+          "jlong"
+        ]
+      },
+      {
+        "returnType": "jint",
+        "parameterTypes": [
+          "void*",
+          "jint",
+          "void*",
+          "void*"
         ]
       }
     ]

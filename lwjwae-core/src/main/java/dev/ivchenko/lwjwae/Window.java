@@ -55,7 +55,9 @@ public interface Window extends AutoCloseable {
    * <p>Platforms:
    *
    * <ul>
-   *   <li>Windows: Pixels.
+   *   <li>Windows: Pixels as the process sees them: physical ones for a process that declares
+   *       itself aware of densities, those of 96 DPI for one that doesn't, whose windows Windows
+   *       scales; {@link Screen#scale()} tells which.
    *   <li>macOS: Points, which are two pixels each on a Retina screen.
    *   <li>Linux, GTK 3: Pixels of GTK, which the scale factor of a HiDPI display multiplies.
    *   <li>Linux, GTK 4: The size of the web view, or the default size of a window that was never
@@ -119,6 +121,21 @@ public interface Window extends AutoCloseable {
   default void position(WindowPosition position) {
     this.position(position.x(), position.y());
   }
+
+  /**
+   * The screen that holds most of the window, or the primary one while the platform can't tell.
+   *
+   * <p>Platforms:
+   *
+   * <ul>
+   *   <li>Windows: As described.
+   *   <li>macOS: As described.
+   *   <li>Linux, GTK 3: As described; on Wayland, the compositor tells which screen the window is
+   *       on.
+   *   <li>Linux, GTK 4: The primary screen until the window was first shown.
+   * </ul>
+   */
+  Screen screen();
 
   /**
    * Moves the window to the middle of the screen it's on.

@@ -96,6 +96,28 @@ platform. Wayland is the exception: the protocol keeps window placement with the
 there `position(x, y)` does nothing, `position()` returns `0, 0`, and `center()` is a request that
 the compositor may ignore. X11, Windows, and macOS place windows as asked.
 
+### Screens
+
+`application.screens()` lists the screens of the desktop, the primary one first, and
+`primaryScreen()` and `window.screen()` pick one. A `Screen` has a name for a person, its
+`bounds`, its `workArea` without the taskbar, the menu bar, the Dock, or the panels, its `scale`,
+the physical pixels per unit, and whether it's `primary`. Areas are `ScreenArea`s in the units of
+`WindowPosition`, from the top left of the primary screen, so a screen to its left has negative
+coordinates:
+
+```java
+Screen screen = window.screen();
+ScreenArea area = screen.workArea();
+window.position(area.x() + area.width() - 420, area.y() + 20);
+```
+
+A window with a state key opens where it closed only if the top of it, where the title bar is,
+would be on one of the screens of now: a monitor that was unplugged, or a resolution that shrank,
+leaves the window where the platform puts it, with its size.
+
+The list is read at the moment of the call; the Javadoc of `Screen` says what each platform
+reports, since Wayland has no primary screen and tells no work area, and GTK 4 knows neither.
+
 ### The state of the window
 
 `minimize()`, `maximize()`, `restore()`, `fullscreen(boolean)`, `alwaysOnTop(boolean)`, and

@@ -255,6 +255,12 @@
           "void*",
           "jint"
         ]
+      },
+      {
+        "returnType": "jdouble",
+        "parameterTypes": [
+          "void*"
+        ]
       }
     ],
     "directUpcalls": [

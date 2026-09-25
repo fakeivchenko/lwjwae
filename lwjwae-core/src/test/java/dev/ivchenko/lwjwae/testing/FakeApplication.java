@@ -3,6 +3,8 @@ package dev.ivchenko.lwjwae.testing;
 import dev.ivchenko.lwjwae.AbstractApplication;
 import dev.ivchenko.lwjwae.AbstractWindow;
 import dev.ivchenko.lwjwae.ApplicationParameters;
+import dev.ivchenko.lwjwae.Screen;
+import dev.ivchenko.lwjwae.ScreenArea;
 import dev.ivchenko.lwjwae.WindowParameters;
 import dev.ivchenko.lwjwae.notification.Notification;
 import dev.ivchenko.lwjwae.notification.NotificationHandle;
@@ -76,5 +78,16 @@ public class FakeApplication extends AbstractApplication {
   @Override
   public String engine() {
     return "fake 0";
+  }
+
+  /** The screens that {@link #screens()} reports: one of 1920 by 1080 with a taskbar, until set. */
+  public volatile List<Screen> desktop =
+      List.of(
+          new Screen(
+              "Fake", new ScreenArea(0, 0, 1920, 1080), new ScreenArea(0, 0, 1920, 1040), 1, true));
+
+  @Override
+  public List<Screen> screens() {
+    return this.desktop;
   }
 }

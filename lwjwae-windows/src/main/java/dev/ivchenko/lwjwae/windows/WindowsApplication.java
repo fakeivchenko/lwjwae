@@ -3,6 +3,7 @@ package dev.ivchenko.lwjwae.windows;
 import dev.ivchenko.lwjwae.AbstractApplication;
 import dev.ivchenko.lwjwae.AbstractWindow;
 import dev.ivchenko.lwjwae.ApplicationParameters;
+import dev.ivchenko.lwjwae.Screen;
 import dev.ivchenko.lwjwae.WindowParameters;
 import dev.ivchenko.lwjwae.notification.Notification;
 import dev.ivchenko.lwjwae.notification.NotificationHandle;
@@ -19,6 +20,7 @@ import java.lang.foreign.MemorySegment;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
@@ -99,6 +101,11 @@ public class WindowsApplication extends AbstractApplication {
   @Override
   public String engine() {
     return this.dispatcher().call(() -> "WebView2 " + WebView2.browserVersion(this.environment()));
+  }
+
+  @Override
+  public List<Screen> screens() {
+    return this.dispatcher().call(WindowsScreens::all);
   }
 
   @Override

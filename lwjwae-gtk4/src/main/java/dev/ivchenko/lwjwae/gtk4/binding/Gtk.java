@@ -138,6 +138,31 @@ public class Gtk {
       NativeLibraries.downcall(GTK, "gtk_settings_get_default", Signatures.POINTER_VOID);
   private final MethodHandle DISPLAY_GET_DEFAULT =
       NativeLibraries.downcall(GTK, "gdk_display_get_default", Signatures.POINTER_VOID);
+  private final MethodHandle DISPLAY_GET_MONITORS =
+      NativeLibraries.downcall(GTK, "gdk_display_get_monitors", Signatures.POINTER_POINTER);
+  private final MethodHandle DISPLAY_GET_MONITOR_AT_SURFACE =
+      NativeLibraries.downcall(
+          GTK, "gdk_display_get_monitor_at_surface", Signatures.POINTER_POINTER_POINTER);
+  private final MethodHandle MONITOR_GET_GEOMETRY =
+      NativeLibraries.downcall(GTK, "gdk_monitor_get_geometry", Signatures.VOID_POINTER_POINTER);
+  private final MethodHandle MONITOR_GET_SCALE_FACTOR =
+      NativeLibraries.downcall(GTK, "gdk_monitor_get_scale_factor", Signatures.INT_POINTER);
+  // GTK 4.14 and later: the fractional scale of the monitor.
+  private final MethodHandle MONITOR_GET_SCALE =
+      NativeLibraries.downcallIfPresent(
+          GTK.find("gdk_monitor_get_scale").isPresent() ? GTK : null,
+          "gdk_monitor_get_scale",
+          Signatures.DOUBLE_POINTER);
+  private final MethodHandle MONITOR_GET_MODEL =
+      NativeLibraries.downcall(GTK, "gdk_monitor_get_model", Signatures.POINTER_POINTER);
+  // GTK 4.10 and later: a description of the monitor for a person, such as "Built-in display".
+  private final MethodHandle MONITOR_GET_DESCRIPTION =
+      NativeLibraries.downcallIfPresent(
+          GTK.find("gdk_monitor_get_description").isPresent() ? GTK : null,
+          "gdk_monitor_get_description",
+          Signatures.POINTER_POINTER);
+  private final MethodHandle MONITOR_GET_CONNECTOR =
+      NativeLibraries.downcall(GTK, "gdk_monitor_get_connector", Signatures.POINTER_POINTER);
   private final MethodHandle DISPLAY_GET_DEFAULT_SEAT =
       NativeLibraries.downcall(GTK, "gdk_display_get_default_seat", Signatures.POINTER_POINTER);
   private final MethodHandle SEAT_GET_POINTER =
@@ -374,6 +399,73 @@ public class Gtk {
     return new int[] {
       (int) WIDGET_GET_WIDTH.invokeExact(widget), (int) WIDGET_GET_HEIGHT.invokeExact(widget)
     };
+  }
+
+  /**
+   * The monitors of the default display, each with a reference that the caller gives back with
+   * {@link Glib#unref}.
+   */
+  @SneakyThrows
+  public List<MemorySegment> monitors() {
+    MemorySegment display = (MemorySegment) DISPLAY_GET_DEFAULT.invokeExact();
+    return Glib.listItems((MemorySegment) DISPLAY_GET_MONITORS.invokeExact(display));
+  }
+
+  /**
+   * The monitor that holds most of {@code surface}, with a reference that the caller gives back, or
+   * {@code NULL} for a window that has no surface yet or that GDK can't place.
+   */
+  @SneakyThrows
+  public MemorySegment monitorAt(MemorySegment surface) {
+    if (surface.equals(MemorySegment.NULL)) {
+      return MemorySegment.NULL;
+    }
+    MemorySegment display = (MemorySegment) DISPLAY_GET_DEFAULT.invokeExact();
+    MemorySegment monitor =
+        (MemorySegment) DISPLAY_GET_MONITOR_AT_SURFACE.invokeExact(display, surface);
+    if (!monitor.equals(MemorySegment.NULL)) {
+      Glib.ref(monitor);
+    }
+    return monitor;
+  }
+
+  /** {@code {x, y, width, height}} of the whole monitor, in the pixels of GDK. */
+  @SneakyThrows
+  public int[] monitorGeometry(MemorySegment monitor) {
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment rectangle = arena.allocate(Signatures.C_INT, 4);
+      MONITOR_GET_GEOMETRY.invokeExact(monitor, rectangle);
+      return rectangle.toArray(Signatures.C_INT);
+    }
+  }
+
+  /** The scale of the monitor: fractional from GTK 4.14 on, a whole number before. */
+  @SneakyThrows
+  public double monitorScale(MemorySegment monitor) {
+    if (MONITOR_GET_SCALE != null) {
+      return (double) MONITOR_GET_SCALE.invokeExact(monitor);
+    }
+    return (int) MONITOR_GET_SCALE_FACTOR.invokeExact(monitor);
+  }
+
+  /**
+   * A name of the monitor for a person: its description from GTK 4.10 on, or else its connector,
+   * such as {@code HDMI-1}, or else its model, or {@code null}.
+   */
+  @SneakyThrows
+  public String monitorName(MemorySegment monitor) {
+    if (MONITOR_GET_DESCRIPTION != null) {
+      String description =
+          NativeLibraries.string((MemorySegment) MONITOR_GET_DESCRIPTION.invokeExact(monitor));
+      if (description != null && !description.isBlank()) {
+        return description;
+      }
+    }
+    String connector =
+        NativeLibraries.string((MemorySegment) MONITOR_GET_CONNECTOR.invokeExact(monitor));
+    return connector != null
+        ? connector
+        : NativeLibraries.string((MemorySegment) MONITOR_GET_MODEL.invokeExact(monitor));
   }
 
   /** Calls {@code gtk_native_get_surface}: the surface of a realized window. */
