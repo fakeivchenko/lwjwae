@@ -200,6 +200,9 @@ public final class InstanceLock implements AutoCloseable {
         return channel.read(answer) == 1 && answer.get(0) == HANDLED;
       } catch (AsynchronousCloseException e) {
         throw new IOException("The running instance did not answer within " + ANSWER_TIMEOUT, e);
+      } catch (IOException _) {
+        // Reset: the connection waited in the queue of a socket that closed before accepting it.
+        return false;
       } finally {
         watchdog.interrupt();
       }
