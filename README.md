@@ -169,6 +169,8 @@ dependencies {
   resize edges; `data-lwjwae-drag` on the page's own bar moves the window, and
   `lwjwae.window.minimize()` and the like work its buttons. `closable`, `minimizable`, and
   `maximizable` take a button off a native title bar.
+- **Transparent windows.** `transparent(true)` lets the desktop show through wherever the page
+  draws nothing, for a widget of any shape with a page of rounded, half-transparent cards.
 - **A tray icon, and windows that hide.** `Application.tray(TrayIcon)` puts an icon with a menu in
   the notification area on Windows, the menu bar on macOS, or the StatusNotifier or XEmbed tray on
   Linux. With `CloseAction.HIDE`, the close button hides a window instead of closing it while a tray

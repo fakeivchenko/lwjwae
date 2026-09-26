@@ -41,6 +41,12 @@ public class User32 {
   private final int GWL_EXSTYLE = -20;
   private final long WS_EX_TOPMOST = 0x00000008;
 
+  /**
+   * {@code WS_EX_NOREDIRECTIONBITMAP}: the window has no surface of its own for the compositor,
+   * only what its children draw with DirectComposition, as WebView2 does.
+   */
+  private final int WS_EX_NOREDIRECTIONBITMAP = 0x00200000;
+
   /** {@code sizeof(WINDOWPLACEMENT)}. */
   private final int WINDOWPLACEMENT_SIZE = 44;
 
@@ -301,7 +307,8 @@ public class User32 {
    * WS_OVERLAPPEDWINDOW}. {@code show} makes it visible. {@code x} and {@code y} place the frame;
    * {@code CW_USEDEFAULT} for both lets Windows choose. {@code topmost} creates it above the
    * windows that aren't, with {@code WS_EX_TOPMOST}: later, {@link #topmost(MemorySegment,
-   * boolean)} works only for the process in the foreground.
+   * boolean)} works only for the process in the foreground. A {@code transparent} window has no
+   * surface of its own, so where its web view draws nothing, the desktop shows through.
    */
   @SneakyThrows
   public MemorySegment createWindow(
@@ -312,12 +319,14 @@ public class User32 {
       int width,
       int height,
       int style,
-      boolean topmost) {
+      boolean topmost,
+      boolean transparent) {
     try (Arena arena = Arena.ofConfined()) {
       MemorySegment hwnd =
           (MemorySegment)
               CREATE_WINDOW_EX.invokeExact(
-                  topmost ? (int) WS_EX_TOPMOST : 0,
+                  (topmost ? (int) WS_EX_TOPMOST : 0)
+                      | (transparent ? WS_EX_NOREDIRECTIONBITMAP : 0),
                   Wide.allocate(arena, className),
                   Wide.allocate(arena, title),
                   style,
@@ -890,12 +899,12 @@ public class User32 {
   }
 
   /**
-   * Resizes the window so that its client area is {@code width} by {@code height}. {@code titleBar}
-   * is {@code false} for a window whose title bar {@link #removeTitleBar} takes away.
+   * Resizes the window so that its client area is {@code width} by {@code height} inside {@code
+   * frame}.
    */
   @SneakyThrows
-  public void resizeClient(MemorySegment hwnd, int width, int height, boolean titleBar) {
-    int[] frame = User32.frameSize(hwnd, width, height, titleBar);
+  public void resizeClient(MemorySegment hwnd, int width, int height, WindowFrame frame) {
+    int[] size = User32.frameSize(hwnd, width, height, frame);
     int _ =
         (int)
             SET_WINDOW_POS.invokeExact(
@@ -903,18 +912,21 @@ public class User32 {
                 MemorySegment.NULL,
                 0,
                 0,
-                frame[0],
-                frame[1],
+                size[0],
+                size[1],
                 SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
   }
 
   /**
    * {@code {width, height}} of the frame around a client area of {@code width} by {@code height},
    * with the current style of the window, by {@code AdjustWindowRectEx}. Without the title bar, the
-   * frame has nothing above the client area.
+   * frame has nothing above the client area, and {@link WindowFrame#NONE} has nothing around it.
    */
   @SneakyThrows
-  public int[] frameSize(MemorySegment hwnd, int width, int height, boolean titleBar) {
+  public int[] frameSize(MemorySegment hwnd, int width, int height, WindowFrame frame) {
+    if (frame == WindowFrame.NONE) {
+      return new int[] {width, height};
+    }
     try (Arena arena = Arena.ofConfined()) {
       MemorySegment rect = arena.allocate(Signatures.RECT);
       RECT_RIGHT.set(rect, 0L, width);
@@ -922,31 +934,42 @@ public class User32 {
       int _ = (int) ADJUST_WINDOW_RECT_EX.invokeExact(rect, (int) User32.style(hwnd), 0, 0);
       return new int[] {
         (int) RECT_RIGHT.get(rect, 0L) - (int) RECT_LEFT.get(rect, 0L),
-        (int) RECT_BOTTOM.get(rect, 0L) - (titleBar ? (int) RECT_TOP.get(rect, 0L) : 0)
+        (int) RECT_BOTTOM.get(rect, 0L)
+            - (frame == WindowFrame.FULL ? (int) RECT_TOP.get(rect, 0L) : 0)
       };
     }
   }
 
   /**
    * Answers {@code WM_NCCALCSIZE} for a window without a title bar: the frame that {@code
-   * DefWindowProc} works out, minus the part above the client area. The window keeps its resize
-   * edges on the other sides, its shadow, and everything that its style gives a window with a title
-   * bar: snapping, and the animations of minimize and maximize. A maximized window reaches past its
-   * monitor by the width of its frame, which the client area leaves out at the top too.
+   * DefWindowProc} works out, minus the part above the client area, or, for {@link
+   * WindowFrame#NONE}, minus all of it. The window keeps everything that its style gives a window
+   * with a title bar: snapping, and the animations of minimize and maximize. A maximized window
+   * reaches past its monitor by the width of its frame, which the client area leaves out on every
+   * side.
    *
    * @param parameters The {@code NCCALCSIZE_PARAMS} of the message, whose first rectangle is the
    *     proposed window on the way in and the client area on the way out.
    * @return What the window procedure returns.
    */
   @SneakyThrows
-  public long removeTitleBar(MemorySegment hwnd, long wordParameter, long parameters) {
+  public long removeFrame(
+      MemorySegment hwnd, long wordParameter, long parameters, WindowFrame frame) {
     MemorySegment rect =
         MemorySegment.ofAddress(parameters).reinterpret(Signatures.RECT.byteSize());
     int windowLeft = (int) RECT_LEFT.get(rect, 0L);
     int windowTop = (int) RECT_TOP.get(rect, 0L);
+    int windowRight = (int) RECT_RIGHT.get(rect, 0L);
+    int windowBottom = (int) RECT_BOTTOM.get(rect, 0L);
     long _ = User32.defWindowProc(hwnd, WM_NCCALCSIZE, wordParameter, parameters);
-    int frame = User32.isMaximized(hwnd) ? (int) RECT_LEFT.get(rect, 0L) - windowLeft : 0;
-    RECT_TOP.set(rect, 0L, windowTop + frame);
+    boolean maximized = User32.isMaximized(hwnd);
+    int edge = maximized ? (int) RECT_LEFT.get(rect, 0L) - windowLeft : 0;
+    RECT_TOP.set(rect, 0L, windowTop + edge);
+    if (frame == WindowFrame.NONE && !maximized) {
+      RECT_LEFT.set(rect, 0L, windowLeft);
+      RECT_RIGHT.set(rect, 0L, windowRight);
+      RECT_BOTTOM.set(rect, 0L, windowBottom);
+    }
     return 0;
   }
 

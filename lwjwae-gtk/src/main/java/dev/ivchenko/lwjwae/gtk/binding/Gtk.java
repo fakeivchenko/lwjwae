@@ -25,6 +25,9 @@ public class Gtk {
   /** {@code GTK_WINDOW_TOPLEVEL}. */
   public final int WINDOW_TOPLEVEL = 0;
 
+  /** {@code GTK_STYLE_PROVIDER_PRIORITY_APPLICATION}: above the theme. */
+  private final int STYLE_PROVIDER_PRIORITY_APPLICATION = 600;
+
   /** {@code GTK_WIN_POS_CENTER}: the window opens in the middle of the screen. */
   public final int WIN_POS_CENTER = 1;
 
@@ -129,6 +132,21 @@ public class Gtk {
   private final MethodHandle HEADER_BAR_SET_DECORATION_LAYOUT =
       NativeLibraries.downcall(
           GTK, "gtk_header_bar_set_decoration_layout", Signatures.VOID_POINTER_POINTER);
+  private final MethodHandle WIDGET_GET_SCREEN =
+      NativeLibraries.downcall(GTK, "gtk_widget_get_screen", Signatures.POINTER_POINTER);
+  private final MethodHandle WIDGET_SET_VISUAL =
+      NativeLibraries.downcall(GTK, "gtk_widget_set_visual", Signatures.VOID_POINTER_POINTER);
+  private final MethodHandle WIDGET_SET_APP_PAINTABLE =
+      NativeLibraries.downcall(GTK, "gtk_widget_set_app_paintable", Signatures.VOID_POINTER_INT);
+  private final MethodHandle CSS_PROVIDER_NEW =
+      NativeLibraries.downcall(GTK, "gtk_css_provider_new", Signatures.POINTER_VOID);
+  // Returns a gboolean that nothing reads: the CSS is this library's own, and it parses.
+  private final MethodHandle CSS_PROVIDER_LOAD_FROM_DATA =
+      NativeLibraries.downcall(
+          GTK, "gtk_css_provider_load_from_data", Signatures.VOID_POINTER_POINTER_LONG_POINTER);
+  private final MethodHandle STYLE_CONTEXT_ADD_PROVIDER =
+      NativeLibraries.downcall(
+          GTK, "gtk_style_context_add_provider", Signatures.VOID_POINTER_POINTER_INT);
   private final MethodHandle WIDGET_GET_STYLE_CONTEXT =
       NativeLibraries.downcall(GTK, "gtk_widget_get_style_context", Signatures.POINTER_POINTER);
   private final MethodHandle STYLE_CONTEXT_ADD_CLASS =
@@ -534,6 +552,36 @@ public class Gtk {
     try (Arena arena = Arena.ofConfined()) {
       HEADER_BAR_SET_DECORATION_LAYOUT.invokeExact(headerBar, arena.allocateFrom(layout));
     }
+  }
+
+  /**
+   * Leaves the background of a window that isn't realized yet to what is under it: the visual with
+   * an alpha channel, and no background of the theme. What its child leaves clear shows the desktop
+   * through a compositor, and black without one.
+   */
+  @SneakyThrows
+  public void windowClearBackground(MemorySegment window) {
+    MemorySegment visual =
+        Gdk.screenRgbaVisual((MemorySegment) WIDGET_GET_SCREEN.invokeExact(window));
+    if (!visual.equals(MemorySegment.NULL)) {
+      WIDGET_SET_VISUAL.invokeExact(window, visual);
+    }
+    WIDGET_SET_APP_PAINTABLE.invokeExact(window, 1);
+  }
+
+  /**
+   * Styles {@code widget} and its own nodes, such as the decoration of a window, with {@code css}.
+   */
+  @SneakyThrows
+  public void widgetAddCss(MemorySegment widget, String css) {
+    MemorySegment provider = (MemorySegment) CSS_PROVIDER_NEW.invokeExact();
+    try (Arena arena = Arena.ofConfined()) {
+      CSS_PROVIDER_LOAD_FROM_DATA.invokeExact(
+          provider, arena.allocateFrom(css), -1L, MemorySegment.NULL);
+    }
+    MemorySegment context = (MemorySegment) WIDGET_GET_STYLE_CONTEXT.invokeExact(widget);
+    STYLE_CONTEXT_ADD_PROVIDER.invokeExact(context, provider, STYLE_PROVIDER_PRIORITY_APPLICATION);
+    Glib.unref(provider);
   }
 
   /** Adds a CSS class to the style context of a widget. */

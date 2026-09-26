@@ -100,7 +100,8 @@ class BridgeProtocolTest {
                 "0",
                 "0",
                 "0",
-                "0"));
+                "0",
+                "1"));
     Assertions.assertEquals("Docs", full.title());
     Assertions.assertEquals(640, full.size().width());
     Assertions.assertEquals(480, full.size().height());
@@ -112,14 +113,15 @@ class BridgeProtocolTest {
     Assertions.assertFalse(full.closable());
     Assertions.assertFalse(full.minimizable());
     Assertions.assertFalse(full.maximizable());
+    Assertions.assertTrue(full.transparent());
 
-    WindowParameters empty = BridgeProtocol.parseWindowParameters(sep.repeat(11));
+    WindowParameters empty = BridgeProtocol.parseWindowParameters(sep.repeat(12));
     Assertions.assertEquals(WindowParameters.createDefault(), empty);
 
     Assertions.assertNull(BridgeProtocol.parseWindowParameters("garbage"));
     Assertions.assertNull(
         BridgeProtocol.parseWindowParameters(
-            String.join(sep, "", "wide", "", "", "", "", "", "", "", "", "", "")));
+            String.join(sep, "", "wide", "", "", "", "", "", "", "", "", "", "", "")));
   }
 
   @Test

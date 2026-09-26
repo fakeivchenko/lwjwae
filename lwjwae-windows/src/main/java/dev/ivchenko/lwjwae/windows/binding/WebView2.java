@@ -78,6 +78,9 @@ public class WebView2 {
   private final int CONTROLLER_PUT_BOUNDS = 6;
   private final int CONTROLLER_CLOSE = 24;
   private final int CONTROLLER_GET_CORE_WEBVIEW2 = 25;
+  // ICoreWebView2Controller2
+  private final MemorySegment IID_CONTROLLER_2 = Com.guid("c979903e-d4ca-4228-92eb-47ee3fa96eab");
+  private final int CONTROLLER_2_PUT_DEFAULT_BACKGROUND_COLOR = 27;
   // ICoreWebView2
   private final int WEBVIEW_GET_SETTINGS = 3;
   private final int WEBVIEW_GET_SOURCE = 4;
@@ -196,6 +199,22 @@ public class WebView2 {
   /** Calls {@code ICoreWebView2Controller::put_IsVisible}. */
   public void setVisible(MemorySegment controller, boolean visible) {
     Com.check("put_IsVisible", Com.call(controller, CONTROLLER_PUT_IS_VISIBLE, visible ? 1 : 0));
+  }
+
+  /**
+   * Calls {@code ICoreWebView2Controller2::put_DefaultBackgroundColor} with a transparent color, so
+   * what the page leaves clear shows what is under the view. The {@code COREWEBVIEW2_COLOR} of four
+   * bytes goes by value, in a register, which is where an {@code int} of zero goes.
+   */
+  public void setTransparentBackground(MemorySegment controller) {
+    MemorySegment controller2 = WinRt.query(controller, IID_CONTROLLER_2);
+    try {
+      Com.check(
+          "put_DefaultBackgroundColor",
+          Com.call(controller2, CONTROLLER_2_PUT_DEFAULT_BACKGROUND_COLOR, 0));
+    } finally {
+      Com.release(controller2);
+    }
   }
 
   /** Sizes the view to {@code width} by {@code height} at the origin of the parent. */

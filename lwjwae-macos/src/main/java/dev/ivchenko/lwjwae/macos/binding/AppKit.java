@@ -362,6 +362,15 @@ public class AppKit {
     }
   }
 
+  /**
+   * Makes a window see-through where its content draws nothing: not opaque, and a clear background.
+   * The shadow follows what the content does draw.
+   */
+  public void clearBackground(MemorySegment window) {
+    ObjC.sendVoid(window, "setOpaque:", false);
+    ObjC.sendVoid(window, "setBackgroundColor:", ObjC.send(ObjC.cls("NSColor"), "clearColor"));
+  }
+
   /** Grays out the zoom button, the green one, which maximizes and enters full screen. */
   public void disableZoomButton(MemorySegment window) {
     ObjC.sendVoid(ObjC.send(window, "standardWindowButton:", ZOOM_BUTTON), "setEnabled:", false);

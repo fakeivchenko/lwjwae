@@ -30,6 +30,7 @@ import dev.ivchenko.lwjwae.windows.binding.User32;
 import dev.ivchenko.lwjwae.windows.binding.WebView2;
 import dev.ivchenko.lwjwae.windows.binding.WebView2EventRegistration;
 import dev.ivchenko.lwjwae.windows.binding.Wide;
+import dev.ivchenko.lwjwae.windows.binding.WindowFrame;
 import dev.ivchenko.lwjwae.windows.exception.ComCallFailedException;
 import dev.ivchenko.lwjwae.windows.util.JsonStringUtil;
 import java.lang.foreign.MemorySegment;
@@ -57,8 +58,9 @@ import java.util.function.Supplier;
  */
 public class WindowsWindow extends AbstractWindow {
   private volatile boolean sharedBuffers = true;
-  private final boolean titleBar;
+  private final WindowFrame frame;
   private final boolean maximizable;
+  private final boolean transparent;
 
   // --- window state that Windows keeps no getter for ---
   private volatile WindowSize minimumSize = WindowSize.NONE;
@@ -114,8 +116,12 @@ public class WindowsWindow extends AbstractWindow {
   WindowsWindow(WindowsApplication application, long id, WindowParameters parameters) {
     super(application, id, parameters);
     this.application = application;
-    this.titleBar = parameters.decorated();
+    this.frame =
+        parameters.decorated()
+            ? WindowFrame.FULL
+            : parameters.transparent() ? WindowFrame.NONE : WindowFrame.NO_TITLE_BAR;
     this.maximizable = parameters.maximizable();
+    this.transparent = parameters.transparent();
     this.callbackId = WINDOWS.register(this);
     try {
       this.dispatcher().run(() -> this.createWindow(parameters));
@@ -142,18 +148,18 @@ public class WindowsWindow extends AbstractWindow {
             parameters.size().width(),
             parameters.size().height(),
             WindowsWindow.windowStyle(parameters),
-            parameters.alwaysOnTop());
+            parameters.alwaysOnTop(),
+            parameters.transparent());
     User32.userData(window, this.callbackId);
     this.hwnd = window;
-    if (!this.titleBar) {
+    if (this.frame != WindowFrame.FULL) {
       // The frame was worked out before the window procedure could find this window: again.
       User32.style(window, User32.style(window));
     }
     if (!parameters.closable()) {
       User32.disableClose(window);
     }
-    User32.resizeClient(
-        window, parameters.size().width(), parameters.size().height(), this.titleBar);
+    User32.resizeClient(window, parameters.size().width(), parameters.size().height(), this.frame);
     if (parameters.centered()) {
       WindowsWindow.centerWindow(window);
     }
@@ -166,8 +172,8 @@ public class WindowsWindow extends AbstractWindow {
 
   /**
    * {@code WS_OVERLAPPEDWINDOW} without the buttons that the window may not have. A window without
-   * a title bar keeps the whole style: {@link User32#removeTitleBar} takes the bar away, and the
-   * style keeps what Windows gives a window with one, snapping and the animations included.
+   * a title bar keeps the whole style: {@link User32#removeFrame} takes the bar away, and the style
+   * keeps what Windows gives a window with one, snapping and the animations included.
    */
   private static int windowStyle(WindowParameters parameters) {
     int style = User32.WS_OVERLAPPEDWINDOW;
@@ -202,7 +208,7 @@ public class WindowsWindow extends AbstractWindow {
 
   @Override
   public void size(int width, int height) {
-    this.dispatcher().run(() -> User32.resizeClient(this.window(), width, height, this.titleBar));
+    this.dispatcher().run(() -> User32.resizeClient(this.window(), width, height, this.frame));
   }
 
   @Override
@@ -284,7 +290,7 @@ public class WindowsWindow extends AbstractWindow {
   private void enforceSizeLimits() {
     MemorySegment hwnd = this.window();
     int[] client = User32.clientSize(hwnd);
-    User32.resizeClient(hwnd, client[0], client[1], this.titleBar);
+    User32.resizeClient(hwnd, client[0], client[1], this.frame);
   }
 
   /** Answers {@code WM_GETMINMAXINFO}: the limits of the client area, as frame sizes. */
@@ -300,8 +306,7 @@ public class WindowsWindow extends AbstractWindow {
   /** The frame size around {@code limit}, with {@code unlimited} for a dimension without one. */
   private int[] frameLimit(MemorySegment hwnd, WindowSize limit, int unlimited) {
     int[] frame =
-        User32.frameSize(
-            hwnd, Math.max(limit.width(), 1), Math.max(limit.height(), 1), this.titleBar);
+        User32.frameSize(hwnd, Math.max(limit.width(), 1), Math.max(limit.height(), 1), this.frame);
     return new int[] {
       limit.width() > 0 ? frame[0] : unlimited, limit.height() > 0 ? frame[1] : unlimited
     };
@@ -445,13 +450,16 @@ public class WindowsWindow extends AbstractWindow {
 
   /**
    * The top edge of a window without a title bar: the web view covers the client area up to the top
-   * of the window, where the other edges keep a strip of frame that Windows resizes from.
+   * of the window, where the other edges keep a strip of frame that Windows resizes from. Every
+   * edge of a window without a frame.
    */
   @Override
   protected List<WindowEdge> pageResizeEdges() {
-    return this.titleBar
-        ? List.of()
-        : List.of(WindowEdge.TOP, WindowEdge.TOP_LEFT, WindowEdge.TOP_RIGHT);
+    return switch (this.frame) {
+      case FULL -> List.of();
+      case NO_TITLE_BAR -> List.of(WindowEdge.TOP, WindowEdge.TOP_LEFT, WindowEdge.TOP_RIGHT);
+      case NONE -> List.of(WindowEdge.values());
+    };
   }
 
   @Override
@@ -653,6 +661,9 @@ public class WindowsWindow extends AbstractWindow {
       this.controller = createdController;
       this.webView = WebView2.coreWebView2(createdController);
       this.fitWebView();
+      if (this.transparent) {
+        WebView2.setTransparentBackground(createdController);
+      }
       WebView2.setDevToolsEnabled(this.webView, false);
 
       this.subscribe(
@@ -906,9 +917,9 @@ public class WindowsWindow extends AbstractWindow {
           window.windowChanged();
         } else if (message == User32.WM_NCCALCSIZE
             && wordParameter != 0
-            && !window.titleBar
+            && window.frame != WindowFrame.FULL
             && !window.fullscreen) {
-          return User32.removeTitleBar(hwnd, wordParameter, longParameter);
+          return User32.removeFrame(hwnd, wordParameter, longParameter, window.frame);
         } else if (message == User32.WM_CLOSE && window.refusesCloseRequest()) {
           // Not passed on: DefWindowProc would destroy the window.
           return 0;

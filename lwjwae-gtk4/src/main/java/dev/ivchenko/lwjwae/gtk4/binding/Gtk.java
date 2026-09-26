@@ -123,6 +123,8 @@ public class Gtk {
       NativeLibraries.downcall(GTK, "gtk_window_set_modal", Signatures.VOID_POINTER_INT);
   private final MethodHandle WINDOW_SET_TITLEBAR =
       NativeLibraries.downcall(GTK, "gtk_window_set_titlebar", Signatures.VOID_POINTER_POINTER);
+  private final MethodHandle WINDOW_SET_DECORATED =
+      NativeLibraries.downcall(GTK, "gtk_window_set_decorated", Signatures.VOID_POINTER_INT);
   private final MethodHandle WINDOW_SET_DELETABLE =
       NativeLibraries.downcall(GTK, "gtk_window_set_deletable", Signatures.VOID_POINTER_INT);
   private final MethodHandle BOX_NEW =
@@ -134,6 +136,8 @@ public class Gtk {
           GTK, "gtk_header_bar_set_decoration_layout", Signatures.VOID_POINTER_POINTER);
   private final MethodHandle WIDGET_ADD_CSS_CLASS =
       NativeLibraries.downcall(GTK, "gtk_widget_add_css_class", Signatures.VOID_POINTER_POINTER);
+  private final MethodHandle WIDGET_REMOVE_CSS_CLASS =
+      NativeLibraries.downcall(GTK, "gtk_widget_remove_css_class", Signatures.VOID_POINTER_POINTER);
   private final MethodHandle SETTINGS_GET_DEFAULT =
       NativeLibraries.downcall(GTK, "gtk_settings_get_default", Signatures.POINTER_VOID);
   private final MethodHandle DISPLAY_GET_DEFAULT =
@@ -591,6 +595,15 @@ public class Gtk {
     WINDOW_SET_TITLEBAR.invokeExact(window, titlebar);
   }
 
+  /**
+   * Calls {@code gtk_window_set_decorated}: whether the window has a frame at all, the title bar,
+   * the shadow, and the resize edges.
+   */
+  @SneakyThrows
+  public void windowSetDecorated(MemorySegment window, boolean decorated) {
+    WINDOW_SET_DECORATED.invokeExact(window, decorated ? 1 : 0);
+  }
+
   /** Calls {@code gtk_window_set_deletable}: whether the title bar has a close button. */
   @SneakyThrows
   public void windowSetDeletable(MemorySegment window, boolean deletable) {
@@ -614,6 +627,18 @@ public class Gtk {
   public void headerBarSetDecorationLayout(MemorySegment headerBar, String layout) {
     try (Arena arena = Arena.ofConfined()) {
       HEADER_BAR_SET_DECORATION_LAYOUT.invokeExact(headerBar, arena.allocateFrom(layout));
+    }
+  }
+
+  /**
+   * Takes the background of the theme away from a window, which is a {@code background} CSS class
+   * on it, so what its child leaves clear shows what is under the window. A surface of GTK 4 has an
+   * alpha channel already.
+   */
+  @SneakyThrows
+  public void windowClearBackground(MemorySegment window) {
+    try (Arena arena = Arena.ofConfined()) {
+      WIDGET_REMOVE_CSS_CLASS.invokeExact(window, arena.allocateFrom("background"));
     }
   }
 

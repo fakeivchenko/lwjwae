@@ -23,12 +23,15 @@ import lombok.Builder;
  *   <li>macOS: Every window opens centered, unless it has a position. {@code decorated(false)}
  *       keeps the rounded corners, the shadow, and the resize edges; the title bar goes transparent
  *       and its buttons hidden. {@code maximizable(false)} grays out the green button, which also
- *       enters full screen.
+ *       enters full screen. A {@code transparent} window without a title bar keeps its shadow,
+ *       which follows what the page draws, and its native resize edges.
  *   <li>Linux, GTK 3: X11: as described. Wayland: {@code position} and {@code centered} are up to
  *       the compositor. A window without its minimize or maximize button gets the title bar of GTK,
- *       with the layout of the desktop minus those buttons.
+ *       with the layout of the desktop minus those buttons. {@code transparent} needs a compositing
+ *       window manager on X11: without one, the background is black.
  *   <li>Linux, GTK 4: {@code position} and {@code centered} do nothing, on X11 as on Wayland, and
- *       neither do {@code maximumSize} and {@code alwaysOnTop}. The buttons as on GTK 3.
+ *       neither do {@code maximumSize} and {@code alwaysOnTop}. The buttons and {@code transparent}
+ *       as on GTK 3.
  * </ul>
  *
  * @param title The window title. Default: {@code "Application"}.
@@ -68,6 +71,12 @@ import lombok.Builder;
  * @param maximizable Whether the title bar has a maximize button, and a double click on it or on a
  *     drag region of the page maximizes the window. {@link Window#maximize()} works either way.
  *     Default: {@code true}.
+ * @param transparent Whether the window has no background of its own, so the desktop shows through
+ *     wherever the page draws nothing. The page keeps {@code html} and {@code body} without a
+ *     background and draws its own shape. With {@code decorated(false)}, the window loses its whole
+ *     frame too, the shadow and the border that would outline the rectangle around that shape, and
+ *     the page takes the pointer along every edge of the window, not of the shape, to resize it. A
+ *     decorated window keeps its title bar and its frame. Default: {@code false}.
  */
 @Builder(toBuilder = true)
 public record WindowParameters(
@@ -85,7 +94,8 @@ public record WindowParameters(
     Boolean decorated,
     Boolean closable,
     Boolean minimizable,
-    Boolean maximizable) {
+    Boolean maximizable,
+    boolean transparent) {
   private static final String DEFAULT_TITLE = "Application";
   private static final WindowSize DEFAULT_SIZE = new WindowSize(1024, 768);
 

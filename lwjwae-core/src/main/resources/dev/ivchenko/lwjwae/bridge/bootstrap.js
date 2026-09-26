@@ -275,7 +275,7 @@
 
     // Windows. open resolves to the id of the new window; close ends this document, so it never
     // resolves. Options mirror WindowParameters: title, width, height, x, y, centered, url, resource,
-    // decorated, closable, minimizable, maximizable.
+    // decorated, closable, minimizable, maximizable, transparent.
     const field = (value) => value === undefined || value === null ? "" : String(value);
     // Java reads whole numbers; a size such as innerWidth / 2 is rounded rather than rejected.
     const number = (value) => value === undefined || value === null ? "" : String(Math.round(value));
@@ -285,7 +285,8 @@
             field(options.title), number(options.width), number(options.height),
             number(options.x), number(options.y), options.centered ? "1" : "",
             field(options.url), field(options.resource), flag(options.decorated),
-            flag(options.closable), flag(options.minimizable), flag(options.maximizable)
+            flag(options.closable), flag(options.minimizable), flag(options.maximizable),
+            options.transparent ? "1" : ""
         ].join(separator)).then(({ text }) => Number(text));
     const close = () => callText("${closeCall}", "").then(() => undefined);
 

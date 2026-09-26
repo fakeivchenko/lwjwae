@@ -238,16 +238,16 @@ public class BridgeProtocol {
 
   /**
    * Parses the payload of an {@link #OPEN_CALL}: the title, the size, the position, {@code
-   * centered}, the URL, the resource, and the four flags of the frame, separated by {@link
-   * #SEPARATOR}, an empty field for one that the page left unset, {@code 1} for a set flag, and
-   * {@code 0} for a flag of the frame that the page turned off.
+   * centered}, the URL, the resource, the four flags of the frame, and {@code transparent},
+   * separated by {@link #SEPARATOR}, an empty field for one that the page left unset, {@code 1} for
+   * a set flag, and {@code 0} for a flag of the frame that the page turned off.
    *
    * @return The parameters, defaults applied, or {@code null} if the text doesn't have the shape or
    *     a number doesn't parse.
    */
   public WindowParameters parseWindowParameters(String payload) {
     String[] parts = payload.split(SEPARATOR, -1);
-    if (parts.length != 12) {
+    if (parts.length != 13) {
       return null;
     }
     try {
@@ -265,6 +265,7 @@ public class BridgeProtocol {
           .closable(BridgeProtocol.flag(parts[9]))
           .minimizable(BridgeProtocol.flag(parts[10]))
           .maximizable(BridgeProtocol.flag(parts[11]))
+          .transparent(parts[12].equals("1"))
           .build();
     } catch (NumberFormatException _) {
       return null;

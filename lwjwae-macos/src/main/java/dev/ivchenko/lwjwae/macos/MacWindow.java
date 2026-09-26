@@ -200,6 +200,9 @@ public class MacWindow extends AbstractWindow {
     Foundation.release(configuration);
     WebKit.setNavigationDelegate(newWebView, newDelegate);
     WebKit.setUiDelegate(newWebView, newDelegate);
+    if (parameters.transparent()) {
+      WebKit.clearBackground(newWebView);
+    }
 
     MemorySegment newWindow =
         AppKit.window(
@@ -212,6 +215,9 @@ public class MacWindow extends AbstractWindow {
     }
     if (!parameters.maximizable()) {
       AppKit.disableZoomButton(newWindow);
+    }
+    if (parameters.transparent()) {
+      AppKit.clearBackground(newWindow);
     }
     AppKit.setContentView(newWindow, newWebView);
     AppKit.setDelegate(newWindow, newDelegate);

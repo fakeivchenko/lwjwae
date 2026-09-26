@@ -145,6 +145,7 @@ public class Gtk4Window extends AbstractWindow {
               void.class, MemorySegment.class, MemorySegment.class, MemorySegment.class),
           Signatures.SCRIPT_MESSAGE_CALLBACK);
   private final long callbackId;
+  private final boolean frameless;
 
   private volatile WindowSize minimumSize = WindowSize.NONE;
   private volatile MemorySegment window;
@@ -162,6 +163,7 @@ public class Gtk4Window extends AbstractWindow {
   @SuppressWarnings("resource")
   Gtk4Window(Gtk4Application application, long id, WindowParameters parameters) {
     super(application, id, parameters);
+    this.frameless = !parameters.decorated() && parameters.transparent();
     this.callbackId = WINDOWS.register(this);
     try {
       this.dispatcher().run(() -> this.createWindow(parameters));
@@ -176,7 +178,11 @@ public class Gtk4Window extends AbstractWindow {
     MemorySegment newWindow = Gtk.windowNew();
     Gtk.windowSetTitle(newWindow, parameters.title());
     Gtk.windowSetDefaultSize(newWindow, parameters.size().width(), parameters.size().height());
-    if (!parameters.decorated()) {
+    if (!parameters.decorated() && parameters.transparent()) {
+      // No frame at all: its shadow and its edge would outline the whole window around the shape
+      // that the page draws.
+      Gtk.windowSetDecorated(newWindow, false);
+    } else if (!parameters.decorated()) {
       // A title bar that never shows rather than gtk_window_set_decorated(FALSE): the window keeps
       // the frame that it draws itself, the shadow and the resize edges in it, and loses only the
       // bar.
@@ -189,10 +195,16 @@ public class Gtk4Window extends AbstractWindow {
     if (!parameters.closable()) {
       Gtk.windowSetDeletable(newWindow, false);
     }
+    if (parameters.transparent()) {
+      Gtk.windowClearBackground(newWindow);
+    }
 
     MemorySegment userData = CallbackRegistry.userData(this.callbackId);
 
     MemorySegment newWebView = WebKit.webViewNew();
+    if (parameters.transparent()) {
+      WebKit.setTransparentBackground(newWebView);
+    }
     // Connect before registering, otherwise early messages race the signal handler.
     MemorySegment manager = WebKit.userContentManager(newWebView);
     Glib.signalConnect(
@@ -232,6 +244,12 @@ public class Gtk4Window extends AbstractWindow {
     // The class of GTK's own bar, which is slimmer than a header bar of an application.
     Gtk.widgetAddCssClass(bar, "default-decoration");
     return bar;
+  }
+
+  /** Every edge of a transparent window without a title bar, which has no frame to resize from. */
+  @Override
+  protected List<WindowEdge> pageResizeEdges() {
+    return this.frameless ? List.of(WindowEdge.values()) : List.of();
   }
 
   @Override

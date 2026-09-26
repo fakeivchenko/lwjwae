@@ -398,7 +398,20 @@ class AbstractApplicationTest {
       FakeWindow opener = application.openFake();
       String options =
           String.join(
-              SEP, "child", "320", "240", "10", "20", "1", "", "app/child.html", "", "", "", "");
+              SEP,
+              "child",
+              "320",
+              "240",
+              "10",
+              "20",
+              "1",
+              "",
+              "app/child.html",
+              "",
+              "",
+              "",
+              "",
+              "");
       opener.call(7, BridgeProtocol.OPEN_CALL, options);
 
       Assertions.assertEquals("2", opener.awaitReply(7).body());

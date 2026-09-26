@@ -86,6 +86,19 @@ public class WebKit {
     return webView;
   }
 
+  /**
+   * Stops {@code webView} from filling what the page leaves clear, with {@code drawsBackground}: a
+   * private key that WebKit has kept since the first {@code WKWebView}, and the one that every
+   * embedding with a transparent window uses.
+   */
+  public void clearBackground(MemorySegment webView) {
+    ObjC.sendVoid(
+        webView,
+        "setValue:forKey:",
+        ObjC.send(ObjC.cls("NSNumber"), "numberWithBool:", false),
+        Foundation.string("drawsBackground"));
+  }
+
   /** Calls {@code -[WKWebView setNavigationDelegate:]}. {@code NULL} detaches the delegate. */
   public void setNavigationDelegate(MemorySegment webView, MemorySegment delegate) {
     ObjC.sendVoid(webView, "setNavigationDelegate:", delegate);

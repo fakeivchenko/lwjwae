@@ -127,7 +127,11 @@ public class GtkWindow extends AbstractWindow {
           MethodType.methodType(
               void.class, MemorySegment.class, MemorySegment.class, MemorySegment.class),
           Signatures.SCRIPT_MESSAGE_CALLBACK);
+  private static final String FRAMELESS_CSS =
+      "decoration, window { box-shadow: none; border: none; border-radius: 0; margin: 0;"
+          + " background: none; }";
   private final long callbackId;
+  private final boolean frameless;
 
   private volatile MemorySegment window;
   private volatile MemorySegment webView;
@@ -150,6 +154,7 @@ public class GtkWindow extends AbstractWindow {
   @SuppressWarnings("resource")
   GtkWindow(GtkApplication application, long id, WindowParameters parameters) {
     super(application, id, parameters);
+    this.frameless = !parameters.decorated() && parameters.transparent();
     this.callbackId = WINDOWS.register(this);
     try {
       this.dispatcher().run(() -> this.createWindow(parameters));
@@ -177,6 +182,11 @@ public class GtkWindow extends AbstractWindow {
       MemorySegment none = Gtk.boxNew(Gtk.ORIENTATION_HORIZONTAL, 0);
       Gtk.widgetSetNoShowAll(none, true);
       Gtk.windowSetTitlebar(newWindow, none);
+      if (parameters.transparent()) {
+        // The frame would outline the whole window around the shape that the page draws.
+        // gtk_window_set_decorated(FALSE) drops it too, but KWin on Wayland then adds its own bar.
+        Gtk.widgetAddCss(newWindow, FRAMELESS_CSS);
+      }
     } else if (!parameters.minimizable() || !parameters.maximizable()) {
       MemorySegment bar = this.titleBar(parameters);
       Gtk.windowSetTitlebar(newWindow, bar);
@@ -184,6 +194,9 @@ public class GtkWindow extends AbstractWindow {
     }
     if (!parameters.closable()) {
       Gtk.windowSetDeletable(newWindow, false);
+    }
+    if (parameters.transparent()) {
+      Gtk.windowClearBackground(newWindow);
     }
 
     MemorySegment userData = CallbackRegistry.userData(this.callbackId);
@@ -198,6 +211,9 @@ public class GtkWindow extends AbstractWindow {
     }
 
     MemorySegment newWebView = WebKit.webViewNew(manager);
+    if (parameters.transparent()) {
+      WebKit.setTransparentBackground(newWebView);
+    }
     Gtk.containerAdd(newWindow, newWebView);
 
     Glib.signalConnect(newWindow, "delete-event", ON_DELETE_EVENT, userData);
@@ -235,6 +251,12 @@ public class GtkWindow extends AbstractWindow {
     // The class of GTK's own bar, which is slimmer than a header bar of an application.
     Gtk.widgetAddCssClass(bar, "default-decoration");
     return bar;
+  }
+
+  /** Every edge of a transparent window without a title bar, which has no frame to resize from. */
+  @Override
+  protected List<WindowEdge> pageResizeEdges() {
+    return this.frameless ? List.of(WindowEdge.values()) : List.of();
   }
 
   @Override

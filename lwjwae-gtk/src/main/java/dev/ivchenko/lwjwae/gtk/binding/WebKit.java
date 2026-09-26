@@ -41,6 +41,9 @@ public class WebKit {
   private final MethodHandle WEB_VIEW_NEW_WITH_USER_CONTENT_MANAGER =
       NativeLibraries.downcall(
           WEBKIT, "webkit_web_view_new_with_user_content_manager", Signatures.POINTER_POINTER);
+  private final MethodHandle WEB_VIEW_SET_BACKGROUND_COLOR =
+      NativeLibraries.downcall(
+          WEBKIT, "webkit_web_view_set_background_color", Signatures.VOID_POINTER_POINTER);
   private final MethodHandle WEB_VIEW_LOAD_URI =
       NativeLibraries.downcall(WEBKIT, "webkit_web_view_load_uri", Signatures.VOID_POINTER_POINTER);
   private final MethodHandle WEB_VIEW_LOAD_HTML =
@@ -245,6 +248,17 @@ public class WebKit {
   @SneakyThrows
   public MemorySegment webViewNew(MemorySegment userContentManager) {
     return (MemorySegment) WEB_VIEW_NEW_WITH_USER_CONTENT_MANAGER.invokeExact(userContentManager);
+  }
+
+  /**
+   * Gives the view a transparent background, a {@code GdkRGBA} of four zero doubles, so what the
+   * page leaves clear shows what is under the view.
+   */
+  @SneakyThrows
+  public void setTransparentBackground(MemorySegment webView) {
+    try (Arena arena = Arena.ofConfined()) {
+      WEB_VIEW_SET_BACKGROUND_COLOR.invokeExact(webView, arena.allocate(Double.BYTES * 4L));
+    }
   }
 
   /** Calls {@code webkit_web_view_load_uri}. */

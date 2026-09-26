@@ -30,6 +30,8 @@ public class Gdk {
           Signatures.C_INT.withName("width"),
           Signatures.C_INT.withName("height"));
 
+  private final MethodHandle SCREEN_GET_RGBA_VISUAL =
+      NativeLibraries.downcall(GDK, "gdk_screen_get_rgba_visual", Signatures.POINTER_POINTER);
   private final MethodHandle DISPLAY_GET_DEFAULT =
       NativeLibraries.downcall(GDK, "gdk_display_get_default", Signatures.POINTER_VOID);
   private final MethodHandle DISPLAY_GET_MONITOR_AT_WINDOW =
@@ -106,6 +108,15 @@ public class Gdk {
 
   /** {@code GDK_WINDOW_STATE_FULLSCREEN}. */
   public final int STATE_FULLSCREEN = 1 << 4;
+
+  /**
+   * Calls {@code gdk_screen_get_rgba_visual}: the visual with an alpha channel, or {@code NULL}
+   * when the screen has none.
+   */
+  @SneakyThrows
+  public MemorySegment screenRgbaVisual(MemorySegment screen) {
+    return (MemorySegment) SCREEN_GET_RGBA_VISUAL.invokeExact(screen);
+  }
 
   /**
    * Calls {@code gdk_window_get_state}: the {@code GdkWindowState} flags that the window manager

@@ -82,7 +82,8 @@ wants to stay alive without a window loops. `quit()`, which `close()` also calls
 window, releases every thread blocked in `run()`, and refuses every `open` from then on.
 
 A page opens and closes windows too. `window.lwjwae.open(options)` takes the same options as
-`WindowParameters` (`title`, `width`, `height`, `x`, `y`, `centered`, `url`, `resource`), shows
+`WindowParameters` (`title`, `width`, `height`, `x`, `y`, `centered`, `url`, `resource`,
+`decorated`, `closable`, `minimizable`, `maximizable`, `transparent`), shows
 the window, and resolves to its ID. `window.lwjwae.close()` closes the window of the page.
 
 ### Placing the window
@@ -195,6 +196,42 @@ itself, `startMove()` and `startResize(edge)`, called while the button is down, 
 | GTK 3, GTK 4 | A title bar that never shows: the window keeps the frame it draws itself, with its shadow, and resizes from it. With a button off, the window draws its own bar, like GTK's own, with the layout of the desktop minus that button. |
 | Windows | `WM_NCCALCSIZE` gives the whole window to the client area except the resize edges on the left, the right, and at the bottom; the style stays, and with it snapping and the animations. The top edge is a strip that the page lays over itself and resizes from. |
 | macOS | A titled window with its content under a transparent title bar, and no buttons: rounded corners, a shadow, resize edges, and the keyboard, which a borderless window can't take. `startResize` does nothing: AppKit resizes only from the edges. |
+
+### A transparent window
+
+`WindowParameters.transparent(true)` takes the background of the window and of its web view away:
+wherever the page draws nothing, the desktop shows through, and a half-transparent color blends
+with it. The page draws its own shape, usually in a window without a title bar:
+
+```java
+application.open(
+    WindowParameters.builder()
+        .size(420, 300)
+        .decorated(false)
+        .transparent(true)
+        .resource("app/widget.html")
+        .build());
+```
+
+```css
+html, body { background: transparent; }
+.card { border-radius: 24px; background: rgba(30, 30, 40, 0.85); }
+```
+
+Without a title bar, a transparent window loses its whole frame too: the shadow and the border
+would outline the rectangle around the shape of the page. The page takes the pointer along every
+edge instead, in a strip of 5 pixels, and resizes the window from there, as `startResize` does.
+Those strips lie on the edges of the window, not of the shape, so a shape that the user resizes
+reaches the edges of the window. A decorated window keeps its
+title bar and its frame. The choice is made once, when the window opens, and a page asks for it
+with `lwjwae.open({ transparent: true })`.
+
+| Platform | Transparent window |
+|---|---|
+| GTK 3 | The visual of the screen with an alpha channel, and no background of the theme. Without a title bar, CSS of the window takes the shadow and the border off the frame that GTK draws: `gtk_window_set_decorated(FALSE)` would make KWin on Wayland add a title bar of its own. X11 needs a compositing window manager; without one, the clear parts are black. |
+| GTK 4 | The `background` CSS class comes off the window, whose surface has an alpha channel already. Without a title bar, `gtk_window_set_decorated(FALSE)`. X11 needs a compositing window manager, as on GTK 3. |
+| Windows | `WS_EX_NOREDIRECTIONBITMAP`: the window has no surface of its own, only what WebView2 draws, over a transparent `DefaultBackgroundColor`. Without a title bar, `WM_NCCALCSIZE` gives the whole window to the client area, and the style stays, with snapping and the animations. |
+| macOS | A window that isn't opaque, with a clear background, and a web view without `drawsBackground`. Without a title bar, the window stays titled, for the keyboard, and keeps its resize edges and its shadow, which follows what the page draws. |
 
 ### Dialogs
 

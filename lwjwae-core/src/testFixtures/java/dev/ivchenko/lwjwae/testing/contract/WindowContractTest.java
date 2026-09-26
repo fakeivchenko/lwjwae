@@ -465,6 +465,42 @@ public abstract class WindowContractTest extends DisplayContractTest {
   }
 
   @Test
+  void transparentWindowShowsThePageOverTheDesktop() throws Exception {
+    try (Application application = Application.create()) {
+      Window window =
+          application.open(
+              WindowParameters.builder()
+                  .title("lwjwae :: transparent")
+                  .size(400, 300)
+                  .decorated(false)
+                  .transparent(true)
+                  .build());
+      final var loaded = Loads.expectFinished(window);
+      window.loadResource("test-app/transparent.html");
+      window.show();
+      loaded.get(30, TimeUnit.SECONDS);
+      WindowContractTest.awaitTrue(window::isVisible, "the window must show");
+      Screenshots.capture("window-transparent");
+
+      Assertions.assertEquals("transparent", Loads.awaitValue(window, "document.title"));
+      Assertions.assertEquals(
+          "rgba(0, 0, 0, 0)",
+          Loads.awaitValue(window, "getComputedStyle(document.body).backgroundColor"));
+
+      // Without a frame, the client area is the whole window, maximized or not.
+      window.maximize();
+      WindowContractTest.awaitTrue(window::isMaximized, "a window without a frame maximizes");
+      window.restore();
+      WindowContractTest.awaitTrue(() -> !window.isMaximized(), "and comes back");
+      if (this.canResizeShownWindows()) {
+        WindowContractTest.awaitTrue(
+            () -> window.size().equals(new WindowSize(400, 300)),
+            "the size of a window without a frame is its page: " + window.size());
+      }
+    }
+  }
+
+  @Test
   void windowWithoutButtonsKeepsWhatJavaAsksFor() throws Exception {
     WindowParameters parameters =
         WindowParameters.builder()
