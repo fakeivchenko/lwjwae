@@ -57,6 +57,23 @@ class InstanceLockTest {
   }
 
   @Test
+  void closeWhileAcceptingGivesTheNameUpEveryTime() throws Exception {
+    for (int attempt = 0; attempt < 50; attempt++) {
+      try (InstanceLock first = InstanceLock.claim(this.directory, "app", FIRST).orElseThrow()) {
+        first.serve(_ -> Assertions.fail("closed"));
+        // Long enough for the thread of the lock to wait in accept, where close() finds it.
+        Thread.sleep(20);
+      }
+
+      Optional<InstanceLock> next = InstanceLock.claim(this.directory, "app", SECOND);
+      Assertions.assertTrue(next.isPresent(), "claim after close, attempt " + attempt);
+      try (InstanceLock _ = next.get()) {
+        Assertions.assertNotNull(next.get());
+      }
+    }
+  }
+
+  @Test
   void socketLeftBehindIsReplaced() throws Exception {
     try (InstanceLock first = InstanceLock.claim(this.directory, "app", FIRST).orElseThrow()) {
       Assertions.assertNotNull(first);

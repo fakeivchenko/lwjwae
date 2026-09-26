@@ -138,9 +138,23 @@ public final class InstanceLock implements AutoCloseable {
         }
         return;
       }
+      if (!this.server.isOpen()) {
+        // close() found this thread waiting in accept, where the socket listens until the call
+        // returns, and a process connected meanwhile. Without an answer, it claims the name.
+        InstanceLock.refuse(client);
+        return;
+      }
       Thread.ofVirtual()
           .name("lwjwae-instance-start")
           .start(() -> InstanceLock.answer(client, handler));
+    }
+  }
+
+  private static void refuse(SocketChannel client) {
+    try (client) {
+      client.shutdownOutput();
+    } catch (IOException e) {
+      ThrowableUtil.report(e);
     }
   }
 
