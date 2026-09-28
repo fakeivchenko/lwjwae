@@ -114,6 +114,9 @@ public class Dbus {
       NativeLibraries.downcall(GLIB, "g_variant_get_uint32", Signatures.INT_POINTER);
   private final MethodHandle VARIANT_GET_STRING =
       NativeLibraries.downcall(GLIB, "g_variant_get_string", Signatures.POINTER_POINTER_POINTER);
+  private final MethodHandle VARIANT_LOOKUP_VALUE =
+      NativeLibraries.downcall(
+          GLIB, "g_variant_lookup_value", Signatures.POINTER_POINTER_POINTER_POINTER);
   private final MethodHandle VARIANT_UNREF =
       NativeLibraries.downcall(GLIB, "g_variant_unref", Signatures.VOID_POINTER);
 
@@ -501,6 +504,27 @@ public class Dbus {
           (MemorySegment) VARIANT_GET_STRING.invokeExact(child, MemorySegment.NULL));
     } finally {
       Dbus.unref(child);
+    }
+  }
+
+  /** The string under {@code key} of an {@code a{sv}} dictionary, or {@code null} without one. */
+  @SneakyThrows
+  public String lookupString(MemorySegment dictionary, String key) {
+    MemorySegment value;
+    try (Arena arena = Arena.ofConfined()) {
+      value =
+          (MemorySegment)
+              VARIANT_LOOKUP_VALUE.invokeExact(
+                  dictionary, arena.allocateFrom(key), MemorySegment.NULL);
+    }
+    if (value.equals(MemorySegment.NULL)) {
+      return null;
+    }
+    try {
+      return NativeLibraries.string(
+          (MemorySegment) VARIANT_GET_STRING.invokeExact(value, MemorySegment.NULL));
+    } finally {
+      Dbus.unref(value);
     }
   }
 

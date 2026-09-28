@@ -15,10 +15,13 @@ import dev.ivchenko.lwjwae.dialog.MessageDialogParameters;
 import dev.ivchenko.lwjwae.dialog.MessageLevel;
 import dev.ivchenko.lwjwae.dialog.OpenDialogParameters;
 import dev.ivchenko.lwjwae.dialog.SaveDialogParameters;
+import dev.ivchenko.lwjwae.event.EventSubscription;
 import dev.ivchenko.lwjwae.event.LoadEvent;
 import dev.ivchenko.lwjwae.event.SecondInstanceEvent;
 import dev.ivchenko.lwjwae.event.WindowEvent;
 import dev.ivchenko.lwjwae.event.WindowEventType;
+import dev.ivchenko.lwjwae.exception.ShortcutUnavailableException;
+import dev.ivchenko.lwjwae.shortcut.Shortcut;
 import dev.ivchenko.lwjwae.testing.Icons;
 import dev.ivchenko.lwjwae.testing.Loads;
 import dev.ivchenko.lwjwae.testing.LocalPages;
@@ -232,6 +235,24 @@ public abstract class WindowContractTest extends DisplayContractTest {
   /** Whether a window that is on screen can be resized by its client. GTK 4 can't. */
   protected boolean canResizeShownWindows() {
     return true;
+  }
+
+  /**
+   * Whether a test may bind a global shortcut without a person at the keyboard. The portal of
+   * Wayland asks the user to confirm it.
+   */
+  protected boolean canBindShortcutsUnattended() {
+    return true;
+  }
+
+  /**
+   * Presses {@code shortcut} the way the keyboard would, for every application, and lets it go.
+   *
+   * @return Whether the backend test can press keys; without that, the test only binds and gives
+   *     back.
+   */
+  protected boolean pressKeys(Shortcut shortcut) throws Exception {
+    return false;
   }
 
   /** Whether the toolkit can keep a window above the others. GTK 4 can't. */
@@ -691,6 +712,38 @@ public abstract class WindowContractTest extends DisplayContractTest {
 
     try (Application next = Application.createSingleInstance(parameters).orElseThrow()) {
       Assertions.assertFalse(next.isClosed(), "a closed instance gives the name up");
+    }
+  }
+
+  @Test
+  void globalShortcutRunsItsHandlerUntilGivenBack() throws Exception {
+    Assumptions.assumeTrue(
+        this.canBindShortcutsUnattended(), "the desktop asks the user to confirm a shortcut");
+    Shortcut shortcut = Shortcut.parse("Ctrl+Alt+Shift+F11");
+    try (Application application = Application.create()) {
+      BlockingQueue<Boolean> heard = new LinkedBlockingQueue<>();
+      Runnable handler = () -> heard.add(Thread.currentThread().isVirtual());
+      EventSubscription binding = application.globalShortcut(shortcut, handler);
+      Assertions.assertThrows(
+          ShortcutUnavailableException.class,
+          () -> application.globalShortcut(shortcut, handler),
+          "a shortcut is bound once");
+
+      if (this.pressKeys(shortcut)) {
+        Assertions.assertEquals(
+            Boolean.TRUE, heard.poll(10, TimeUnit.SECONDS), "the press runs the handler");
+      }
+      binding.unlisten();
+      binding.unlisten();
+      if (this.pressKeys(shortcut)) {
+        Assertions.assertNull(heard.poll(1, TimeUnit.SECONDS), "a shortcut given back stays quiet");
+      }
+
+      application.globalShortcut(shortcut, handler);
+      if (this.pressKeys(shortcut)) {
+        Assertions.assertEquals(
+            Boolean.TRUE, heard.poll(10, TimeUnit.SECONDS), "bound again, the press is heard");
+      }
     }
   }
 

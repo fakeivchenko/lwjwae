@@ -151,7 +151,7 @@ public class WindowsDispatcher extends EventLoopDispatcher {
 
   /**
    * The {@code WNDPROC} of the message window: a {@code WM_APP} runs the queued tasks, wherever the
-   * loop that dispatched it runs.
+   * loop that dispatched it runs, and a {@code WM_HOTKEY} goes to {@link WindowsShortcuts}.
    *
    * <p>Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
    * binds it by name, so no Java code calls it and the compiler sees a dead private method.
@@ -161,6 +161,10 @@ public class WindowsDispatcher extends EventLoopDispatcher {
       MemorySegment hwnd, int message, long wordParameter, long longParameter) {
     if (message == User32.WM_APP) {
       INSTANCE.drainTasks();
+      return 0;
+    }
+    if (message == User32.WM_HOTKEY) {
+      WindowsShortcuts.pressed(wordParameter);
       return 0;
     }
     return User32.defWindowProc(hwnd, message, wordParameter, longParameter);

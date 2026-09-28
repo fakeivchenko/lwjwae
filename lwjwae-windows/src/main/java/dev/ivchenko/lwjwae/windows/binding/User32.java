@@ -108,6 +108,19 @@ public class User32 {
   public final int WM_USER = 0x0400;
   public final int WM_APP = 0x8000;
 
+  /** {@code WM_HOTKEY}: a shortcut of {@code RegisterHotKey}, with its ID in {@code wParam}. */
+  public final int WM_HOTKEY = 0x0312;
+
+  /** {@code MOD_ALT}, {@code MOD_CONTROL}, {@code MOD_SHIFT}, {@code MOD_WIN}. */
+  public final int MOD_ALT = 0x0001;
+
+  public final int MOD_CONTROL = 0x0002;
+  public final int MOD_SHIFT = 0x0004;
+  public final int MOD_WIN = 0x0008;
+
+  /** {@code MOD_NOREPEAT}: holding the keys down sends one {@code WM_HOTKEY}. */
+  private final int MOD_NOREPEAT = 0x4000;
+
   /** {@code COLOR_WINDOW + 1}: the class background brush that GTK-style applications use. */
   private final MemorySegment WINDOW_BACKGROUND = MemorySegment.ofAddress(5 + 1);
 
@@ -166,6 +179,10 @@ public class User32 {
       NativeLibraries.downcall(USER32, "DestroyWindow", Signatures.INT_POINTER);
   private final MethodHandle SEND_MESSAGE =
       NativeLibraries.downcall(USER32, "SendMessageW", Signatures.LONG_POINTER_INT_LONG_LONG);
+  private final MethodHandle REGISTER_HOT_KEY =
+      NativeLibraries.downcall(USER32, "RegisterHotKey", Signatures.INT_POINTER_INT_INT_INT);
+  private final MethodHandle UNREGISTER_HOT_KEY =
+      NativeLibraries.downcall(USER32, "UnregisterHotKey", Signatures.INT_POINTER_INT);
   private final MethodHandle POST_MESSAGE =
       NativeLibraries.downcall(USER32, "PostMessageW", Signatures.INT_POINTER_INT_LONG_LONG);
   private final MethodHandle REGISTER_WINDOW_MESSAGE =
@@ -373,6 +390,25 @@ public class User32 {
   @SneakyThrows
   public long send(MemorySegment hwnd, int message, long wordParameter, long longParameter) {
     return (long) SEND_MESSAGE.invokeExact(hwnd, message, wordParameter, longParameter);
+  }
+
+  /**
+   * Calls {@code RegisterHotKey}: {@code hwnd} hears {@code WM_HOTKEY} with {@code id} whenever the
+   * user presses {@code virtualKey} with {@code modifiers}, once however long the keys are held.
+   * Call on the thread of {@code hwnd}.
+   *
+   * @return Whether Windows took the shortcut: not when another application holds it, or Windows
+   *     keeps it for itself.
+   */
+  @SneakyThrows
+  public boolean registerHotKey(MemorySegment hwnd, int id, int modifiers, int virtualKey) {
+    return (int) REGISTER_HOT_KEY.invokeExact(hwnd, id, modifiers | MOD_NOREPEAT, virtualKey) != 0;
+  }
+
+  /** Calls {@code UnregisterHotKey}. Call on the thread of {@code hwnd}. */
+  @SneakyThrows
+  public void unregisterHotKey(MemorySegment hwnd, int id) {
+    int _ = (int) UNREGISTER_HOT_KEY.invokeExact(hwnd, id);
   }
 
   /** Calls {@code PostMessageW}: queues {@code message} for {@code hwnd} and returns at once. */

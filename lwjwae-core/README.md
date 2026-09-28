@@ -23,7 +23,8 @@ the window; a codec module supplies JSON when you use the typed bridge methods.
 | [`event.LoadEvent`](src/main/java/dev/ivchenko/lwjwae/event/LoadEvent.java), [`event.LoadState`](src/main/java/dev/ivchenko/lwjwae/event/LoadState.java)                                                                                                                                                                  | Page load lifecycle notifications.                                                                                                                                                                                                                                                                                                                     |
 | [`tray.TrayIcon`](src/main/java/dev/ivchenko/lwjwae/tray/TrayIcon.java), [`tray.TrayMenuItem`](src/main/java/dev/ivchenko/lwjwae/tray/TrayMenuItem.java), [`tray.Tray`](src/main/java/dev/ivchenko/lwjwae/tray/Tray.java)                                                                                                 | A system tray icon: what it shows, its menu, and the handle that changes or removes it. The image is PNG bytes or a PNG among the resources of the application, `icon("app/tray.png")`. `Application.tray(TrayIcon)` puts one up; it belongs to the application, keeps `run()` going with no window open, and goes away with the application at the latest. A backend without tray support throws `UnsupportedOperationException`.                     |
 | [`notification.Notification`](src/main/java/dev/ivchenko/lwjwae/notification/Notification.java), [`notification.NotificationAction`](src/main/java/dev/ivchenko/lwjwae/notification/NotificationAction.java), [`notification.NotificationHandle`](src/main/java/dev/ivchenko/lwjwae/notification/NotificationHandle.java) | A desktop notification: its title, body, image, buttons, and click handler, and the handle that takes it back. `Notification.of(title, body)` is the plain one; the image is PNG bytes or a resource path. `Application.showNotification(Notification)` shows one; it doesn't keep `run()` going, and `quit()` takes it back. A backend without notifications, or a desktop without a notification server, throws `UnsupportedOperationException`. |
-| `exception.*`                                                                                                                                                                                                                                                                                                             | [`BackendNotAvailableException`](src/main/java/dev/ivchenko/lwjwae/exception/BackendNotAvailableException.java), [`ResourceNotFoundException`](src/main/java/dev/ivchenko/lwjwae/exception/ResourceNotFoundException.java), [`ScriptEvaluationFailedException`](src/main/java/dev/ivchenko/lwjwae/exception/ScriptEvaluationFailedException.java).     |
+| [`shortcut.Shortcut`](src/main/java/dev/ivchenko/lwjwae/shortcut/Shortcut.java), [`shortcut.ShortcutKey`](src/main/java/dev/ivchenko/lwjwae/shortcut/ShortcutKey.java), [`shortcut.ShortcutModifier`](src/main/java/dev/ivchenko/lwjwae/shortcut/ShortcutModifier.java) | A combination of keys for `Application.globalShortcut`, which runs a handler on it whichever application has the keyboard. `Shortcut.parse("CmdOrCtrl+Shift+K")` reads one. |
+| `exception.*`                                                                                                                                                                                                                                                                                                             | [`BackendNotAvailableException`](src/main/java/dev/ivchenko/lwjwae/exception/BackendNotAvailableException.java), [`ResourceNotFoundException`](src/main/java/dev/ivchenko/lwjwae/exception/ResourceNotFoundException.java), [`ScriptEvaluationFailedException`](src/main/java/dev/ivchenko/lwjwae/exception/ScriptEvaluationFailedException.java), [`ShortcutUnavailableException`](src/main/java/dev/ivchenko/lwjwae/exception/ShortcutUnavailableException.java).     |
 
 A minimal application, in one line:
 
@@ -299,6 +300,34 @@ Windows keeps what was written after the application exits, and so does macOS; o
 clipboard manager of the desktop takes a copy, as most desktops have one. Wayland gives the
 clipboard only to the application whose window has the focus that the user gave it: a write or a
 read from a background thread, with no window in front, finds nothing.
+
+
+### Global shortcuts
+
+`application.globalShortcut(shortcut, handler)` runs the handler whenever the user presses the
+shortcut, whichever application has the keyboard, until the returned handle gives it back or the
+application closes. The handler runs off the UI thread, like a handler of the tray:
+
+```java
+EventSubscription shortcut =
+    application.globalShortcut("CmdOrCtrl+Shift+Space", window::focus);
+shortcut.unlisten(); // gives the shortcut back
+```
+
+A shortcut is written with the modifiers first and the key last: `Ctrl`, `Alt`, `Shift`, `Meta`,
+which is Win, Command, or Super, and `CmdOrCtrl`, which is Command on macOS and Ctrl elsewhere; the
+key is a letter, a digit, `F1` to `F24`, or a named key such as `Space`, `Enter`, `PageUp`, or
+`Left`. `Shortcut.of(ShortcutKey.K, ShortcutModifier.CONTROL)` says the same in code. A key other
+than a function key needs a modifier, since the shortcut takes the key away from every application.
+A shortcut that another application holds throws `ShortcutUnavailableException`, and so does one
+that this application holds already.
+
+| Platform | Global shortcut |
+|---|---|
+| Windows | `RegisterHotKey` on the message window of the UI thread, so a shortcut keeps working while every window is hidden. Holding the keys down runs the handler once. |
+| macOS | A hot key of Carbon, which needs no permission of the user. A letter names the key at its place on a US keyboard, as the menu shortcuts of macOS do. |
+| Linux, X11 | A grab of the key on the root window, with and without Caps Lock and Num Lock. |
+| Linux, Wayland | The `GlobalShortcuts` portal, which KDE Plasma and GNOME 48 and later have. The desktop asks the user to confirm the shortcut the first time and may let them pick other keys; `globalShortcut` returns before that. `focus()` from the handler brings the window to the front where the portal hands on the activation token of the press, as GNOME does; KDE Plasma hands none on, so there the window only asks for attention. Without the portal, the call throws `UnsupportedOperationException`. |
 
 ### Links that leave the application
 

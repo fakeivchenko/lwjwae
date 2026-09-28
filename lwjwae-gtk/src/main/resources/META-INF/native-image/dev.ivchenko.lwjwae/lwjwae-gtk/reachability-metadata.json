@@ -79,6 +79,14 @@
             "java.lang.foreign.MemorySegment",
             "java.lang.foreign.MemorySegment"
           ]
+        },
+        {
+          "name": "onXlibEvent",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
         }
       ]
     },
@@ -421,6 +429,16 @@
         "parameterTypes": [
           "void*",
           "jint",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.gtk.GtkApplication",
+        "method": "onXlibEvent",
+        "returnType": "jint",
+        "parameterTypes": [
+          "void*",
+          "void*",
           "void*"
         ]
       }

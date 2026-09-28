@@ -15,6 +15,7 @@ import dev.ivchenko.lwjwae.event.LoadEvent;
 import dev.ivchenko.lwjwae.event.LoadState;
 import dev.ivchenko.lwjwae.foreign.CallbackRegistry;
 import dev.ivchenko.lwjwae.foreign.NativeLibraries;
+import dev.ivchenko.lwjwae.glib.PortalShortcuts;
 import dev.ivchenko.lwjwae.glib.binding.Glib;
 import dev.ivchenko.lwjwae.glib.util.DecorationLayoutUtil;
 import dev.ivchenko.lwjwae.gtk.binding.Gdk;
@@ -576,6 +577,10 @@ public class GtkWindow extends AbstractWindow {
             () -> {
               MemorySegment current = this.window();
               Gtk.widgetShowAll(current);
+              String token = PortalShortcuts.takeActivationToken();
+              if (token != null) {
+                Gtk.windowSetStartupId(current, token);
+              }
               Gtk.windowPresent(current);
             });
   }

@@ -228,6 +228,12 @@ public class Signatures {
       FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_POINTER);
 
   /**
+   * {@code GdkFilterReturn (*)(GdkXEvent*, GdkEvent*, gpointer)}: a filter of {@code
+   * gdk_window_add_filter}, which sees every {@code XEvent} before GDK does.
+   */
+  public final FunctionDescriptor GDK_FILTER_FUNC = DELETE_EVENT_CALLBACK;
+
+  /**
    * {@code void (*)(GtkStatusIcon*, guint button, guint activate_time, gpointer)}: the {@code
    * popup-menu} signal of a status icon.
    */

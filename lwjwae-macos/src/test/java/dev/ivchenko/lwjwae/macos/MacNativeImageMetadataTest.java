@@ -1,6 +1,7 @@
 package dev.ivchenko.lwjwae.macos;
 
 import dev.ivchenko.lwjwae.macos.binding.AppKit;
+import dev.ivchenko.lwjwae.macos.binding.Carbon;
 import dev.ivchenko.lwjwae.macos.binding.Foundation;
 import dev.ivchenko.lwjwae.macos.binding.ObjC;
 import dev.ivchenko.lwjwae.macos.binding.UserNotifications;
@@ -36,6 +37,8 @@ class MacNativeImageMetadataTest extends NativeImageMetadataContractTest {
         MacMainMenu.class,
         MacTray.class,
         UserNotifications.class,
-        MacNotifier.class);
+        MacNotifier.class,
+        Carbon.class,
+        MacShortcuts.class);
   }
 }

@@ -73,6 +73,35 @@ public class Gdk {
           "gdk_wayland_display_get_type",
           Signatures.LONG_VOID);
 
+  private final MethodHandle X11_DISPLAY_GET_TYPE =
+      NativeLibraries.downcallIfPresent(
+          GDK.find("gdk_x11_display_get_type").isPresent() ? GDK : null,
+          "gdk_x11_display_get_type",
+          Signatures.LONG_VOID);
+  private final MethodHandle X11_DISPLAY_GET_XDISPLAY =
+      NativeLibraries.downcallIfPresent(
+          GDK.find("gdk_x11_display_get_xdisplay").isPresent() ? GDK : null,
+          "gdk_x11_display_get_xdisplay",
+          Signatures.POINTER_POINTER);
+  private final MethodHandle X11_DISPLAY_ERROR_TRAP_PUSH =
+      NativeLibraries.downcallIfPresent(
+          GDK.find("gdk_x11_display_error_trap_push").isPresent() ? GDK : null,
+          "gdk_x11_display_error_trap_push",
+          Signatures.VOID_POINTER);
+  private final MethodHandle X11_DISPLAY_ERROR_TRAP_POP =
+      NativeLibraries.downcallIfPresent(
+          GDK.find("gdk_x11_display_error_trap_pop").isPresent() ? GDK : null,
+          "gdk_x11_display_error_trap_pop",
+          Signatures.INT_POINTER);
+  private final MethodHandle WINDOW_ADD_FILTER =
+      NativeLibraries.downcall(
+          GDK, "gdk_window_add_filter", Signatures.VOID_POINTER_POINTER_POINTER);
+
+  /** {@code GDK_FILTER_CONTINUE} and {@code GDK_FILTER_REMOVE}: what a filter makes of an event. */
+  public final int FILTER_CONTINUE = 0;
+
+  public final int FILTER_REMOVE = 2;
+
   /** {@code GDK_CURRENT_TIME}: the time of the event being handled, for a request. */
   public final int CURRENT_TIME = 0;
 
@@ -187,6 +216,46 @@ public class Gdk {
     MemorySegment display = (MemorySegment) DISPLAY_GET_DEFAULT.invokeExact();
     long waylandType = (long) WAYLAND_DISPLAY_GET_TYPE.invokeExact();
     return Glib.typeCheckInstanceIsA(display, waylandType);
+  }
+
+  /** Whether the default display is one of X11, where a client grabs keys itself. */
+  @SneakyThrows
+  public boolean isX11() {
+    if (X11_DISPLAY_GET_TYPE == null) {
+      return false;
+    }
+    MemorySegment display = (MemorySegment) DISPLAY_GET_DEFAULT.invokeExact();
+    return Glib.typeCheckInstanceIsA(display, (long) X11_DISPLAY_GET_TYPE.invokeExact());
+  }
+
+  /** The Xlib {@code Display} of the default display, which {@link #isX11()} must be. */
+  @SneakyThrows
+  public MemorySegment xlibDisplay() {
+    return (MemorySegment)
+        X11_DISPLAY_GET_XDISPLAY.invokeExact((MemorySegment) DISPLAY_GET_DEFAULT.invokeExact());
+  }
+
+  /**
+   * Runs {@code action} with the errors of X trapped instead of sent to the handler, which would
+   * end the process, and returns the code of the error that it caused, or 0.
+   */
+  @SneakyThrows
+  public int trapped(Runnable action) {
+    MemorySegment display = (MemorySegment) DISPLAY_GET_DEFAULT.invokeExact();
+    X11_DISPLAY_ERROR_TRAP_PUSH.invokeExact(display);
+    int error;
+    try {
+      action.run();
+    } finally {
+      error = (int) X11_DISPLAY_ERROR_TRAP_POP.invokeExact(display);
+    }
+    return error;
+  }
+
+  /** Calls {@code gdk_window_add_filter} for every window: {@code filter} sees every event. */
+  @SneakyThrows
+  public void addEventFilter(MemorySegment filter, MemorySegment userData) {
+    WINDOW_ADD_FILTER.invokeExact(MemorySegment.NULL, filter, userData);
   }
 
   /** The monitors of the default display, which GDK owns. */

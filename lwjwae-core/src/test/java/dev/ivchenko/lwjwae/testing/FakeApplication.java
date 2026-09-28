@@ -7,11 +7,15 @@ import dev.ivchenko.lwjwae.Screen;
 import dev.ivchenko.lwjwae.ScreenArea;
 import dev.ivchenko.lwjwae.WindowParameters;
 import dev.ivchenko.lwjwae.clipboard.Clipboard;
+import dev.ivchenko.lwjwae.event.EventSubscription;
 import dev.ivchenko.lwjwae.notification.Notification;
 import dev.ivchenko.lwjwae.notification.NotificationHandle;
+import dev.ivchenko.lwjwae.shortcut.Shortcut;
 import dev.ivchenko.lwjwae.tray.Tray;
 import dev.ivchenko.lwjwae.tray.TrayIcon;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Consumer;
 
@@ -71,6 +75,15 @@ public class FakeApplication extends AbstractApplication {
       Notification notification, Consumer<NotificationHandle> closed) {
     this.shownNotifications.add(notification);
     return new FakeNotification(closed);
+  }
+
+  /** The shortcuts that are bound now, with what a press runs. */
+  public final Map<Shortcut, Runnable> boundShortcuts = new ConcurrentHashMap<>();
+
+  @Override
+  protected EventSubscription bindGlobalShortcut(Shortcut shortcut, Runnable pressed) {
+    this.boundShortcuts.put(shortcut, pressed);
+    return () -> this.boundShortcuts.remove(shortcut);
   }
 
   /** Every URL that went to the system, in order. */

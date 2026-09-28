@@ -6,10 +6,12 @@ import dev.ivchenko.lwjwae.event.Event;
 import dev.ivchenko.lwjwae.event.EventSubscription;
 import dev.ivchenko.lwjwae.event.SecondInstanceEvent;
 import dev.ivchenko.lwjwae.exception.BackendNotAvailableException;
+import dev.ivchenko.lwjwae.exception.ShortcutUnavailableException;
 import dev.ivchenko.lwjwae.instance.InstanceLock;
 import dev.ivchenko.lwjwae.notification.Notification;
 import dev.ivchenko.lwjwae.notification.NotificationHandle;
 import dev.ivchenko.lwjwae.rpc.RpcHandler;
+import dev.ivchenko.lwjwae.shortcut.Shortcut;
 import dev.ivchenko.lwjwae.tray.Tray;
 import dev.ivchenko.lwjwae.tray.TrayIcon;
 import dev.ivchenko.lwjwae.tray.TrayMenuItem;
@@ -455,6 +457,56 @@ public interface Application extends AutoCloseable {
    */
   default Tray tray(String icon, TrayMenuItem... menu) {
     return this.tray(TrayIcon.builder().icon(icon).menu(menu).build());
+  }
+
+  /**
+   * Runs {@code handler} whenever the user presses {@code shortcut}, whichever application has the
+   * keyboard, until the returned handle gives the shortcut back or the application closes.
+   *
+   * <p>The shortcut belongs to the application while it is bound: the key press goes to the
+   * handler, not to the application in front. The handler runs off the UI thread, like a handler of
+   * the tray, so it may block or call back into a window, often {@link Window#focus()}.
+   *
+   * <pre>{@code
+   * application.globalShortcut("CmdOrCtrl+Shift+Space", window::focus);
+   * }</pre>
+   *
+   * <p>Platforms:
+   *
+   * <ul>
+   *   <li>Windows: {@code RegisterHotKey}. A shortcut that another application holds throws, and so
+   *       does one that Windows keeps, such as {@code Win+L}. Holding the keys down runs the
+   *       handler once.
+   *   <li>macOS: {@code RegisterEventHotKey} of Carbon, which needs no permission of the user. A
+   *       shortcut of the system, such as {@code Command+Space} for Spotlight, may still go to the
+   *       system first.
+   *   <li>Linux, GTK 3: X11: a grab of the key on the root window, which throws when another client
+   *       holds it. Wayland: the {@code GlobalShortcuts} portal, which KDE Plasma and GNOME 48 and
+   *       later have. The desktop asks the user to confirm the shortcuts the first time and may let
+   *       the user pick other keys; the call returns before that, and a shortcut that the user
+   *       turns down never runs. Without the portal, the call throws {@link
+   *       UnsupportedOperationException}. {@link Window#focus()} from the handler brings the window
+   *       to the front where the portal hands on the activation token of the press, as GNOME does;
+   *       KDE Plasma hands none on, and the window only asks for attention in the task bar.
+   *   <li>Linux, GTK 4: As on GTK 3.
+   * </ul>
+   *
+   * @return The handle that gives the shortcut back. Giving it back twice is harmless.
+   * @throws ShortcutUnavailableException If another application, or this one, holds the shortcut.
+   * @throws UnsupportedOperationException If the desktop has no global shortcuts, or the backend
+   *     has none yet.
+   * @throws IllegalStateException If the application is closed.
+   */
+  EventSubscription globalShortcut(Shortcut shortcut, Runnable handler);
+
+  /**
+   * Runs {@code handler} whenever the user presses {@code shortcut}, written as {@link
+   * Shortcut#parse} reads it, such as {@code Ctrl+Shift+K}.
+   *
+   * @throws IllegalArgumentException If the text isn't a shortcut.
+   */
+  default EventSubscription globalShortcut(String shortcut, Runnable handler) {
+    return this.globalShortcut(Shortcut.parse(shortcut), handler);
   }
 
   /**

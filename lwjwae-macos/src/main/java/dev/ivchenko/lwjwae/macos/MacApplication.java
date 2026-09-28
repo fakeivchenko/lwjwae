@@ -6,10 +6,12 @@ import dev.ivchenko.lwjwae.ApplicationParameters;
 import dev.ivchenko.lwjwae.Screen;
 import dev.ivchenko.lwjwae.WindowParameters;
 import dev.ivchenko.lwjwae.clipboard.Clipboard;
+import dev.ivchenko.lwjwae.event.EventSubscription;
 import dev.ivchenko.lwjwae.macos.binding.AppKit;
 import dev.ivchenko.lwjwae.macos.binding.WebKit;
 import dev.ivchenko.lwjwae.notification.Notification;
 import dev.ivchenko.lwjwae.notification.NotificationHandle;
+import dev.ivchenko.lwjwae.shortcut.Shortcut;
 import dev.ivchenko.lwjwae.tray.Tray;
 import dev.ivchenko.lwjwae.tray.TrayIcon;
 import java.util.List;
@@ -62,6 +64,11 @@ public class MacApplication extends AbstractApplication {
   @Override
   protected AbstractWindow createWindow(long id, WindowParameters parameters) {
     return new MacWindow(this, id, parameters);
+  }
+
+  @Override
+  protected EventSubscription bindGlobalShortcut(Shortcut shortcut, Runnable pressed) {
+    return MacShortcuts.bind(this.dispatcher(), shortcut, pressed);
   }
 
   @Override

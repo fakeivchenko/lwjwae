@@ -2,11 +2,14 @@ package dev.ivchenko.lwjwae;
 
 import dev.ivchenko.lwjwae.bridge.BridgeProtocol;
 import dev.ivchenko.lwjwae.event.Event;
+import dev.ivchenko.lwjwae.event.EventSubscription;
 import dev.ivchenko.lwjwae.event.SecondInstanceEvent;
+import dev.ivchenko.lwjwae.exception.ShortcutUnavailableException;
 import dev.ivchenko.lwjwae.instance.InstanceLock;
 import dev.ivchenko.lwjwae.instance.InstanceLocks;
 import dev.ivchenko.lwjwae.notification.Notification;
 import dev.ivchenko.lwjwae.notification.NotificationHandle;
+import dev.ivchenko.lwjwae.shortcut.Shortcut;
 import dev.ivchenko.lwjwae.testing.FakeApplication;
 import dev.ivchenko.lwjwae.testing.FakeWindow;
 import dev.ivchenko.lwjwae.testing.Point;
@@ -578,6 +581,40 @@ class AbstractApplicationTest {
   private static void serveInstances(AbstractApplication application, Path directory) {
     application.serveInstances(
         InstanceLocks.claim(directory, "app", AbstractApplicationTest.start()).orElseThrow());
+  }
+
+  @Test
+  void globalShortcutRunsItsHandlerOffTheUiThreadUntilGivenBack() throws Exception {
+    try (FakeApplication application = new FakeApplication()) {
+      BlockingQueue<String> heard = new LinkedBlockingQueue<>();
+      EventSubscription binding =
+          application.globalShortcut(
+              "Ctrl+Shift+K", () -> heard.add(String.valueOf(Thread.currentThread().isVirtual())));
+      Shortcut shortcut = Shortcut.parse("Ctrl+Shift+K");
+
+      application.boundShortcuts.get(shortcut).run();
+      Assertions.assertEquals("true", heard.poll(5, TimeUnit.SECONDS));
+
+      binding.unlisten();
+      binding.unlisten();
+      Assertions.assertTrue(application.boundShortcuts.isEmpty());
+      Assertions.assertDoesNotThrow(() -> application.globalShortcut(shortcut, () -> {}));
+    }
+  }
+
+  @Test
+  void sameShortcutTwiceIsRefusedAndQuitGivesEveryShortcutBack() {
+    FakeApplication application = new FakeApplication();
+    try (application) {
+      application.globalShortcut("Alt+F4", () -> {});
+      application.globalShortcut("Ctrl+Alt+Delete", () -> {});
+      Assertions.assertThrows(
+          ShortcutUnavailableException.class, () -> application.globalShortcut("alt+f4", () -> {}));
+      Assertions.assertEquals(2, application.boundShortcuts.size());
+    }
+    Assertions.assertTrue(application.boundShortcuts.isEmpty(), "quit gives the shortcuts back");
+    Assertions.assertThrows(
+        IllegalStateException.class, () -> application.globalShortcut("Alt+F4", () -> {}));
   }
 
   private static SecondInstanceEvent start() {

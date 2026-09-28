@@ -228,6 +228,19 @@
           ]
         }
       ]
+    },
+    {
+      "type": "dev.ivchenko.lwjwae.macos.MacShortcuts",
+      "methods": [
+        {
+          "name": "onHotKey",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
+        }
+      ]
     }
   ],
   "resources": [
@@ -573,6 +586,46 @@
           "void*",
           "void*"
         ]
+      },
+      {
+        "returnType": "jint",
+        "parameterTypes": [
+          "void*"
+        ]
+      },
+      {
+        "returnType": "jint",
+        "parameterTypes": [
+          "jint",
+          "jint",
+          "jlong",
+          "void*",
+          "jint",
+          "void*"
+        ]
+      },
+      {
+        "returnType": "jint",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "jlong",
+          "void*",
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "returnType": "jint",
+        "parameterTypes": [
+          "void*",
+          "jint",
+          "jint",
+          "void*",
+          "jlong",
+          "void*",
+          "void*"
+        ]
       }
     ],
     "directUpcalls": [
@@ -812,6 +865,16 @@
         "class": "dev.ivchenko.lwjwae.macos.MacMainMenu",
         "method": "onShouldTerminate",
         "returnType": "jlong",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.macos.MacShortcuts",
+        "method": "onHotKey",
+        "returnType": "jint",
         "parameterTypes": [
           "void*",
           "void*",

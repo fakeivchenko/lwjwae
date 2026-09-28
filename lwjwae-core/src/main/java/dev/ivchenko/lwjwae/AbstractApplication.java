@@ -6,16 +6,19 @@ import dev.ivchenko.lwjwae.clipboard.Clipboard;
 import dev.ivchenko.lwjwae.event.Event;
 import dev.ivchenko.lwjwae.event.EventSubscription;
 import dev.ivchenko.lwjwae.event.SecondInstanceEvent;
+import dev.ivchenko.lwjwae.exception.ShortcutUnavailableException;
 import dev.ivchenko.lwjwae.instance.InstanceLock;
 import dev.ivchenko.lwjwae.notification.Notification;
 import dev.ivchenko.lwjwae.notification.NotificationHandle;
 import dev.ivchenko.lwjwae.rpc.RpcHandler;
+import dev.ivchenko.lwjwae.shortcut.Shortcut;
 import dev.ivchenko.lwjwae.state.SavedWindowState;
 import dev.ivchenko.lwjwae.state.WindowStateStore;
 import dev.ivchenko.lwjwae.state.WindowStateTracker;
 import dev.ivchenko.lwjwae.tray.Tray;
 import dev.ivchenko.lwjwae.tray.TrayIcon;
 import dev.ivchenko.lwjwae.ui.UiDispatcher;
+import dev.ivchenko.lwjwae.util.HandlerUtil;
 import dev.ivchenko.lwjwae.util.ThrowableUtil;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -23,6 +26,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -80,6 +84,7 @@ public abstract class AbstractApplication implements Application {
   private final AtomicBoolean closed = new AtomicBoolean();
 
   private volatile Clipboard clipboard;
+  private final Map<Shortcut, EventSubscription> globalShortcuts = new HashMap<>();
 
   // --- single instance, under the lock of the listener list ---
   private final List<Consumer<SecondInstanceEvent>> secondInstanceListeners = new ArrayList<>();
@@ -360,6 +365,52 @@ public abstract class AbstractApplication implements Application {
   }
 
   @Override
+  public final EventSubscription globalShortcut(Shortcut shortcut, Runnable handler) {
+    Objects.requireNonNull(shortcut, "shortcut");
+    Objects.requireNonNull(handler, "handler");
+    this.checkOpen();
+    EventSubscription binding;
+    synchronized (this.globalShortcuts) {
+      if (this.globalShortcuts.containsKey(shortcut)) {
+        throw new ShortcutUnavailableException(
+            shortcut + " is a shortcut of this application already");
+      }
+      binding = this.bindGlobalShortcut(shortcut, () -> HandlerUtil.runOffTheUiThread(handler));
+      this.globalShortcuts.put(shortcut, binding);
+    }
+    // Bound while quit() gave the others back: this one missed it.
+    if (this.closed.get()) {
+      this.releaseGlobalShortcut(shortcut, binding);
+      throw new IllegalStateException("The application is closed");
+    }
+    return () -> this.releaseGlobalShortcut(shortcut, binding);
+  }
+
+  private void releaseGlobalShortcut(Shortcut shortcut, EventSubscription binding) {
+    boolean bound;
+    synchronized (this.globalShortcuts) {
+      bound = this.globalShortcuts.remove(shortcut, binding);
+    }
+    if (bound) {
+      binding.unlisten();
+    }
+  }
+
+  /**
+   * Binds {@code shortcut} in the system, the way {@link #globalShortcut} describes. The default
+   * throws, for a backend without global shortcuts.
+   *
+   * @param pressed To run on every press, on any thread; it returns at once.
+   * @return What gives the shortcut back to the system, called once, on any thread.
+   * @throws ShortcutUnavailableException If the system refuses the shortcut.
+   * @throws UnsupportedOperationException If the backend or the desktop has no global shortcuts.
+   */
+  protected EventSubscription bindGlobalShortcut(Shortcut shortcut, Runnable pressed) {
+    throw new UnsupportedOperationException(
+        "The " + this.engine() + " backend has no global shortcuts yet");
+  }
+
+  @Override
   public final Clipboard clipboard() {
     this.checkOpen();
     Clipboard current = this.clipboard;
@@ -574,6 +625,17 @@ public abstract class AbstractApplication implements Application {
     for (NotificationHandle notification : List.copyOf(this.notifications)) {
       try {
         notification.close();
+      } catch (Throwable t) {
+        ThrowableUtil.report(t);
+      }
+    }
+    List<Map.Entry<Shortcut, EventSubscription>> shortcuts;
+    synchronized (this.globalShortcuts) {
+      shortcuts = List.copyOf(this.globalShortcuts.entrySet());
+    }
+    for (Map.Entry<Shortcut, EventSubscription> shortcut : shortcuts) {
+      try {
+        this.releaseGlobalShortcut(shortcut.getKey(), shortcut.getValue());
       } catch (Throwable t) {
         ThrowableUtil.report(t);
       }

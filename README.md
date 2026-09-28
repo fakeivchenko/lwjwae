@@ -157,6 +157,9 @@ dependencies {
 - **Clipboard.** `application.clipboard()` reads and writes text and images, as PNG, on the desktop
   clipboard from Java, and `lwjwae.clipboard` reads and writes text on the page, without the
   prompts of `navigator.clipboard`.
+- **Global shortcuts.** `application.globalShortcut("CmdOrCtrl+Shift+Space", window::focus)` runs a
+  handler on a shortcut, whichever application has the keyboard: `RegisterHotKey` on Windows, a
+  hot key of Carbon on macOS, a key grab on X11, and the `GlobalShortcuts` portal on Wayland.
 - **Screens.** `application.screens()` and `window.screen()` tell where the screens are, their work
   areas and scales; a window that remembers its place doesn't open on a monitor that is gone.
 - **Native dialogs.** `showOpenDialog`, `showSaveDialog`, and `showMessageDialog` on a window, and

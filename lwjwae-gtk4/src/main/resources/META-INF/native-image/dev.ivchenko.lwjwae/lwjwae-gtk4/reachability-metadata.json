@@ -103,6 +103,14 @@
             "java.lang.foreign.MemorySegment",
             "java.lang.foreign.MemorySegment"
           ]
+        },
+        {
+          "name": "onXlibEvent",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
         }
       ]
     },
@@ -438,6 +446,16 @@
         "class": "dev.ivchenko.lwjwae.gtk4.Gtk4Clipboard",
         "method": "onImageRead",
         "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.gtk4.Gtk4Application",
+        "method": "onXlibEvent",
+        "returnType": "jint",
         "parameterTypes": [
           "void*",
           "void*",

@@ -2,6 +2,8 @@ package dev.ivchenko.lwjwae.gtk4;
 
 import dev.ivchenko.lwjwae.Application;
 import dev.ivchenko.lwjwae.Window;
+import dev.ivchenko.lwjwae.glib.XtestKeyboard;
+import dev.ivchenko.lwjwae.shortcut.Shortcut;
 import dev.ivchenko.lwjwae.testing.contract.WindowContractTest;
 import dev.ivchenko.lwjwae.util.PlatformUtil;
 
@@ -55,6 +57,19 @@ class Gtk4WindowTest extends WindowContractTest {
   @Override
   protected boolean hasMaximumSize() {
     return false;
+  }
+
+  /** The portal of Wayland asks the user to confirm a shortcut. */
+  @Override
+  protected boolean canBindShortcutsUnattended() {
+    return Gtk4WindowTest.isX11();
+  }
+
+  /** XTest presses keys on X11; Wayland lets no client press keys for the others. */
+  @Override
+  protected boolean pressKeys(Shortcut shortcut) {
+    XtestKeyboard.press(shortcut);
+    return true;
   }
 
   @Override

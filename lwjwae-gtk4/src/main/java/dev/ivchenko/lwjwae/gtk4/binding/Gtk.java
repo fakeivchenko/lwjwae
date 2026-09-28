@@ -70,6 +70,8 @@ public class Gtk {
       NativeLibraries.downcall(GTK, "gtk_native_get_surface", Signatures.POINTER_POINTER);
   private final MethodHandle TOPLEVEL_GET_STATE =
       NativeLibraries.downcall(GTK, "gdk_toplevel_get_state", Signatures.INT_POINTER);
+  private final MethodHandle WINDOW_SET_STARTUP_ID =
+      NativeLibraries.downcall(GTK, "gtk_window_set_startup_id", Signatures.VOID_POINTER_POINTER);
   private final MethodHandle WINDOW_PRESENT =
       NativeLibraries.downcall(GTK, "gtk_window_present", Signatures.VOID_POINTER);
   private final MethodHandle WINDOW_CLOSE =
@@ -188,6 +190,26 @@ public class Gtk {
           Signatures.POINTER_POINTER);
   private final MethodHandle MONITOR_GET_CONNECTOR =
       NativeLibraries.downcall(GTK, "gdk_monitor_get_connector", Signatures.POINTER_POINTER);
+  private final MethodHandle X11_DISPLAY_GET_TYPE =
+      NativeLibraries.downcallIfPresent(
+          GTK.find("gdk_x11_display_get_type").isPresent() ? GTK : null,
+          "gdk_x11_display_get_type",
+          Signatures.LONG_VOID);
+  private final MethodHandle X11_DISPLAY_GET_XDISPLAY =
+      NativeLibraries.downcallIfPresent(
+          GTK.find("gdk_x11_display_get_xdisplay").isPresent() ? GTK : null,
+          "gdk_x11_display_get_xdisplay",
+          Signatures.POINTER_POINTER);
+  private final MethodHandle X11_DISPLAY_ERROR_TRAP_PUSH =
+      NativeLibraries.downcallIfPresent(
+          GTK.find("gdk_x11_display_error_trap_push").isPresent() ? GTK : null,
+          "gdk_x11_display_error_trap_push",
+          Signatures.VOID_POINTER);
+  private final MethodHandle X11_DISPLAY_ERROR_TRAP_POP =
+      NativeLibraries.downcallIfPresent(
+          GTK.find("gdk_x11_display_error_trap_pop").isPresent() ? GTK : null,
+          "gdk_x11_display_error_trap_pop",
+          Signatures.INT_POINTER);
   private final MethodHandle DISPLAY_GET_DEFAULT_SEAT =
       NativeLibraries.downcall(GTK, "gdk_display_get_default_seat", Signatures.POINTER_POINTER);
   private final MethodHandle SEAT_GET_POINTER =
@@ -308,6 +330,17 @@ public class Gtk {
   @SneakyThrows
   public boolean isWindowResizable(MemorySegment window) {
     return (int) WINDOW_GET_RESIZABLE.invokeExact(window) != 0;
+  }
+
+  /**
+   * Calls {@code gtk_window_set_startup_id}: the next present of the window hands {@code token} to
+   * the compositor, which on Wayland is what lets the window take the focus.
+   */
+  @SneakyThrows
+  public void windowSetStartupId(MemorySegment window, String token) {
+    try (Arena arena = Arena.ofConfined()) {
+      WINDOW_SET_STARTUP_ID.invokeExact(window, arena.allocateFrom(token));
+    }
   }
 
   /** Calls {@code gtk_window_present}: shows the window and asks the desktop to raise it. */
@@ -849,5 +882,46 @@ public class Gtk {
   @SneakyThrows
   public void windowSetModal(MemorySegment window, boolean modal) {
     WINDOW_SET_MODAL.invokeExact(window, modal ? 1 : 0);
+  }
+
+  /** Whether the default display is one of X11, where a client grabs keys itself. */
+  @SneakyThrows
+  public boolean isX11() {
+    if (X11_DISPLAY_GET_TYPE == null) {
+      return false;
+    }
+    MemorySegment display = (MemorySegment) DISPLAY_GET_DEFAULT.invokeExact();
+    return Glib.typeCheckInstanceIsA(display, (long) X11_DISPLAY_GET_TYPE.invokeExact());
+  }
+
+  /** The Xlib {@code Display} of the default display, which {@link #isX11()} must be. */
+  @SneakyThrows
+  public MemorySegment xlibDisplay() {
+    return (MemorySegment)
+        X11_DISPLAY_GET_XDISPLAY.invokeExact((MemorySegment) DISPLAY_GET_DEFAULT.invokeExact());
+  }
+
+  /**
+   * Runs {@code action} with the errors of X trapped instead of sent to the handler, which would
+   * end the process, and returns the code of the error that it caused, or 0.
+   */
+  @SneakyThrows
+  public int trapped(Runnable action) {
+    MemorySegment display = (MemorySegment) DISPLAY_GET_DEFAULT.invokeExact();
+    X11_DISPLAY_ERROR_TRAP_PUSH.invokeExact(display);
+    int error;
+    try {
+      action.run();
+    } finally {
+      error = (int) X11_DISPLAY_ERROR_TRAP_POP.invokeExact(display);
+    }
+    return error;
+  }
+
+  /** Connects {@code callback} to the {@code xevent} signal of the default display of X11. */
+  @SneakyThrows
+  public void connectXlibEvents(MemorySegment callback) {
+    Glib.signalConnect(
+        (MemorySegment) DISPLAY_GET_DEFAULT.invokeExact(), "xevent", callback, MemorySegment.NULL);
   }
 }

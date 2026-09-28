@@ -79,6 +79,36 @@ public class Signatures {
   /** {@code T* f(void)}. */
   public final FunctionDescriptor POINTER_VOID = FunctionDescriptor.of(C_POINTER);
 
+  /** {@code OSStatus f(T*)}: {@code UnregisterEventHotKey}. */
+  public final FunctionDescriptor INT_POINTER = FunctionDescriptor.of(C_INT, C_POINTER);
+
+  /**
+   * {@code OSStatus RegisterEventHotKey(UInt32, UInt32, EventHotKeyID, EventTargetRef, OptionBits,
+   * EventHotKeyRef*)}. The {@code EventHotKeyID} of two {@code UInt32} goes by value in one
+   * register on both architectures, which is where a {@code long} of the two goes.
+   */
+  public final FunctionDescriptor REGISTER_EVENT_HOT_KEY =
+      FunctionDescriptor.of(C_INT, C_INT, C_INT, C_LONG, C_POINTER, C_INT, C_POINTER);
+
+  /**
+   * {@code OSStatus InstallEventHandler(EventTargetRef, EventHandlerUPP, ItemCount, const
+   * EventTypeSpec*, void*, EventHandlerRef*)}.
+   */
+  public final FunctionDescriptor INSTALL_EVENT_HANDLER =
+      FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_LONG, C_POINTER, C_POINTER, C_POINTER);
+
+  /**
+   * {@code OSStatus GetEventParameter(EventRef, EventParamName, EventParamType, EventParamType*,
+   * ByteCount, ByteCount*, void*)}.
+   */
+  public final FunctionDescriptor GET_EVENT_PARAMETER =
+      FunctionDescriptor.of(
+          C_INT, C_POINTER, C_INT, C_INT, C_POINTER, C_LONG, C_POINTER, C_POINTER);
+
+  /** {@code OSStatus (*EventHandlerProcPtr)(EventHandlerCallRef, EventRef, void*)}. */
+  public final FunctionDescriptor EVENT_HANDLER =
+      FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_POINTER);
+
   /** {@code void f(T*)}. */
   public final FunctionDescriptor VOID_POINTER = FunctionDescriptor.ofVoid(C_POINTER);
 

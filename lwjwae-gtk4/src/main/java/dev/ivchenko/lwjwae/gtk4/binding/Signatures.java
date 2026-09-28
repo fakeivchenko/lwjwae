@@ -249,6 +249,12 @@ public class Signatures {
   public final FunctionDescriptor WIDGET_CALLBACK = VOID_POINTER_POINTER;
 
   /**
+   * {@code gboolean (*)(GdkX11Display*, XEvent*, gpointer)}: the {@code xevent} signal, which sees
+   * every event of X before GDK does, and whose {@code TRUE} takes it out of the way of GDK.
+   */
+  public final FunctionDescriptor X_EVENT_CALLBACK = INT_POINTER_POINTER_POINTER;
+
+  /**
    * {@code gboolean (*)(GtkWindow*, gpointer)}: the {@code close-request} signal of a window, whose
    * {@code TRUE} cancels the close.
    */

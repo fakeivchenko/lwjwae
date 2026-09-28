@@ -4,6 +4,7 @@ import dev.ivchenko.lwjwae.glib.binding.Dbus;
 import dev.ivchenko.lwjwae.glib.binding.GdkPixbuf;
 import dev.ivchenko.lwjwae.glib.binding.Glib;
 import dev.ivchenko.lwjwae.glib.binding.Unix;
+import dev.ivchenko.lwjwae.glib.binding.X11;
 import dev.ivchenko.lwjwae.testing.contract.NativeImageMetadataContractTest;
 import dev.ivchenko.lwjwae.util.PlatformUtil;
 import java.util.List;
@@ -30,6 +31,8 @@ class GlibNativeImageMetadataTest extends NativeImageMetadataContractTest {
         Unix.class,
         GlibDispatcher.class,
         FreedesktopNotifier.class,
-        StatusNotifierTray.class);
+        StatusNotifierTray.class,
+        X11.class,
+        PortalShortcuts.class);
   }
 }

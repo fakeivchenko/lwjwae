@@ -104,6 +104,8 @@ public class Gtk {
       NativeLibraries.downcall(GTK, "gtk_widget_hide", Signatures.VOID_POINTER);
   private final MethodHandle WIDGET_GET_VISIBLE =
       NativeLibraries.downcall(GTK, "gtk_widget_get_visible", Signatures.INT_POINTER);
+  private final MethodHandle WINDOW_SET_STARTUP_ID =
+      NativeLibraries.downcall(GTK, "gtk_window_set_startup_id", Signatures.VOID_POINTER_POINTER);
   private final MethodHandle WINDOW_PRESENT =
       NativeLibraries.downcall(GTK, "gtk_window_present", Signatures.VOID_POINTER);
   private final MethodHandle WINDOW_CLOSE =
@@ -467,6 +469,17 @@ public class Gtk {
   @SneakyThrows
   public void windowClose(MemorySegment window) {
     WINDOW_CLOSE.invokeExact(window);
+  }
+
+  /**
+   * Calls {@code gtk_window_set_startup_id}: the next present of the window hands {@code token} to
+   * the compositor, which on Wayland is what lets the window take the focus.
+   */
+  @SneakyThrows
+  public void windowSetStartupId(MemorySegment window, String token) {
+    try (Arena arena = Arena.ofConfined()) {
+      WINDOW_SET_STARTUP_ID.invokeExact(window, arena.allocateFrom(token));
+    }
   }
 
   /** Calls {@code gtk_window_present}: shows the window and asks the desktop to raise it. */

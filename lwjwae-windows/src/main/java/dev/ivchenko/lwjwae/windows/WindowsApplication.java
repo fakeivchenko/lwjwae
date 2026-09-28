@@ -6,8 +6,10 @@ import dev.ivchenko.lwjwae.ApplicationParameters;
 import dev.ivchenko.lwjwae.Screen;
 import dev.ivchenko.lwjwae.WindowParameters;
 import dev.ivchenko.lwjwae.clipboard.Clipboard;
+import dev.ivchenko.lwjwae.event.EventSubscription;
 import dev.ivchenko.lwjwae.notification.Notification;
 import dev.ivchenko.lwjwae.notification.NotificationHandle;
+import dev.ivchenko.lwjwae.shortcut.Shortcut;
 import dev.ivchenko.lwjwae.tray.Tray;
 import dev.ivchenko.lwjwae.tray.TrayIcon;
 import dev.ivchenko.lwjwae.windows.binding.Com;
@@ -117,6 +119,11 @@ public class WindowsApplication extends AbstractApplication {
   @Override
   protected AbstractWindow createWindow(long id, WindowParameters parameters) {
     return new WindowsWindow(this, id, parameters);
+  }
+
+  @Override
+  protected EventSubscription bindGlobalShortcut(Shortcut shortcut, Runnable pressed) {
+    return WindowsShortcuts.bind(WindowsDispatcher.instance(), shortcut, pressed);
   }
 
   @Override

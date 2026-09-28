@@ -57,6 +57,23 @@
           ]
         }
       ]
+    },
+    {
+      "type": "dev.ivchenko.lwjwae.glib.PortalShortcuts",
+      "methods": [
+        {
+          "name": "onSignal",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
+        }
+      ]
     }
   ],
   "foreign": {
@@ -322,6 +339,34 @@
           "void*",
           "void*"
         ]
+      },
+      {
+        "returnType": "jbyte",
+        "parameterTypes": [
+          "void*",
+          "jlong"
+        ]
+      },
+      {
+        "returnType": "jint",
+        "parameterTypes": [
+          "void*",
+          "jint",
+          "jint",
+          "jlong"
+        ]
+      },
+      {
+        "returnType": "jint",
+        "parameterTypes": [
+          "void*",
+          "jint",
+          "jint",
+          "jlong",
+          "jint",
+          "jint",
+          "jint"
+        ]
       }
     ],
     "directUpcalls": [
@@ -366,6 +411,20 @@
         "class": "dev.ivchenko.lwjwae.glib.StatusNotifierTray",
         "method": "onGetProperty",
         "returnType": "void*",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "void*",
+          "void*",
+          "void*",
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.glib.PortalShortcuts",
+        "method": "onSignal",
+        "returnType": "void",
         "parameterTypes": [
           "void*",
           "void*",
