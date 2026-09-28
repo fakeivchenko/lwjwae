@@ -23,13 +23,21 @@ import java.util.concurrent.LinkedBlockingDeque;
  *
  * <p>A document holds the stream until it goes away or the next document opens its own. Events
  * emitted while no document holds it wait for the next one, at most {@value #PENDING_LIMIT} of
- * them, the oldest dropped first: the page that {@code emit} addresses is the one that is loading,
- * and a page that never opens the stream, of an origin that the window doesn't trust, mustn't make
- * them pile up. An event that a stream failed to deliver, because its document went away, goes back
- * to the front of the line for the next one.
+ * them, and those that a document holding it hasn't read yet wait for it, at most {@value
+ * #LIVE_LIMIT}; the oldest go first: the page that {@code emit} addresses is the one that is
+ * loading, and a page that never opens the stream, of an origin that the window doesn't trust,
+ * mustn't make them pile up. An event that a stream failed to deliver, because its document went
+ * away, goes back to the front of the line for the next one.
  */
 public final class PageEvents {
   private static final int PENDING_LIMIT = 1024;
+
+  /**
+   * How many events a document that holds the stream may be behind: far above a burst that a page
+   * reads, as ten thousand in a loop are, and still a bound for one that stopped reading.
+   */
+  private static final int LIVE_LIMIT = 65_536;
+
   private static final int BATCH_LIMIT = 256 * 1024;
   private static final byte[] RETIRED = new byte[0];
 
@@ -44,11 +52,10 @@ public final class PageEvents {
     synchronized (this.lock) {
       if (this.current != null) {
         this.current.add(frame);
-        return;
-      }
-      this.pending.add(frame);
-      if (this.pending.size() > PENDING_LIMIT) {
-        this.pending.removeFirst();
+        PageEvents.trim(this.current, LIVE_LIMIT);
+      } else {
+        this.pending.add(frame);
+        PageEvents.trim(this.pending, PENDING_LIMIT);
       }
     }
   }
@@ -117,6 +124,17 @@ public final class PageEvents {
       for (int i = left.size() - 1; i >= 0; i--) {
         target.addFirst(left.get(i));
       }
+      PageEvents.trim(target, target == this.pending ? PENDING_LIMIT : LIVE_LIMIT);
+    }
+  }
+
+  /**
+   * Drops the oldest events beyond {@code limit}: a document that holds the stream but stopped
+   * reading, frozen or in the background, mustn't make them pile up either.
+   */
+  private static void trim(Deque<byte[]> events, int limit) {
+    while (events.size() > limit) {
+      events.pollFirst();
     }
   }
 

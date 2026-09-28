@@ -195,11 +195,19 @@ public final class MessageRpcExchange implements RpcExchange {
     sent.whenComplete((_, _) -> this.inFlight.release());
   }
 
-  /** Whether an answer of {@code type} can travel as text: UTF-8 in, UTF-8 out. */
-  private static boolean isText(String type) {
+  /**
+   * Whether an answer of {@code type} can travel as text: UTF-8 in, UTF-8 out. A text in another
+   * charset goes as bytes, which reach the page intact, as they do over {@code fetch}.
+   */
+  static boolean isText(String type) {
     String lower = type.toLowerCase(Locale.ROOT);
-    return lower.startsWith("text/")
-        || lower.contains("charset=utf-8")
-        || lower.startsWith("application/json");
+    int charset = lower.indexOf("charset=");
+    if (charset >= 0) {
+      String name = lower.substring(charset + "charset=".length()).trim();
+      int end = name.indexOf(';');
+      name = (end >= 0 ? name.substring(0, end) : name).replace("\"", "").trim();
+      return name.equals("utf-8") || name.equals("utf8");
+    }
+    return lower.startsWith("text/") || lower.startsWith("application/json");
   }
 }

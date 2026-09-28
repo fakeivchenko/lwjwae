@@ -49,9 +49,17 @@ final class MacRpcExchange implements RpcExchange {
 
   /** Starts a call for {@code task}; runs on the main thread, in the start callback. */
   static void start(MacWindow window, MemorySegment task) {
+    window.rpc(MacRpcExchange.open(window, task));
+  }
+
+  /**
+   * Takes over {@code task} for an answer that comes part by part, a large resource as much as a
+   * call; runs on the main thread, in the start callback.
+   */
+  static MacRpcExchange open(MacWindow window, MemorySegment task) {
     MacRpcExchange exchange = new MacRpcExchange(window, task);
     RUNNING.put(task.address(), exchange);
-    window.rpc(exchange);
+    return exchange;
   }
 
   /**

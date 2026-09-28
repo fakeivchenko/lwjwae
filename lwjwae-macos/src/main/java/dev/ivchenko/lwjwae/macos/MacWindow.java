@@ -733,13 +733,14 @@ public class MacWindow extends AbstractWindow {
    */
   private void serveResource(MemorySegment task) {
     String url = WebKit.taskUrl(task);
-    String path = url.substring(url.indexOf("//") + 2);
-    path = path.substring(path.indexOf('/') + 1);
-    int query = path.indexOf('?');
-    if (query >= 0) {
-      path = path.substring(0, query);
-    }
+    String authority = url.substring(url.indexOf("//") + 2);
+    String path = ResourceUtil.servedPath(authority.substring(authority.indexOf('/') + 1));
     try {
+      long size = ResourceUtil.servedSize(path);
+      if (size < 0 || size >= ResourceUtil.STREAM_THRESHOLD) {
+        ResourceUtil.stream(MacRpcExchange.open(this, task), path);
+        return;
+      }
       WebKit.finishTask(task, url, MimeTypeUtil.of(path), ResourceUtil.read(path));
     } catch (ResourceNotFoundException e) {
       if (url.equals(this.loading)) {
@@ -1044,8 +1045,8 @@ public class MacWindow extends AbstractWindow {
   }
 
   /**
-   * Resources are answered in one step inside {@link #onStartUrlSchemeTask}, so only RPC calls have
-   * anything to stop.
+   * A small resource is answered in one step inside {@link #onStartUrlSchemeTask}, so only RPC
+   * calls and large resources, which go through {@link MacRpcExchange}, have anything to stop.
    *
    * <p>Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
    * binds it by name, so no Java code calls it and the compiler sees a dead private method.

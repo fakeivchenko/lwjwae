@@ -18,6 +18,13 @@ ssh "$host" "New-Item -ItemType Directory -Force '$remote' | Out-Null; Get-Child
 tar --exclude=build --exclude=.gradle --exclude=.idea --exclude=.kotlin --exclude=.git -czf - -C "$(dirname "$root")" "$(basename "$root")" \
     | ssh "$host" "tar -xzf - -C '$parent'" 2>/dev/null
 
+# tar.exe of Windows skips a name that isn't ASCII; scp keeps it in UTF-8
+target="$(printf '%s' "$remote" | tr '\\' '/')"
+(cd "$root" && find . \( -name build -o -name .gradle -o -name .idea -o -name .kotlin -o -name .git \) -prune \
+    -o -type f -print) | LC_ALL=C grep '[^ -~]' | while IFS= read -r file; do
+    scp -q "$root/${file#./}" "$host:$target/${file#./}" 2>/dev/null
+done
+
 if [ $# -gt 0 ]; then
     ssh "$host" "cd '$remote'; cmd /c \"gradlew.bat $* --console=plain 2>&1\"" 2>/dev/null
 fi

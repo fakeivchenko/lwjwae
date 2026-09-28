@@ -486,6 +486,34 @@ public abstract class WindowContractTest extends DisplayContractTest {
   }
 
   @Test
+  void resourcesOfAnyNameAndSizeLoadAndTheCodeStaysOut() throws Exception {
+    try (Application application = Application.create()) {
+      Window window =
+          application.open(WindowParameters.builder().title("lwjwae :: resources").build());
+      for (String name : List.of("with space", "кириллица")) {
+        final var loaded = Loads.expectFinished(window);
+        window.loadResource("test-app/" + name + ".html");
+        loaded.get(30, TimeUnit.SECONDS);
+        Assertions.assertEquals(name, Loads.awaitValue(window, "document.title"));
+      }
+
+      Loads.eval(
+          window,
+          "fetch('large.txt').then((response) => response.text()).then((text) =>"
+              + " window.__large = text.length + ' ' + text.endsWith('end\\n')); undefined;");
+      Assertions.assertEquals(
+          (62 * 20000 + 4) + " true", Loads.awaitValue(window, "window.__large"));
+
+      Loads.eval(
+          window,
+          "fetch('/dev/ivchenko/lwjwae/Application.class').then((response) => window.__code ="
+              + " response.ok ? 'served' : 'refused', () => window.__code = 'refused');"
+              + " undefined;");
+      Assertions.assertEquals("refused", Loads.awaitValue(window, "window.__code"));
+    }
+  }
+
+  @Test
   void transparentWindowShowsThePageOverTheDesktop() throws Exception {
     try (Application application = Application.create()) {
       Window window =

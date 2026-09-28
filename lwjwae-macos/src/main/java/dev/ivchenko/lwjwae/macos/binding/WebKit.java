@@ -237,13 +237,6 @@ public class WebKit {
         ObjC.send(ObjC.send(task, "request"), "valueForHTTPHeaderField:", Foundation.string(name)));
   }
 
-  /** {@code task.request.URL.query}, or an empty string. */
-  public String taskQuery(MemorySegment task) {
-    String query =
-        Foundation.string(ObjC.send(ObjC.send(ObjC.send(task, "request"), "URL"), "query"));
-    return query == null ? "" : query;
-  }
-
   /**
    * The body of the request of {@code task}: {@code HTTPBody}, or, where WebKit hands the body over
    * as a stream instead, {@code HTTPBodyStream} read to its end.
