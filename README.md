@@ -33,101 +33,32 @@ and call Java from the page and the page from Java through one bridge that works
 The window above is native compiled application created using lwjwae, compiled with
 GraalVM to one executable and captured on Windows 11.
 
-## A first window
+## Get started
 
 One line opens a window on a page of the application and returns when it closes:
 
 ```java
-Application.launch("Docs", "app/index.html");
+Application.launch("Notes", "app/index.html");
 ```
 
-With a Java function for the page:
+The [wiki](https://github.com/fakeivchenko/lwjwae/wiki) walks you through a whole application, step by step:
 
-```java
-Application.launch(
-    WindowParameters.of("Docs", "app/index.html"),
-    window -> window.bind("reverse", text -> new StringBuilder(text).reverse().toString()));
-```
+1. [Set up the project](https://github.com/fakeivchenko/lwjwae/wiki/1.-Set-up-the-project): what each platform needs, and the Gradle build.
+1. [Open a window](https://github.com/fakeivchenko/lwjwae/wiki/2.-Open-a-window) on a page of the application.
+1. [Call Java from the page](https://github.com/fakeivchenko/lwjwae/wiki/3.-Call-Java-from-the-page), and
+   [send events from Java to the page](https://github.com/fakeivchenko/lwjwae/wiki/4.-Send-events-from-Java-to-the-page).
+1. [Draw your own title bar](https://github.com/fakeivchenko/lwjwae/wiki/5.-Draw-your-own-title-bar).
+1. [Export notes through a native dialog](https://github.com/fakeivchenko/lwjwae/wiki/6.-Export-notes-through-a-native-dialog), and
+   [keep the application in the tray](https://github.com/fakeivchenko/lwjwae/wiki/7.-Keep-the-application-in-the-tray).
+1. [Package the application](https://github.com/fakeivchenko/lwjwae/wiki/8.-Package-the-application), as a native executable too.
 
-Every step on its own, for an application with more than one window, a tray icon, or a life
-beyond its first window:
-
-```java
-try (Application application = Application.create()) {
-  Window window = application.open(WindowParameters.builder()
-      .title("Docs")
-      .size(1280, 800)
-      .build());
-  window.bind("reverse", text -> new StringBuilder(text).reverse().toString());
-  window.load("app/index.html");
-  window.show();
-  application.run();
-}
-```
-
-On the page:
-
-```js
-const reversed = await window.reverse("lwjwae");
-await window.lwjwae.listen("tick", (event) => console.log(event.payload));
-```
-
-`Application.create` picks the backend for the machine it runs on. Put
-[`lwjwae-core`](lwjwae-core) and the backend module of your platform on the classpath, or all
-three, and the same JAR file runs everywhere. [`lwjwae-examples`](https://github.com/fakeivchenko/lwjwae-examples) has a demo
-that shows every feature on one page.
-
-## Requirements
-
-- **Java 25** or newer. The library binds native code through the FFM API and needs
-  `--enable-native-access=ALL-UNNAMED` on the command line of the JVM, or the equivalent
-  `Enable-Native-Access` manifest attribute in an executable JAR file.
-- **A display**: X11 or Wayland on Linux, a desktop session on Windows and macOS. A service session
-  without one, such as session 0 on Windows, can't open a window.
-- The window and the engine of the platform:
-
-| Platform | Needs                                                                                                                                                            |
-|----------|------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Linux    | GTK 3 and WebKitGTK 2.40 or newer with the 4.1 API (`libwebkit2gtk-4.1.so.0`). See [`lwjwae-gtk`](lwjwae-gtk#requirements) for the package of each distribution. Or GTK 4 and the 6.0 API (`libwebkitgtk-6.0.so.4`) with [`lwjwae-gtk4`](lwjwae-gtk4#requirements), which can't place windows. |
-| Windows  | Windows 10 or 11, x64, with the WebView2 Evergreen runtime. Windows 11 ships it; Edge installs it on Windows 10.                                                 |
-| macOS    | macOS on arm64 or x86_64. AppKit and WebKit are part of the system.                                                                                              |
-
-When a backend can't run, `Application.create` throws `BackendNotAvailableException` with the
-reason of every backend it found and, on Linux, the command that installs the missing packages.
-
-## Installation
-
-The modules are published to `https://repo.ivchenko.dev/releases` under the group
-`dev.ivchenko.lwjwae`:
-
-```kotlin
-repositories {
-    maven("https://repo.ivchenko.dev/releases")
-}
-
-dependencies {
-    implementation("dev.ivchenko.lwjwae:lwjwae-core:VERSION")
-    runtimeOnly("dev.ivchenko.lwjwae:lwjwae-gtk:VERSION")
-    runtimeOnly("dev.ivchenko.lwjwae:lwjwae-gtk4:VERSION") // optional: Linux without WebKitGTK 4.1
-    runtimeOnly("dev.ivchenko.lwjwae:lwjwae-windows:VERSION")
-    runtimeOnly("dev.ivchenko.lwjwae:lwjwae-macos:VERSION")
-}
-```
-
-`lwjwae-core` is the API; a backend module is needed at runtime only. Add the one of your platform,
-or all three, and the same JAR file runs everywhere: a backend checks the operating system before
-it loads anything, so the other two step aside.
-
-The typed bridge methods, `bind(name, Class, handler)` and `emit(name, Object)`, need a
-`BridgeCodec`. The codecs live in [lwjwae-codecs](https://github.com/fakeivchenko/lwjwae-codecs): Jackson 3, Gson,
-and Jakarta JSON Binding, each one a module that registers itself. Add one to the runtime classpath, or pass a
-configured instance through `ApplicationParameters.codec()`:
-
-```kotlin
-dependencies {
-    runtimeOnly("dev.ivchenko.lwjwae.codec:lwjwae-codec-jackson:VERSION")
-}
-```
+In short: Java 25 or later, run with `--enable-native-access=ALL-UNNAMED`, and the web engine of
+the platform, which Windows 11 and macOS already have; [`lwjwae-gtk`](lwjwae-gtk#requirements) lists
+the packages of each Linux distribution. The modules are in
+`https://repo.ivchenko.dev/releases` under the group `dev.ivchenko.lwjwae`: `lwjwae-core` for your
+code, and at runtime the backend of each platform that you ship for. On Linux without WebKitGTK
+4.1, [`lwjwae-gtk4`](lwjwae-gtk4#requirements) runs on WebKitGTK 6.0 instead. Typed bindings and
+events need a codec from [lwjwae-codecs](https://github.com/fakeivchenko/lwjwae-codecs).
 
 ## What you get
 
