@@ -50,7 +50,8 @@ The [wiki](https://github.com/fakeivchenko/lwjwae/wiki) walks you through a whol
 1. [Draw your own title bar](https://github.com/fakeivchenko/lwjwae/wiki/5.-Draw-your-own-title-bar).
 1. [Export notes through a native dialog](https://github.com/fakeivchenko/lwjwae/wiki/6.-Export-notes-through-a-native-dialog), and
    [keep the application in the tray](https://github.com/fakeivchenko/lwjwae/wiki/7.-Keep-the-application-in-the-tray).
-1. [Package the application](https://github.com/fakeivchenko/lwjwae/wiki/8.-Package-the-application), as a native executable too.
+1. [Show notifications](https://github.com/fakeivchenko/lwjwae/wiki/8.-Show-notifications).
+1. [Package the application](https://github.com/fakeivchenko/lwjwae/wiki/9.-Package-the-application), as a native executable too.
 
 In short: Java 25 or later, run with `--enable-native-access=ALL-UNNAMED`, and the web engine of
 the platform, which Windows 11 and macOS already have; [`lwjwae-gtk`](lwjwae-gtk#requirements) lists
