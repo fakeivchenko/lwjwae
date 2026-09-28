@@ -1,6 +1,8 @@
 package dev.ivchenko.lwjwae;
 
 import dev.ivchenko.lwjwae.bridge.codec.BridgeCodec;
+import dev.ivchenko.lwjwae.util.PlatformUtil;
+import java.nio.file.Path;
 import lombok.Builder;
 
 /**
@@ -14,6 +16,18 @@ import lombok.Builder;
  * ApplicationParameters.builder().codec(new JacksonBridgeCodec()).build()
  * }</pre>
  *
+ * <p>Platforms:
+ *
+ * <ul>
+ *   <li>Windows: {@code name} also labels the toasts: the library registers it for the user under
+ *       an ID made from it, and Notification Center keeps showing it after the application exits.
+ *   <li>macOS: The menu bar says {@code name}, or the name of the process without one, which is
+ *       {@code java} under the launcher; the bundle of an {@code .app} names the application in the
+ *       Dock.
+ *   <li>Linux, GTK 3: As described.
+ *   <li>Linux, GTK 4: As described.
+ * </ul>
+ *
  * @param devServerUrl Where the frontend is served from during development, for example {@code
  *     http://localhost:5173}. When set, {@link Window#loadResource} opens this URL instead of the
  *     bundled files, so a Vite or webpack development server with hot reload drives the windows
@@ -23,11 +37,18 @@ import lombok.Builder;
  * @param codec The codec behind the typed bridge methods. The default is the first {@link
  *     BridgeCodec} on the classpath. When there is none, the value stays {@code null} and typed
  *     calls fail with a message.
- * @param name The name of the application, as the desktop shows it next to its notifications.
- *     Default: none, and the desktop shows its own placeholder.
+ * @param name The name of the application, as the desktop shows it next to its notifications, and
+ *     the one that the processes of {@link Application#createSingleInstance} meet under. Default:
+ *     none, and the desktop shows its own placeholder.
+ * @param dataDirectory Where the application keeps what it remembers from one run to the next, such
+ *     as the size and the place of its windows. Default: the directory that the platform has for
+ *     the data of an application, named after {@code name}: {@code $XDG_CONFIG_HOME/NAME} or {@code
+ *     ~/.config/NAME} on Linux, {@code ~/Library/Application Support/NAME} on macOS, {@code
+ *     %APPDATA%\NAME} on Windows. Without a name, none, and windows remember nothing.
  */
 @Builder(toBuilder = true)
-public record ApplicationParameters(String devServerUrl, BridgeCodec codec, String name) {
+public record ApplicationParameters(
+    String devServerUrl, BridgeCodec codec, String name, Path dataDirectory) {
   /** The system property that supplies {@link #devServerUrl()} when the builder leaves it unset. */
   public static final String DEV_SERVER_URL_PROPERTY = "lwjwae.devServerUrl";
 
@@ -35,21 +56,39 @@ public record ApplicationParameters(String devServerUrl, BridgeCodec codec, Stri
   public static final String DEV_SERVER_URL_VARIABLE = "LWJWAE_DEV_SERVER_URL";
 
   public ApplicationParameters {
-    if (isBlank(devServerUrl)) {
+    if (ApplicationParameters.isBlank(devServerUrl)) {
       devServerUrl = System.getProperty(DEV_SERVER_URL_PROPERTY);
     }
-    if (isBlank(devServerUrl)) {
+    if (ApplicationParameters.isBlank(devServerUrl)) {
       devServerUrl = System.getenv(DEV_SERVER_URL_VARIABLE);
     }
-    if (isBlank(devServerUrl)) {
+    if (ApplicationParameters.isBlank(devServerUrl)) {
       devServerUrl = null;
     }
     if (codec == null) {
       codec = BridgeCodec.discover().orElse(null);
     }
-    if (isBlank(name)) {
+    if (ApplicationParameters.isBlank(name)) {
       name = null;
     }
+    if (dataDirectory == null && name != null) {
+      dataDirectory = ApplicationParameters.defaultDataDirectory(name);
+    }
+  }
+
+  /** The directory of the platform for the data of the application {@code name}. */
+  private static Path defaultDataDirectory(String name) {
+    String home = System.getProperty("user.home");
+    if (PlatformUtil.isWindows()) {
+      String appData = System.getenv("APPDATA");
+      return Path.of(
+          ApplicationParameters.isBlank(appData) ? home + "\\AppData\\Roaming" : appData, name);
+    }
+    if (PlatformUtil.isMacOs()) {
+      return Path.of(home, "Library", "Application Support", name);
+    }
+    String config = System.getenv("XDG_CONFIG_HOME");
+    return Path.of(ApplicationParameters.isBlank(config) ? home + "/.config" : config, name);
   }
 
   /** Creates parameters with every default. */

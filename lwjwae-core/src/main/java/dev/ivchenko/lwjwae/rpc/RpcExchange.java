@@ -33,7 +33,8 @@ public interface RpcExchange {
   /**
    * Hands {@code part} to the page.
    *
-   * @return False if the page abandoned the request.
+   * @return False if the page abandoned the request before the part left, so it never reaches the
+   *     page; a part that left is reported as written, even if the page gives up right after.
    */
   boolean write(byte[] part);
 

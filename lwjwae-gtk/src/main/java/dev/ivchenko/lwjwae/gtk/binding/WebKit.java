@@ -41,6 +41,9 @@ public class WebKit {
   private final MethodHandle WEB_VIEW_NEW_WITH_USER_CONTENT_MANAGER =
       NativeLibraries.downcall(
           WEBKIT, "webkit_web_view_new_with_user_content_manager", Signatures.POINTER_POINTER);
+  private final MethodHandle WEB_VIEW_SET_BACKGROUND_COLOR =
+      NativeLibraries.downcall(
+          WEBKIT, "webkit_web_view_set_background_color", Signatures.VOID_POINTER_POINTER);
   private final MethodHandle WEB_VIEW_LOAD_URI =
       NativeLibraries.downcall(WEBKIT, "webkit_web_view_load_uri", Signatures.VOID_POINTER_POINTER);
   private final MethodHandle WEB_VIEW_LOAD_HTML =
@@ -48,6 +51,11 @@ public class WebKit {
           WEBKIT, "webkit_web_view_load_html", Signatures.VOID_POINTER_POINTER_POINTER);
   private final MethodHandle WEB_VIEW_GET_URI =
       NativeLibraries.downcall(WEBKIT, "webkit_web_view_get_uri", Signatures.POINTER_POINTER);
+  private final MethodHandle NAVIGATION_ACTION_GET_REQUEST =
+      NativeLibraries.downcall(
+          WEBKIT, "webkit_navigation_action_get_request", Signatures.POINTER_POINTER);
+  private final MethodHandle URI_REQUEST_GET_URI =
+      NativeLibraries.downcall(WEBKIT, "webkit_uri_request_get_uri", Signatures.POINTER_POINTER);
   private final MethodHandle WEB_VIEW_GET_SETTINGS =
       NativeLibraries.downcall(WEBKIT, "webkit_web_view_get_settings", Signatures.POINTER_POINTER);
   private final MethodHandle SETTINGS_SET_ENABLE_DEVELOPER_EXTRAS =
@@ -242,6 +250,17 @@ public class WebKit {
     return (MemorySegment) WEB_VIEW_NEW_WITH_USER_CONTENT_MANAGER.invokeExact(userContentManager);
   }
 
+  /**
+   * Gives the view a transparent background, a {@code GdkRGBA} of four zero doubles, so what the
+   * page leaves clear shows what is under the view.
+   */
+  @SneakyThrows
+  public void setTransparentBackground(MemorySegment webView) {
+    try (Arena arena = Arena.ofConfined()) {
+      WEB_VIEW_SET_BACKGROUND_COLOR.invokeExact(webView, arena.allocate(Double.BYTES * 4L));
+    }
+  }
+
   /** Calls {@code webkit_web_view_load_uri}. */
   @SneakyThrows
   public void loadUri(MemorySegment webView, String uri) {
@@ -268,6 +287,13 @@ public class WebKit {
   @SneakyThrows
   public String uri(MemorySegment webView) {
     return NativeLibraries.string((MemorySegment) WEB_VIEW_GET_URI.invokeExact(webView));
+  }
+
+  /** The URL that a {@code WebKitNavigationAction}, the argument of {@code create}, goes to. */
+  @SneakyThrows
+  public String navigationActionUri(MemorySegment action) {
+    MemorySegment request = (MemorySegment) NAVIGATION_ACTION_GET_REQUEST.invokeExact(action);
+    return NativeLibraries.string((MemorySegment) URI_REQUEST_GET_URI.invokeExact(request));
   }
 
   /**

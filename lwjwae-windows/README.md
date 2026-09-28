@@ -82,9 +82,15 @@ receives its callbacks, and must pump messages for them to arrive. [`WindowsDisp
 2. On that thread, `initialize()` calls `CoInitializeEx(NULL, COINIT_APARTMENTTHREADED)`, records
    the thread ID, and calls `PeekMessageW` once. Until a thread has called a message function, it
    has no message queue, and `PostThreadMessage` to it fails, so the first wake-up would be lost.
-3. `runEventLoop()` runs `GetMessageW`, and for every message either drains the task queue, when
-   the message is `WM_APP`, or calls `TranslateMessage` and `DispatchMessageW`.
-4. `wakeUp()` posts `WM_APP` to the thread with `PostThreadMessageW`, which is safe from any thread.
+3. It then creates a message-only window, a child of `HWND_MESSAGE` that is never shown, whose
+   window procedure drains the task queue on `WM_APP`.
+4. `runEventLoop()` runs `GetMessageW`, and for every message either drains the task queue, when
+   the message is a `WM_APP` of the thread, or calls `TranslateMessage` and `DispatchMessageW`.
+5. `wakeUp()` posts `WM_APP` to the message window with `PostMessageW`, which is safe from any
+   thread, and to the thread before the window exists. A modal loop, the one of a file dialog, a
+   message box, a menu, or a drag of the frame, dispatches the messages of windows and drops those
+   of the thread: through the window, the work that other threads queue keeps running while such a
+   loop is up, and a dialog can be closed from it.
 
 ## Creating the application
 
@@ -186,6 +192,35 @@ the window only posts the answers:
    which reaches the page as an `ArrayBuffer` with no encoding; the page copies it and releases it.
    On a runtime older than 114, the part goes as Base64 in a text message instead.
 
+## Window state
+
+- **Minimize, maximize, restore.** `ShowWindow` with `SW_MINIMIZE`, `SW_MAXIMIZE`, and
+  `SW_RESTORE`, read back with `IsIconic` and `IsZoomed`. `ShowWindow` would show a hidden window,
+  which the other backends don't do, so a hidden window keeps the command until `show()`. A
+  window that was maximized before it was minimized comes back maximized from `SW_RESTORE`, so
+  `restore()` sends it a second time.
+- **Full screen.** Windows has no such state: the window drops `WS_OVERLAPPEDWINDOW` and covers its
+  monitor, and the style and the `WINDOWPLACEMENT` from before are kept to put back.
+- **Limits.** The window procedure answers `WM_GETMINMAXINFO` with the limits turned into frame
+  sizes by `AdjustWindowRectEx`, except in full screen. Setting a limit resizes the window to its
+  own size, which runs it through the limits.
+- **On top and focus.** `HWND_TOPMOST` and `WS_EX_TOPMOST`; `SetForegroundWindow` and
+  `GetForegroundWindow`.
+- **Without a title bar.** The window keeps `WS_OVERLAPPEDWINDOW`, so it snaps and animates as any
+  other, and answers `WM_NCCALCSIZE` with the frame that `DefWindowProc` works out minus the part
+  above the client area. The resize edges on the left, the right, and at the bottom stay outside
+  the client area, where the web view doesn't reach; the top edge is a strip that the page lays over
+  itself. A maximized window reaches past its monitor by the width of its frame, which the client
+  area leaves out at the top too. The frame of `resizeClient` and of the limits has nothing above
+  the client area then.
+- **Buttons.** No `WS_MINIMIZEBOX` or `WS_MAXIMIZEBOX` for a window that may not have them, and
+  `Close` grayed out in its system menu, which grays out the close button and takes away `Alt+F4`;
+  `WM_CLOSE` is refused as well, since the taskbar sends it all the same.
+- **Drags from the page.** `ReleaseCapture`, then `WM_NCLBUTTONDOWN` posted with `HTCAPTION` to move
+  or `HTLEFT` and the like to resize: Windows runs the loop it runs for a press on the frame. Only
+  while the primary button is down, by `GetAsyncKeyState`: after a quick click, the loop would wait
+  for the next one.
+
 ## Evaluating scripts
 
 `ICoreWebView2::ExecuteScript` reports a thrown exception as a `null` result instead of a failure,
@@ -252,6 +287,22 @@ on a thread of the pool, not on the UI thread, so the handlers are agile COM obj
 Center, where it can still be clicked, so its handle stays open until a click, a dismissal, `close()`,
 or `quit()`. Under Do Not Disturb, every toast goes there at once and reports a timeout; taking those
 back would hide every notification from a user who only asked for quiet.
+
+## Dialogs
+
+The common item dialogs come from `CoCreateInstance` with `CLSID_FileOpenDialog` or
+`CLSID_FileSaveDialog`, and are called through their vtables like WebView2. The options add
+`FOS_FORCEFILESYSTEM` to what the dialog has, the folder is an `IShellItem` from
+`SHCreateItemFromParsingName`, the kinds of file are `COMDLG_FILTERSPEC` entries, and the answer
+is the `SIGDN_FILESYSPATH` of each item. A message is `MessageBoxW`, since `TaskDialog` needs
+version 6 of the common controls, which a Java launcher doesn't declare in its manifest.
+
+Both kinds are modal: `Show` and `MessageBoxW` return when the user answers, and meanwhile the UI
+thread runs their loop, and the queued work through the message window of the dispatcher. A
+cancellation posts `WM_COMMAND` with `IDCANCEL` to the dialog that the window owns, found with
+`GetWindow(GW_ENABLEDPOPUP)`: `IFileDialog::Close` answers `S_OK` from the loop and leaves the
+dialog on screen. A message box without a Cancel button ignores `IDCANCEL`, so it ends with
+`EndDialog` instead.
 
 ## Closing
 

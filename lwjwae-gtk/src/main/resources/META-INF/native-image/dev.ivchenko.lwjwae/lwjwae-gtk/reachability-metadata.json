@@ -12,6 +12,22 @@
           ]
         },
         {
+          "name": "onCreate",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
+        },
+        {
+          "name": "onDeleteEvent",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
+        },
+        {
           "name": "onDestroy",
           "parameterTypes": [
             "java.lang.foreign.MemorySegment",
@@ -45,7 +61,7 @@
           ]
         },
         {
-          "name": "onDeleteEvent",
+          "name": "onWindowEvent",
           "parameterTypes": [
             "java.lang.foreign.MemorySegment",
             "java.lang.foreign.MemorySegment",
@@ -60,6 +76,14 @@
         {
           "name": "onResourceRequest",
           "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
+        },
+        {
+          "name": "onXlibEvent",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
             "java.lang.foreign.MemorySegment",
             "java.lang.foreign.MemorySegment"
           ]
@@ -91,6 +115,19 @@
           "parameterTypes": [
             "java.lang.foreign.MemorySegment",
             "int",
+            "int",
+            "java.lang.foreign.MemorySegment"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "dev.ivchenko.lwjwae.gtk.GtkDialogs",
+      "methods": [
+        {
+          "name": "onResponse",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
             "int",
             "java.lang.foreign.MemorySegment"
           ]
@@ -193,6 +230,63 @@
           "void*",
           "jint",
           "void*"
+        ]
+      },
+      {
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "void*",
+          "jint"
+        ]
+      },
+      {
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "jint",
+          "jint",
+          "jint",
+          "jint",
+          "jint"
+        ]
+      },
+      {
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "jint",
+          "jint",
+          "jint",
+          "jint"
+        ]
+      },
+      {
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "returnType": "void*",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "jint",
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "jint"
         ]
       }
     ],
@@ -301,6 +395,46 @@
       {
         "class": "dev.ivchenko.lwjwae.gtk.GtkWindow",
         "method": "onDeleteEvent",
+        "returnType": "jint",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.gtk.GtkWindow",
+        "method": "onWindowEvent",
+        "returnType": "jint",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.gtk.GtkWindow",
+        "method": "onCreate",
+        "returnType": "void*",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.gtk.GtkDialogs",
+        "method": "onResponse",
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "jint",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.gtk.GtkApplication",
+        "method": "onXlibEvent",
         "returnType": "jint",
         "parameterTypes": [
           "void*",

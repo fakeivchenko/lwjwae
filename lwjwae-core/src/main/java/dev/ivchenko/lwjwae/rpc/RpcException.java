@@ -13,6 +13,8 @@ public class RpcException extends RuntimeException {
   private final String code;
 
   /**
+   * An error with the status and the code that the page receives.
+   *
    * @param status The HTTP status, such as {@code 400}.
    * @param code A short, stable code for the page to branch on, such as {@code "not-found"}.
    * @param message What went wrong, for a person.

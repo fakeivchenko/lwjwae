@@ -23,6 +23,8 @@ public final class MessageRpcCalls {
   private final Map<String, MessageRpcExchange> running = new ConcurrentHashMap<>();
 
   /**
+   * Starts with no call running.
+   *
    * @param window The window whose page calls.
    * @param channel The way back to the page.
    * @param token The secret that the bootstrap hands to a trusted document.

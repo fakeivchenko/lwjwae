@@ -37,12 +37,12 @@ public class Foundation {
 
   /** An autoreleased {@code NSURL}. */
   public MemorySegment url(String url) {
-    return ObjC.send(ObjC.cls("NSURL"), "URLWithString:", string(url));
+    return ObjC.send(ObjC.cls("NSURL"), "URLWithString:", Foundation.string(url));
   }
 
   /** {@code -[NSURL absoluteString]}. */
   public String urlString(MemorySegment nsUrl) {
-    return string(ObjC.send(nsUrl, "absoluteString"));
+    return Foundation.string(ObjC.send(nsUrl, "absoluteString"));
   }
 
   /** An autoreleased {@code NSData} holding a copy of {@code bytes}. */
@@ -53,16 +53,31 @@ public class Foundation {
     }
   }
 
+  /** The bytes of an {@code NSData}, or {@code null} for {@code nil}. */
+  public byte[] bytes(MemorySegment data) {
+    if (ObjC.isNull(data)) {
+      return null;
+    }
+    long length = ObjC.sendLong(data, "length");
+    if (length == 0) {
+      return new byte[0];
+    }
+    return ObjC.send(data, "bytes").reinterpret(length).toArray(ValueLayout.JAVA_BYTE);
+  }
+
   /** An autoreleased {@code NSError} in the domain of the library. */
   public MemorySegment error(long code, String description) {
-    MemorySegment key = string("NSLocalizedDescription");
+    MemorySegment key = Foundation.string("NSLocalizedDescription");
     MemorySegment userInfo =
         ObjC.send(
-            ObjC.cls("NSDictionary"), "dictionaryWithObject:forKey:", string(description), key);
+            ObjC.cls("NSDictionary"),
+            "dictionaryWithObject:forKey:",
+            Foundation.string(description),
+            key);
     return ObjC.send(
         ObjC.cls("NSError"),
         "errorWithDomain:code:userInfo:",
-        string("dev.ivchenko.lwjwae"),
+        Foundation.string("dev.ivchenko.lwjwae"),
         code,
         userInfo);
   }
@@ -80,18 +95,21 @@ public class Foundation {
 
   /** {@code -[NSError localizedDescription]}. */
   public String errorDescription(MemorySegment error) {
-    return string(ObjC.send(error, "localizedDescription"));
+    return Foundation.string(ObjC.send(error, "localizedDescription"));
   }
 
   /** The URL an {@code NSError} from WebKit was loading, or {@code null}. */
   public String errorFailingUrl(MemorySegment error) {
     MemorySegment userInfo = ObjC.send(error, "userInfo");
-    String url = string(ObjC.send(userInfo, "objectForKey:", string("NSErrorFailingURLStringKey")));
+    String url =
+        Foundation.string(
+            ObjC.send(userInfo, "objectForKey:", Foundation.string("NSErrorFailingURLStringKey")));
     if (url != null) {
       return url;
     }
-    MemorySegment nsUrl = ObjC.send(userInfo, "objectForKey:", string("NSErrorFailingURLKey"));
-    return ObjC.isNull(nsUrl) ? null : urlString(nsUrl);
+    MemorySegment nsUrl =
+        ObjC.send(userInfo, "objectForKey:", Foundation.string("NSErrorFailingURLKey"));
+    return ObjC.isNull(nsUrl) ? null : Foundation.urlString(nsUrl);
   }
 
   /**
@@ -102,7 +120,7 @@ public class Foundation {
    * x86_64.
    */
   public double[] rect(MemorySegment object, String key) {
-    MemorySegment value = ObjC.send(object, "valueForKey:", string(key));
+    MemorySegment value = ObjC.send(object, "valueForKey:", Foundation.string(key));
     try (Arena arena = Arena.ofConfined()) {
       MemorySegment rect = arena.allocate(Signatures.NSRECT);
       ObjC.sendVoid(value, "getValue:size:", rect, Signatures.NSRECT.byteSize());
@@ -121,6 +139,20 @@ public class Foundation {
     rect.set(Signatures.C_DOUBLE, 16, width);
     rect.set(Signatures.C_DOUBLE, 24, height);
     return rect;
+  }
+
+  /**
+   * The {@code CGFloat} property {@code key} of {@code object}, through key-value coding, which
+   * wraps it in an {@code NSNumber}: no {@code objc_msgSend} returning a floating-point number is
+   * bound.
+   */
+  public double doubleValue(MemorySegment object, String key) {
+    MemorySegment value = ObjC.send(object, "valueForKey:", Foundation.string(key));
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment number = arena.allocate(Signatures.C_DOUBLE);
+      ObjC.sendVoid(value, "getValue:size:", number, Signatures.C_DOUBLE.byteSize());
+      return number.get(Signatures.C_DOUBLE, 0);
+    }
   }
 
   /** An {@code NSSize} allocated from {@code arena}. */
@@ -154,7 +186,8 @@ public class Foundation {
   /** {@code CFBundleVersion} of the bundle that defines {@code cls}, or {@code null}. */
   public String bundleVersion(MemorySegment cls) {
     MemorySegment bundle = ObjC.send(ObjC.cls("NSBundle"), "bundleForClass:", cls);
-    return string(ObjC.send(bundle, "objectForInfoDictionaryKey:", string("CFBundleVersion")));
+    return Foundation.string(
+        ObjC.send(bundle, "objectForInfoDictionaryKey:", Foundation.string("CFBundleVersion")));
   }
 
   /**
@@ -162,8 +195,17 @@ public class Foundation {
    * 23G93)}.
    */
   public String operatingSystemVersion() {
-    return string(
+    return Foundation.string(
         ObjC.send(
             ObjC.send(ObjC.cls("NSProcessInfo"), "processInfo"), "operatingSystemVersionString"));
+  }
+
+  /**
+   * {@code -[NSProcessInfo processName]}: the name of the executable, {@code java} under the
+   * launcher.
+   */
+  public String processName() {
+    return Foundation.string(
+        ObjC.send(ObjC.send(ObjC.cls("NSProcessInfo"), "processInfo"), "processName"));
   }
 }

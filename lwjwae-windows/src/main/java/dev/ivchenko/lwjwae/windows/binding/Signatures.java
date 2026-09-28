@@ -52,6 +52,15 @@ public class Signatures {
           C_INT.withName("workBottom"),
           C_INT.withName("flags"));
 
+  /**
+   * {@code struct MONITORINFOEXW}: {@link #MONITORINFO} followed by {@code WCHAR szDevice[32]}, the
+   * name of the display device.
+   */
+  public final MemoryLayout MONITORINFOEX =
+      MemoryLayout.structLayout(
+          MONITORINFO.withName("info"),
+          MemoryLayout.sequenceLayout(32, C_SHORT).withName("device"));
+
   /** {@code struct RECT { LONG left, top, right, bottom; }}. */
   public final MemoryLayout RECT =
       MemoryLayout.structLayout(
@@ -131,6 +140,29 @@ public class Signatures {
   /** {@code int f(void)}. */
   public final FunctionDescriptor INT_VOID = FunctionDescriptor.of(C_INT);
 
+  /** {@code BOOL f(DWORD, DWORD, BOOL)}: {@code AttachThreadInput}. */
+  public final FunctionDescriptor INT_INT_INT_INT =
+      FunctionDescriptor.of(C_INT, C_INT, C_INT, C_INT);
+
+  /** {@code HRESULT f(T*, U*, DWORD, V*, W*)}: {@code CoCreateInstance}. */
+  public final FunctionDescriptor INT_POINTER_POINTER_INT_POINTER_POINTER =
+      FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_INT, C_POINTER, C_POINTER);
+
+  /** {@code HRESULT f(T*, U*, V*, W*)}: {@code SHCreateItemFromParsingName}. */
+  public final FunctionDescriptor INT_POINTER_X4 =
+      FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_POINTER, C_POINTER);
+
+  /** {@code int f(T*, U*, V*, UINT)}: {@code MessageBoxW}. */
+  public final FunctionDescriptor INT_POINTER_POINTER_POINTER_INT =
+      FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_POINTER, C_INT);
+
+  /** {@code SHORT f(int)}: {@code GetAsyncKeyState}. */
+  public final FunctionDescriptor SHORT_INT = FunctionDescriptor.of(C_SHORT, C_INT);
+
+  /** {@code BOOL f(T*, UINT, UINT)}: {@code EnableMenuItem}. */
+  public final FunctionDescriptor INT_POINTER_INT_INT =
+      FunctionDescriptor.of(C_INT, C_POINTER, C_INT, C_INT);
+
   /** {@code int f(int)}: {@code GetSystemMetrics}. */
   public final FunctionDescriptor INT_INT = FunctionDescriptor.of(C_INT, C_INT);
 
@@ -152,6 +184,22 @@ public class Signatures {
   /** {@code T* f(void)}: {@code CreatePopupMenu}. */
   public final FunctionDescriptor POINTER_VOID = FunctionDescriptor.of(C_POINTER);
 
+  /** {@code HANDLE f(UINT)}: {@code GetClipboardData}. */
+  public final FunctionDescriptor POINTER_INT = FunctionDescriptor.of(C_POINTER, C_INT);
+
+  /** {@code HANDLE f(UINT, HANDLE)}: {@code SetClipboardData}. */
+  public final FunctionDescriptor POINTER_INT_POINTER =
+      FunctionDescriptor.of(C_POINTER, C_INT, C_POINTER);
+
+  /** {@code HGLOBAL f(UINT, SIZE_T)}: {@code GlobalAlloc}. */
+  public final FunctionDescriptor POINTER_INT_LONG =
+      FunctionDescriptor.of(C_POINTER, C_INT, C_LONG_PTR);
+
+  /** {@code T* f(U*, V*, W*, X*, Y*, int)}: {@code ShellExecuteW}. */
+  public final FunctionDescriptor POINTER_POINTER_X5_INT =
+      FunctionDescriptor.of(
+          C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_INT);
+
   /** {@code T* f(U*, int, int, int, int, int, int)}: {@code CreateIconFromResourceEx}. */
   public final FunctionDescriptor POINTER_POINTER_INT_X6 =
       FunctionDescriptor.of(C_POINTER, C_POINTER, C_INT, C_INT, C_INT, C_INT, C_INT, C_INT);
@@ -168,6 +216,17 @@ public class Signatures {
   /** {@code int f(T*, U*)}: {@code HRESULT (this, arg)}. */
   public final FunctionDescriptor INT_POINTER_POINTER =
       FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER);
+
+  /**
+   * {@code BOOL f(HDC, LPCRECT, MONITORENUMPROC, LPARAM)}: {@code EnumDisplayMonitors}, and {@code
+   * BOOL f(HMONITOR, HDC, LPRECT, LPARAM)}: the {@code MONITORENUMPROC} that it calls.
+   */
+  public final FunctionDescriptor INT_POINTER_X3_LONG =
+      FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_POINTER, C_LONG_PTR);
+
+  /** {@code HRESULT f(HMONITOR, int, UINT*, UINT*)}: {@code GetDpiForMonitor}. */
+  public final FunctionDescriptor INT_POINTER_INT_POINTER_POINTER =
+      FunctionDescriptor.of(C_INT, C_POINTER, C_INT, C_POINTER, C_POINTER);
 
   /** {@code int f(T*, U*, V*)}: {@code HRESULT (this, arg, arg)} and {@code QueryInterface}. */
   public final FunctionDescriptor INT_POINTER_POINTER_POINTER =

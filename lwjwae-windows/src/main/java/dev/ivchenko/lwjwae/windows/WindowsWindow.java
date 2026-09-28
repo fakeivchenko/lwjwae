@@ -1,9 +1,16 @@
 package dev.ivchenko.lwjwae.windows;
 
 import dev.ivchenko.lwjwae.AbstractWindow;
+import dev.ivchenko.lwjwae.Screen;
+import dev.ivchenko.lwjwae.WindowEdge;
 import dev.ivchenko.lwjwae.WindowParameters;
 import dev.ivchenko.lwjwae.WindowPosition;
+import dev.ivchenko.lwjwae.WindowSize;
 import dev.ivchenko.lwjwae.bridge.RpcMessageChannel;
+import dev.ivchenko.lwjwae.dialog.DialogCompletion;
+import dev.ivchenko.lwjwae.dialog.MessageDialogParameters;
+import dev.ivchenko.lwjwae.dialog.OpenDialogParameters;
+import dev.ivchenko.lwjwae.dialog.SaveDialogParameters;
 import dev.ivchenko.lwjwae.event.LoadEvent;
 import dev.ivchenko.lwjwae.event.LoadState;
 import dev.ivchenko.lwjwae.exception.ResourceNotFoundException;
@@ -23,13 +30,17 @@ import dev.ivchenko.lwjwae.windows.binding.User32;
 import dev.ivchenko.lwjwae.windows.binding.WebView2;
 import dev.ivchenko.lwjwae.windows.binding.WebView2EventRegistration;
 import dev.ivchenko.lwjwae.windows.binding.Wide;
+import dev.ivchenko.lwjwae.windows.binding.WindowFrame;
 import dev.ivchenko.lwjwae.windows.exception.ComCallFailedException;
 import dev.ivchenko.lwjwae.windows.util.JsonStringUtil;
 import java.lang.foreign.MemorySegment;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
+import java.nio.file.Path;
 import java.time.Duration;
+import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
 
@@ -47,6 +58,23 @@ import java.util.function.Supplier;
  */
 public class WindowsWindow extends AbstractWindow {
   private volatile boolean sharedBuffers = true;
+  private final WindowFrame frame;
+  private final boolean maximizable;
+  private final boolean transparent;
+
+  // --- window state that Windows keeps no getter for ---
+  private volatile WindowSize minimumSize = WindowSize.NONE;
+  private volatile WindowSize maximumSize = WindowSize.NONE;
+  private volatile boolean fullscreen;
+  private byte[] placementBeforeFullscreen;
+  private long styleBeforeFullscreen;
+
+  /**
+   * What {@link #show()} shows the window as. {@code ShowWindow} would show a hidden window that is
+   * minimized or maximized, which the other backends don't do, so a hidden window keeps the state
+   * until it's shown.
+   */
+  private volatile int showCommand = User32.SW_SHOW;
 
   private static final String WINDOW_CLASS = "lwjwae";
   private static final String RESOURCE_ORIGIN = "http://app.localhost/";
@@ -86,8 +114,14 @@ public class WindowsWindow extends AbstractWindow {
    */
   @SuppressWarnings("resource")
   WindowsWindow(WindowsApplication application, long id, WindowParameters parameters) {
-    super(application, id);
+    super(application, id, parameters);
     this.application = application;
+    this.frame =
+        parameters.decorated()
+            ? WindowFrame.FULL
+            : parameters.transparent() ? WindowFrame.NONE : WindowFrame.NO_TITLE_BAR;
+    this.maximizable = parameters.maximizable();
+    this.transparent = parameters.transparent();
     this.callbackId = WINDOWS.register(this);
     try {
       this.dispatcher().run(() -> this.createWindow(parameters));
@@ -103,27 +137,53 @@ public class WindowsWindow extends AbstractWindow {
 
   /** Creates the Win32 window and starts the asynchronous WebView2 setup. Runs on the UI thread. */
   private void createWindow(WindowParameters parameters) {
-    registerWindowClass();
+    WindowsWindow.registerWindowClass();
     boolean placed = parameters.hasPosition() && !parameters.centered();
     MemorySegment window =
         User32.createWindow(
             WINDOW_CLASS,
             parameters.title(),
-            placed ? parameters.x() : User32.CW_USEDEFAULT,
-            placed ? parameters.y() : User32.CW_USEDEFAULT,
-            parameters.width(),
-            parameters.height());
+            placed ? parameters.position().x() : User32.CW_USEDEFAULT,
+            placed ? parameters.position().y() : User32.CW_USEDEFAULT,
+            parameters.size().width(),
+            parameters.size().height(),
+            WindowsWindow.windowStyle(parameters),
+            parameters.alwaysOnTop(),
+            parameters.transparent());
     User32.userData(window, this.callbackId);
     this.hwnd = window;
-    User32.resizeClient(window, parameters.width(), parameters.height());
+    if (this.frame != WindowFrame.FULL) {
+      // The frame was worked out before the window procedure could find this window: again.
+      User32.style(window, User32.style(window));
+    }
+    if (!parameters.closable()) {
+      User32.disableClose(window);
+    }
+    User32.resizeClient(window, parameters.size().width(), parameters.size().height(), this.frame);
     if (parameters.centered()) {
-      centerWindow(window);
+      WindowsWindow.centerWindow(window);
     }
 
     MemorySegment handler =
         ComCallback.completion(WebView2.IID_CONTROLLER_COMPLETED, this::onControllerCreated);
     WebView2.createController(this.application.environment(), window, handler);
     Com.release(handler);
+  }
+
+  /**
+   * {@code WS_OVERLAPPEDWINDOW} without the buttons that the window may not have. A window without
+   * a title bar keeps the whole style: {@link User32#removeFrame} takes the bar away, and the style
+   * keeps what Windows gives a window with one, snapping and the animations included.
+   */
+  private static int windowStyle(WindowParameters parameters) {
+    int style = User32.WS_OVERLAPPEDWINDOW;
+    if (!parameters.minimizable()) {
+      style &= ~User32.WS_MINIMIZEBOX;
+    }
+    if (!parameters.maximizable()) {
+      style &= ~User32.WS_MAXIMIZEBOX;
+    }
+    return style;
   }
 
   @Override
@@ -137,18 +197,18 @@ public class WindowsWindow extends AbstractWindow {
   }
 
   @Override
-  public int width() {
-    return this.dispatcher().call(() -> User32.clientSize(this.window())[0]);
-  }
-
-  @Override
-  public int height() {
-    return this.dispatcher().call(() -> User32.clientSize(this.window())[1]);
+  public WindowSize size() {
+    return this.dispatcher()
+        .call(
+            () -> {
+              int[] size = User32.clientSize(this.window());
+              return new WindowSize(size[0], size[1]);
+            });
   }
 
   @Override
   public void size(int width, int height) {
-    this.dispatcher().run(() -> User32.resizeClient(this.window(), width, height));
+    this.dispatcher().run(() -> User32.resizeClient(this.window(), width, height, this.frame));
   }
 
   @Override
@@ -167,8 +227,13 @@ public class WindowsWindow extends AbstractWindow {
   }
 
   @Override
+  public Screen screen() {
+    return this.dispatcher().call(() -> WindowsScreens.of(User32.monitorOf(this.window())));
+  }
+
+  @Override
   public void center() {
-    this.dispatcher().run(() -> centerWindow(this.window()));
+    this.dispatcher().run(() -> WindowsWindow.centerWindow(this.window()));
   }
 
   /** Puts the frame in the middle of the work area of the monitor that holds the window. */
@@ -194,8 +259,234 @@ public class WindowsWindow extends AbstractWindow {
         .run(
             () -> {
               long style = User32.style(this.window());
-              long resizing = User32.WS_THICKFRAME | User32.WS_MAXIMIZEBOX;
+              long resizing = User32.WS_THICKFRAME | (this.maximizable ? User32.WS_MAXIMIZEBOX : 0);
               User32.style(this.window(), resizable ? style | resizing : style & ~resizing);
+            });
+  }
+
+  @Override
+  public WindowSize minimumSize() {
+    return this.minimumSize;
+  }
+
+  @Override
+  public void minimumSize(int width, int height) {
+    this.minimumSize = new WindowSize(width, height);
+    this.dispatcher().run(this::enforceSizeLimits);
+  }
+
+  @Override
+  public WindowSize maximumSize() {
+    return this.maximumSize;
+  }
+
+  @Override
+  public void maximumSize(int width, int height) {
+    this.maximumSize = new WindowSize(width, height);
+    this.dispatcher().run(this::enforceSizeLimits);
+  }
+
+  /** Resizes the window to its own size, which runs it through {@code WM_GETMINMAXINFO}. */
+  private void enforceSizeLimits() {
+    MemorySegment hwnd = this.window();
+    int[] client = User32.clientSize(hwnd);
+    User32.resizeClient(hwnd, client[0], client[1], this.frame);
+  }
+
+  /** Answers {@code WM_GETMINMAXINFO}: the limits of the client area, as frame sizes. */
+  private void writeSizeLimits(MemorySegment hwnd, long minMaxInfo) {
+    WindowSize minimum = this.minimumSize;
+    WindowSize maximum = this.maximumSize;
+    User32.sizeLimits(
+        minMaxInfo,
+        minimum.equals(WindowSize.NONE) ? null : this.frameLimit(hwnd, minimum, 0),
+        maximum.equals(WindowSize.NONE) ? null : this.frameLimit(hwnd, maximum, Short.MAX_VALUE));
+  }
+
+  /** The frame size around {@code limit}, with {@code unlimited} for a dimension without one. */
+  private int[] frameLimit(MemorySegment hwnd, WindowSize limit, int unlimited) {
+    int[] frame =
+        User32.frameSize(hwnd, Math.max(limit.width(), 1), Math.max(limit.height(), 1), this.frame);
+    return new int[] {
+      limit.width() > 0 ? frame[0] : unlimited, limit.height() > 0 ? frame[1] : unlimited
+    };
+  }
+
+  @Override
+  public boolean isMinimized() {
+    return this.dispatcher()
+        .call(
+            () ->
+                User32.isVisible(this.window())
+                    ? User32.isMinimized(this.window())
+                    : this.showCommand == User32.SW_MINIMIZE);
+  }
+
+  @Override
+  public void minimize() {
+    this.dispatcher().run(() -> this.showAs(User32.SW_MINIMIZE));
+  }
+
+  @Override
+  public boolean isMaximized() {
+    return this.dispatcher()
+        .call(
+            () ->
+                User32.isVisible(this.window())
+                    ? User32.isMaximized(this.window())
+                    : this.showCommand == User32.SW_MAXIMIZE);
+  }
+
+  @Override
+  public void maximize() {
+    this.dispatcher().run(() -> this.showAs(User32.SW_MAXIMIZE));
+  }
+
+  /** {@code SW_RESTORE} brings a minimized window back to maximized if it was, hence the second. */
+  @Override
+  public void restore() {
+    this.dispatcher()
+        .run(
+            () -> {
+              MemorySegment hwnd = this.window();
+              if (!User32.isVisible(hwnd)) {
+                this.showCommand = User32.SW_SHOW;
+                return;
+              }
+              User32.showWindow(hwnd, User32.SW_RESTORE);
+              if (User32.isMaximized(hwnd)) {
+                User32.showWindow(hwnd, User32.SW_RESTORE);
+              }
+            });
+  }
+
+  /** Applies {@code command} now to a visible window, or when a hidden one is shown. */
+  private void showAs(int command) {
+    MemorySegment hwnd = this.window();
+    if (User32.isVisible(hwnd)) {
+      User32.showWindow(hwnd, command);
+    } else {
+      this.showCommand = command;
+    }
+  }
+
+  @Override
+  public boolean isFullscreen() {
+    this.checkOpen();
+    return this.fullscreen;
+  }
+
+  /**
+   * Windows has no full screen state; a window is in full screen when it has no frame and covers
+   * its monitor. The style and the placement from before are kept, and put back when it ends.
+   */
+  @Override
+  public void fullscreen(boolean fullscreen) {
+    this.dispatcher()
+        .run(
+            () -> {
+              if (fullscreen == this.fullscreen) {
+                return;
+              }
+              MemorySegment hwnd = this.window();
+              this.fullscreen = fullscreen;
+              if (fullscreen) {
+                this.placementBeforeFullscreen = User32.placement(hwnd);
+                this.styleBeforeFullscreen = User32.style(hwnd);
+                User32.style(hwnd, this.styleBeforeFullscreen & ~User32.WS_OVERLAPPEDWINDOW);
+                User32.bounds(hwnd, User32.monitorRect(hwnd));
+              } else {
+                User32.style(hwnd, this.styleBeforeFullscreen);
+                User32.placement(hwnd, this.placementBeforeFullscreen);
+              }
+            });
+  }
+
+  @Override
+  protected void presentOpenDialog(
+      OpenDialogParameters parameters, DialogCompletion<List<Path>> completion) {
+    WindowsDialogs.open(this.window(), parameters, completion);
+  }
+
+  @Override
+  protected void presentSaveDialog(
+      SaveDialogParameters parameters, DialogCompletion<Optional<Path>> completion) {
+    WindowsDialogs.save(this.window(), parameters, completion);
+  }
+
+  @Override
+  protected void presentMessageDialog(
+      MessageDialogParameters parameters, DialogCompletion<Boolean> completion) {
+    WindowsDialogs.message(this.window(), parameters, completion);
+  }
+
+  @Override
+  protected void beginMove() {
+    this.dispatcher().run(() -> User32.beginFrameDrag(this.window(), User32.HTCAPTION));
+  }
+
+  @Override
+  protected void beginResize(WindowEdge edge) {
+    int hitTest =
+        switch (edge) {
+          case TOP -> User32.HTTOP;
+          case BOTTOM -> User32.HTBOTTOM;
+          case LEFT -> User32.HTLEFT;
+          case RIGHT -> User32.HTRIGHT;
+          case TOP_LEFT -> User32.HTTOPLEFT;
+          case TOP_RIGHT -> User32.HTTOPRIGHT;
+          case BOTTOM_LEFT -> User32.HTBOTTOMLEFT;
+          case BOTTOM_RIGHT -> User32.HTBOTTOMRIGHT;
+        };
+    this.dispatcher()
+        .run(
+            () -> {
+              MemorySegment current = this.window();
+              if ((User32.style(current) & User32.WS_THICKFRAME) != 0) {
+                User32.beginFrameDrag(current, hitTest);
+              }
+            });
+  }
+
+  /**
+   * The top edge of a window without a title bar: the web view covers the client area up to the top
+   * of the window, where the other edges keep a strip of frame that Windows resizes from. Every
+   * edge of a window without a frame.
+   */
+  @Override
+  protected List<WindowEdge> pageResizeEdges() {
+    return switch (this.frame) {
+      case FULL -> List.of();
+      case NO_TITLE_BAR -> List.of(WindowEdge.TOP, WindowEdge.TOP_LEFT, WindowEdge.TOP_RIGHT);
+      case NONE -> List.of(WindowEdge.values());
+    };
+  }
+
+  @Override
+  public boolean isAlwaysOnTop() {
+    return this.dispatcher().call(() -> User32.isTopmost(this.window()));
+  }
+
+  @Override
+  public void alwaysOnTop(boolean alwaysOnTop) {
+    this.dispatcher().run(() -> User32.topmost(this.window(), alwaysOnTop));
+  }
+
+  @Override
+  public boolean isFocused() {
+    return this.dispatcher().call(() -> User32.isForeground(this.window()));
+  }
+
+  @Override
+  public void focus() {
+    this.show();
+    this.dispatcher()
+        .run(
+            () -> {
+              if (User32.isMinimized(this.window())) {
+                User32.showWindow(this.window(), User32.SW_RESTORE);
+              }
+              User32.bringToFront(this.window());
             });
   }
 
@@ -254,7 +545,8 @@ public class WindowsWindow extends AbstractWindow {
                 MemorySegment handler =
                     ComCallback.completion(
                         WebView2.IID_EXECUTE_SCRIPT_COMPLETED,
-                        (hresult, json) -> completeEvaluation(result, hresult, Wide.read(json)));
+                        (hresult, json) ->
+                            WindowsWindow.completeEvaluation(result, hresult, Wide.read(json)));
                 WebView2.executeScript(this.view(), wrapped, handler);
                 Com.release(handler);
               } catch (Throwable t) {
@@ -292,7 +584,9 @@ public class WindowsWindow extends AbstractWindow {
         .run(
             () -> {
               MemorySegment current = this.window();
-              User32.show(current);
+              User32.showWindow(
+                  current, User32.isVisible(current) ? User32.SW_SHOW : this.showCommand);
+              this.showCommand = User32.SW_SHOW;
               WebView2.setVisible(this.controller, true);
               User32.setForeground(current);
             });
@@ -367,6 +661,9 @@ public class WindowsWindow extends AbstractWindow {
       this.controller = createdController;
       this.webView = WebView2.coreWebView2(createdController);
       this.fitWebView();
+      if (this.transparent) {
+        WebView2.setTransparentBackground(createdController);
+      }
       WebView2.setDevToolsEnabled(this.webView, false);
 
       this.subscribe(
@@ -399,6 +696,10 @@ public class WindowsWindow extends AbstractWindow {
               this.handleBridgeMessage(message);
             }
           });
+      this.subscribe(
+          WebView2::onNewWindowRequested,
+          WebView2.IID_NEW_WINDOW_REQUESTED,
+          (_, arguments) -> this.newWindowRequested(WebView2.takeNewWindowRequest(arguments)));
       WebView2.addWebResourceRequestedFilter(this.webView, RESOURCE_ORIGIN + "*");
       this.subscribe(
           WebView2::onWebResourceRequested,
@@ -606,8 +907,22 @@ public class WindowsWindow extends AbstractWindow {
     try {
       WindowsWindow window = WINDOWS.lookup(User32.userData(hwnd));
       if (window != null) {
-        if (message == User32.WM_SIZE && window.controller != null) {
+        if (message == User32.WM_GETMINMAXINFO && !window.fullscreen) {
+          window.writeSizeLimits(hwnd, longParameter);
+          return 0;
+        } else if (message == User32.WM_SIZE && window.controller != null) {
           window.fitWebView();
+          window.windowChanged();
+        } else if (message == User32.WM_MOVE || message == User32.WM_ACTIVATE) {
+          window.windowChanged();
+        } else if (message == User32.WM_NCCALCSIZE
+            && wordParameter != 0
+            && window.frame != WindowFrame.FULL
+            && !window.fullscreen) {
+          return User32.removeFrame(hwnd, wordParameter, longParameter, window.frame);
+        } else if (message == User32.WM_CLOSE && window.refusesCloseRequest()) {
+          // Not passed on: DefWindowProc would destroy the window.
+          return 0;
         } else if (message == User32.WM_CLOSE && window.hidesOnCloseRequest()) {
           // Not passed on: DefWindowProc would destroy the window.
           window.hideNow();

@@ -82,13 +82,26 @@ Google Java Style allows everything in this section. The project restricts it.
 ### `this.` on every instance member
 
 Access to an instance field or method is qualified with `this.`: `this.repository.persist(...)`,
-`this.validate(request)`, `this::handle`. A static member is never qualified with `this.`; call it
-bare in its own class and by class name from elsewhere.
+`this.validate(request)`, `this::handle`. A static member is never qualified with `this.`.
 
 Checkstyle `RequireThis` with `checkFields`, `checkMethods`, and `validateOnlyOverlapping=false`.
 Members of a `@UtilityClass` are exempt (they're static).
 
 Google Java Style doesn't regulate it. Google's own code omits `this.`.
+
+### Static methods by class name
+
+A call to a static method names the class, in the class itself too, so that the call says where it
+goes: `AppKit.isMiniaturized(window)`, `WindowContractTest.awaitTrue(...)`, never a bare
+`isMiniaturized(window)`. That covers the methods of a `@UtilityClass`, which Lombok makes static,
+and private helpers. Static fields and constants stay bare in their own class.
+
+Checkstyle `MatchXpath` with the id `staticMethodByClassName`: a bare call whose name is the name of
+a `static` method, or of a method of a `@UtilityClass`, declared in the same file. Checkstyle sees
+one file without types, so an instance method that shares its name with a static one of the same
+file would be reported too; give the two different names.
+
+Google Java Style doesn't regulate it.
 
 ### No static imports
 
@@ -107,6 +120,32 @@ method names document them.
 
 Checkstyle `MissingJavadocType` with `scope=public`, on top of the upstream instance that covers
 `protected`.
+
+### Platforms in Javadoc
+
+A public member whose behavior differs between platforms says how in one block, after the
+description and before the tags, with the four rows always present and always in this order:
+
+```java
+/**
+ * Moves the window frame.
+ *
+ * <p>Platforms:
+ *
+ * <ul>
+ *   <li>Windows: As described.
+ *   <li>macOS: Points, from the top left of the primary screen.
+ *   <li>Linux, GTK 3: X11: as described. Wayland: does nothing.
+ *   <li>Linux, GTK 4: Does nothing, on X11 as on Wayland.
+ * </ul>
+ */
+```
+
+A platform that behaves as the description says reads `As described.`, a Linux row that differs by
+display server names X11 and Wayland inside the row, and a row that repeats another reads `As on
+GTK 3.` or the like. A record puts the block in its own Javadoc, for the components that differ.
+Nothing about a platform goes into the description itself, and a member that behaves the same
+everywhere has no block. Checked by review.
 
 ### `@SuppressWarnings` is documented
 

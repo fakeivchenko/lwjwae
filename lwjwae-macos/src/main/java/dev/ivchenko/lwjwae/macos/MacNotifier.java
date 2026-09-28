@@ -83,8 +83,9 @@ final class MacNotifier {
           MethodType.methodType(
               void.class, MemorySegment.class, boolean.class, MemorySegment.class),
           Signatures.AUTHORIZATION_BLOCK);
-  private static final MemorySegment ON_WILL_PRESENT = delegateStub("onWillPresent");
-  private static final MemorySegment ON_DID_RECEIVE_RESPONSE = delegateStub("onDidReceiveResponse");
+  private static final MemorySegment ON_WILL_PRESENT = MacNotifier.delegateStub("onWillPresent");
+  private static final MemorySegment ON_DID_RECEIVE_RESPONSE =
+      MacNotifier.delegateStub("onDidReceiveResponse");
 
   private static final MemorySegment DELEGATE_CLASS =
       ObjC.defineClass(
@@ -120,7 +121,7 @@ final class MacNotifier {
                     + " isn't one");
           }
           MemorySegment newCenter = UserNotifications.center();
-          installDelegate(newCenter);
+          MacNotifier.installDelegate(newCenter);
           this.center = newCenter;
         });
   }
@@ -339,7 +340,7 @@ final class MacNotifier {
       MemorySegment response,
       MemorySegment completion) {
     try {
-      responded(
+      MacNotifier.responded(
           UserNotifications.responseNotification(response),
           UserNotifications.responseAction(response));
     } catch (Throwable t) {

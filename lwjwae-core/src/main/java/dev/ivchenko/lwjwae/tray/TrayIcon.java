@@ -1,5 +1,7 @@
 package dev.ivchenko.lwjwae.tray;
 
+import dev.ivchenko.lwjwae.exception.ResourceNotFoundException;
+import dev.ivchenko.lwjwae.util.ResourceUtil;
 import java.util.List;
 import lombok.Builder;
 
@@ -13,17 +15,33 @@ import lombok.Builder;
  *
  * <pre>{@code
  * TrayIcon.builder()
- *     .icon(ResourceUtil.read("app/tray.png"))
+ *     .icon("app/tray.png")
  *     .tooltip("Docs")
- *     .menu(List.of(
+ *     .menu(
  *         new TrayMenuItem("Show", window::show),
  *         TrayMenuItem.separator(),
- *         new TrayMenuItem("Quit", application::quit)))
+ *         new TrayMenuItem("Quit", application::quit))
  *     .onActivate(window::show)
  *     .build()
  * }</pre>
  *
- * @param icon The PNG bytes of the image. Required.
+ * <p>Platforms:
+ *
+ * <ul>
+ *   <li>Windows: A left click runs {@code onActivate}, or opens the menu without it; a right click
+ *       opens the menu.
+ *   <li>macOS: The image is scaled to 18 points. Without {@code onActivate}, any click opens the
+ *       menu; with it, a primary click runs it, and a secondary or Control click opens the menu.
+ *   <li>Linux, GTK 3: Through libappindicator, any click opens the menu, and {@code onActivate}
+ *       never runs. Through the StatusNotifierItem that the library serves, or {@code
+ *       GtkStatusIcon} on X11, a primary click runs {@code onActivate}. The menu is the only way in
+ *       on panels that show nothing else.
+ *   <li>Linux, GTK 4: A StatusNotifierItem: a primary click runs {@code onActivate}, and without
+ *       it, any click opens the menu.
+ * </ul>
+ *
+ * @param icon The PNG bytes of the image, or a PNG among the resources of the application through
+ *     the builder. Required.
  * @param tooltip The text that the tray shows on hover, where it shows one. Default: none.
  * @param menu The entries of the menu, in order. Default: none.
  * @param onActivate What happens on the primary click of the icon, where the tray reports one.
@@ -39,5 +57,38 @@ public record TrayIcon(byte[] icon, String tooltip, List<TrayMenuItem> menu, Run
       menu = List.of();
     }
     menu = List.copyOf(menu);
+  }
+
+  /**
+   * The builder, which also takes the image from the resources of the application and the menu as
+   * separate entries. Lombok leaves out a method whose name is already here, so the plain ones are
+   * here too.
+   */
+  public static class TrayIconBuilder {
+    /** The PNG bytes of the image. */
+    public TrayIconBuilder icon(byte[] icon) {
+      this.icon = icon;
+      return this;
+    }
+
+    /**
+     * A PNG among the resources of the application, such as {@code "app/tray.png"}.
+     *
+     * @throws ResourceNotFoundException If the classpath has no such resource.
+     */
+    public TrayIconBuilder icon(String resource) {
+      return this.icon(ResourceUtil.read(resource));
+    }
+
+    /** The entries of the menu, in order. */
+    public TrayIconBuilder menu(List<TrayMenuItem> menu) {
+      this.menu = menu;
+      return this;
+    }
+
+    /** The same as {@link #menu(List)}. */
+    public TrayIconBuilder menu(TrayMenuItem... menu) {
+      return this.menu(List.of(menu));
+    }
   }
 }

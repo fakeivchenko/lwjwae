@@ -76,9 +76,18 @@ WebKitGTK 6.0 differ, and what the backend does about each.
   `destroy` synchronously as `gtk_widget_destroy` did. The title-bar close button emits
   `close-request` instead of `delete-event`; `TRUE` cancels the close, as before, which is how
   `CloseAction.HIDE` hides the window.
-- **Size.** There is no `gtk_window_resize`: `gtk_window_set_default_size` also resizes a window that
-  is on screen, and GTK 4 keeps the default size in step with the size of the window, so it is also
-  what `width()` and `height()` read.
+- **Size.** There is no `gtk_window_resize`, and `gtk_window_set_default_size` counts only for the
+  first show of a window: after that, on X11 as on Wayland, its size is the user's, and `size()`
+  changes nothing. GTK 4 keeps the default size as the size that the window goes back to, so it
+  stays put while the window is maximized or in full screen; `size()` reads the size of the web
+  view.
+- **Limits and state.** A minimum size goes on the web view with `gtk_widget_set_size_request`, since
+  GTK 4 has no minimum size of a window. There's no maximum size and no way to keep a window on
+  top, so `maximumSize` and `alwaysOnTop` do nothing. Minimizing is `gtk_window_minimize`, and
+  whether a window is minimized comes from the state of its `GdkToplevel`.
+- **Frame.** A window without a title bar gets one that never shows, as in GTK 3, but GTK 4 has
+  `gtk_widget_set_visible` for that. A drag from the page goes to `gdk_toplevel_begin_move` and
+  `gdk_toplevel_begin_resize`, with the pointer of the default seat and its place on the surface.
 - **Placement.** GTK 4 can't move a window or tell where it is, on X11 as on Wayland. The position in
   `WindowParameters` is ignored, `position()` answers `0, 0`, and `position(x, y)` and `center()` do
   nothing: what the API promises for Wayland, everywhere.

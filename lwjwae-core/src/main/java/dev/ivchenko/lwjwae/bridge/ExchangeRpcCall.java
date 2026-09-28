@@ -35,6 +35,8 @@ public final class ExchangeRpcCall implements RpcCall {
   private volatile Thread thread;
 
   /**
+   * Wraps a call that the backend received as {@code exchange}.
+   *
    * @param exchange The request as the backend received it, and the way back.
    * @param name The name that the page called.
    * @param window The window whose page made the call.
@@ -191,7 +193,8 @@ public final class ExchangeRpcCall implements RpcCall {
       this.answerWhole(
           status,
           "application/json",
-          errorJson(code, rootMessage(failure)).getBytes(StandardCharsets.UTF_8));
+          ExchangeRpcCall.errorJson(code, ExchangeRpcCall.rootMessage(failure))
+              .getBytes(StandardCharsets.UTF_8));
     } else if (!this.cancelled) {
       // The stream is open: the status is gone, so the page only sees the answer end early.
       ThrowableUtil.report(failure);

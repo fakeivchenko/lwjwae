@@ -2,19 +2,31 @@ package dev.ivchenko.lwjwae.testing;
 
 import dev.ivchenko.lwjwae.AbstractApplication;
 import dev.ivchenko.lwjwae.AbstractWindow;
+import dev.ivchenko.lwjwae.Screen;
+import dev.ivchenko.lwjwae.WindowEdge;
 import dev.ivchenko.lwjwae.WindowParameters;
 import dev.ivchenko.lwjwae.WindowPosition;
+import dev.ivchenko.lwjwae.WindowSize;
 import dev.ivchenko.lwjwae.bridge.BridgeProtocol;
 import dev.ivchenko.lwjwae.bridge.RpcMessageChannel;
+import dev.ivchenko.lwjwae.dialog.DialogCompletion;
+import dev.ivchenko.lwjwae.dialog.MessageDialogParameters;
+import dev.ivchenko.lwjwae.dialog.OpenDialogParameters;
+import dev.ivchenko.lwjwae.dialog.SaveDialogParameters;
 import dev.ivchenko.lwjwae.event.LoadEvent;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
+import java.util.Optional;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.regex.Matcher;
@@ -36,6 +48,12 @@ public class FakeWindow extends AbstractWindow {
   public final List<String> navigated = new CopyOnWriteArrayList<>();
   public final List<String> posted = new CopyOnWriteArrayList<>();
 
+  /** Every dialog that the window was asked to show, in order. */
+  public final BlockingQueue<PresentedDialog> dialogs = new LinkedBlockingQueue<>();
+
+  /** Every drag that the page handed to the window manager: {@code move}, or the resize edge. */
+  public final List<String> drags = new CopyOnWriteArrayList<>();
+
   private String title;
   private int left;
   private int top;
@@ -43,6 +61,12 @@ public class FakeWindow extends AbstractWindow {
   private int height;
   private boolean resizable = true;
   private boolean devToolsEnabled;
+  private WindowSize minimumSize = WindowSize.NONE;
+  private WindowSize maximumSize = WindowSize.NONE;
+  private boolean minimized;
+  private boolean maximized;
+  private boolean fullscreen;
+  private boolean alwaysOnTop;
 
   /** Whether {@link #show()} was called. */
   @Getter private boolean shown;
@@ -51,11 +75,16 @@ public class FakeWindow extends AbstractWindow {
   private final Condition evaluatedScript = this.evaluations.newCondition();
 
   FakeWindow(AbstractApplication application, long id, WindowParameters parameters) {
-    super(application, id);
+    super(application, id, parameters);
     this.title = parameters.title();
-    this.width = parameters.width();
-    this.height = parameters.height();
+    this.width = parameters.size().width();
+    this.height = parameters.size().height();
     this.installBridge();
+  }
+
+  /** Plays the engine: the page asked for a new window of {@code url}. */
+  public void requestNewWindow(String url) {
+    this.newWindowRequested(url);
   }
 
   /** Exposes the protected hook, so that tests can play the part of the engine. */
@@ -163,6 +192,16 @@ public class FakeWindow extends AbstractWindow {
     }
   }
 
+  /** Waits until the UI thread has run everything that was queued before. */
+  public void awaitUiThread() {
+    this.dispatcher().call(() -> null);
+  }
+
+  /** Plays the toolkit: reports that the window may have changed. */
+  public void reportChange() {
+    this.windowChanged();
+  }
+
   /** Exposes the protected hook, so that tests can play the part of the engine. */
   public void emit(LoadEvent event) {
     this.emitLoad(event);
@@ -233,19 +272,24 @@ public class FakeWindow extends AbstractWindow {
   }
 
   @Override
-  public int width() {
-    return this.width;
-  }
-
-  @Override
-  public int height() {
-    return this.height;
+  public WindowSize size() {
+    return new WindowSize(this.width, this.height);
   }
 
   @Override
   public void size(int width, int height) {
     this.width = width;
     this.height = height;
+  }
+
+  /** The first screen of the application that holds the top left of the window, or the first. */
+  @Override
+  public Screen screen() {
+    List<Screen> screens = this.application().screens();
+    return screens.stream()
+        .filter(screen -> screen.bounds().contains(this.left, this.top))
+        .findFirst()
+        .orElse(screens.getFirst());
   }
 
   @Override
@@ -276,6 +320,83 @@ public class FakeWindow extends AbstractWindow {
   }
 
   @Override
+  public WindowSize minimumSize() {
+    return this.minimumSize;
+  }
+
+  @Override
+  public void minimumSize(int width, int height) {
+    this.minimumSize = new WindowSize(width, height);
+  }
+
+  @Override
+  public WindowSize maximumSize() {
+    return this.maximumSize;
+  }
+
+  @Override
+  public void maximumSize(int width, int height) {
+    this.maximumSize = new WindowSize(width, height);
+  }
+
+  @Override
+  public boolean isMinimized() {
+    return this.minimized;
+  }
+
+  @Override
+  public void minimize() {
+    this.minimized = true;
+  }
+
+  @Override
+  public boolean isMaximized() {
+    return this.maximized;
+  }
+
+  @Override
+  public void maximize() {
+    this.maximized = true;
+  }
+
+  @Override
+  public void restore() {
+    this.minimized = false;
+    this.maximized = false;
+  }
+
+  @Override
+  public boolean isFullscreen() {
+    return this.fullscreen;
+  }
+
+  @Override
+  public void fullscreen(boolean fullscreen) {
+    this.fullscreen = fullscreen;
+  }
+
+  @Override
+  public boolean isAlwaysOnTop() {
+    return this.alwaysOnTop;
+  }
+
+  @Override
+  public void alwaysOnTop(boolean alwaysOnTop) {
+    this.alwaysOnTop = alwaysOnTop;
+  }
+
+  @Override
+  public boolean isFocused() {
+    return this.shown && !this.minimized;
+  }
+
+  @Override
+  public void focus() {
+    this.shown = true;
+    this.minimized = false;
+  }
+
+  @Override
   public boolean isDevToolsEnabled() {
     return this.devToolsEnabled;
   }
@@ -300,9 +421,46 @@ public class FakeWindow extends AbstractWindow {
     return this.shown;
   }
 
-  /** Plays the part of the close button: hides or closes, as the close action says. */
+  @Override
+  protected void presentOpenDialog(
+      OpenDialogParameters parameters, DialogCompletion<List<Path>> completion) {
+    this.present(parameters, completion);
+  }
+
+  @Override
+  protected void presentSaveDialog(
+      SaveDialogParameters parameters, DialogCompletion<Optional<Path>> completion) {
+    this.present(parameters, completion);
+  }
+
+  @Override
+  protected void presentMessageDialog(
+      MessageDialogParameters parameters, DialogCompletion<Boolean> completion) {
+    this.present(parameters, completion);
+  }
+
+  private void present(Object parameters, DialogCompletion<?> completion) {
+    AtomicBoolean closed = new AtomicBoolean();
+    completion.onCancel(() -> closed.set(true));
+    this.dialogs.add(new PresentedDialog(parameters, completion, closed));
+  }
+
+  @Override
+  protected void beginMove() {
+    this.drags.add("move");
+  }
+
+  @Override
+  protected void beginResize(WindowEdge edge) {
+    this.drags.add(edge.pageName());
+  }
+
+  /** Plays the part of the close button: refuses, hides, or closes, as the window says. */
   @Override
   public void requestClose() {
+    if (this.refusesCloseRequest()) {
+      return;
+    }
     if (this.hidesOnCloseRequest()) {
       this.hide();
     } else {

@@ -42,7 +42,7 @@ public class NativeLibraries {
    */
   public SymbolLookup loadIfPresent(String... sonames) {
     try {
-      return load(sonames);
+      return NativeLibraries.load(sonames);
     } catch (UnsatisfiedLinkError _) {
       return null;
     }
@@ -73,7 +73,7 @@ public class NativeLibraries {
    */
   public boolean isLoadable(String... sonames) {
     try {
-      load(sonames);
+      NativeLibraries.load(sonames);
       return true;
     } catch (UnsatisfiedLinkError _) {
       return false;
@@ -116,7 +116,7 @@ public class NativeLibraries {
     if (library == null) {
       return null;
     }
-    return downcall(library, symbol, descriptor);
+    return NativeLibraries.downcall(library, symbol, descriptor);
   }
 
   /**

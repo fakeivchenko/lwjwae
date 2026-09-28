@@ -1,10 +1,14 @@
 package dev.ivchenko.lwjwae.gtk.binding;
 
 import dev.ivchenko.lwjwae.foreign.NativeLibraries;
+import dev.ivchenko.lwjwae.glib.binding.Glib;
 import java.lang.foreign.Arena;
+import java.lang.foreign.MemoryLayout;
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.SymbolLookup;
+import java.lang.foreign.ValueLayout;
 import java.lang.invoke.MethodHandle;
+import java.util.List;
 import lombok.SneakyThrows;
 import lombok.experimental.UtilityClass;
 
@@ -21,8 +25,25 @@ public class Gtk {
   /** {@code GTK_WINDOW_TOPLEVEL}. */
   public final int WINDOW_TOPLEVEL = 0;
 
+  /** {@code GTK_STYLE_PROVIDER_PRIORITY_APPLICATION}: above the theme. */
+  private final int STYLE_PROVIDER_PRIORITY_APPLICATION = 600;
+
   /** {@code GTK_WIN_POS_CENTER}: the window opens in the middle of the screen. */
   public final int WIN_POS_CENTER = 1;
+
+  private final MethodHandle CLIPBOARD_GET =
+      NativeLibraries.downcall(GTK, "gtk_clipboard_get", Signatures.POINTER_POINTER);
+  private final MethodHandle CLIPBOARD_SET_TEXT =
+      NativeLibraries.downcall(GTK, "gtk_clipboard_set_text", Signatures.VOID_POINTER_POINTER_INT);
+  private final MethodHandle CLIPBOARD_WAIT_FOR_TEXT =
+      NativeLibraries.downcall(GTK, "gtk_clipboard_wait_for_text", Signatures.POINTER_POINTER);
+  private final MethodHandle CLIPBOARD_SET_IMAGE =
+      NativeLibraries.downcall(GTK, "gtk_clipboard_set_image", Signatures.VOID_POINTER_POINTER);
+  private final MethodHandle CLIPBOARD_WAIT_FOR_IMAGE =
+      NativeLibraries.downcall(GTK, "gtk_clipboard_wait_for_image", Signatures.POINTER_POINTER);
+
+  /** {@code GDK_SELECTION_CLIPBOARD}: the atom of the clipboard that Ctrl+C fills, a constant. */
+  private final MemorySegment SELECTION_CLIPBOARD = MemorySegment.ofAddress(69);
 
   private final MethodHandle INIT_CHECK =
       NativeLibraries.downcall(GTK, "gtk_init_check", Signatures.INT_POINTER_POINTER);
@@ -50,6 +71,27 @@ public class Gtk {
       NativeLibraries.downcall(GTK, "gtk_window_set_resizable", Signatures.VOID_POINTER_INT);
   private final MethodHandle WINDOW_GET_RESIZABLE =
       NativeLibraries.downcall(GTK, "gtk_window_get_resizable", Signatures.INT_POINTER);
+  private final MethodHandle WINDOW_ICONIFY =
+      NativeLibraries.downcall(GTK, "gtk_window_iconify", Signatures.VOID_POINTER);
+  private final MethodHandle WINDOW_DEICONIFY =
+      NativeLibraries.downcall(GTK, "gtk_window_deiconify", Signatures.VOID_POINTER);
+  private final MethodHandle WINDOW_MAXIMIZE =
+      NativeLibraries.downcall(GTK, "gtk_window_maximize", Signatures.VOID_POINTER);
+  private final MethodHandle WINDOW_UNMAXIMIZE =
+      NativeLibraries.downcall(GTK, "gtk_window_unmaximize", Signatures.VOID_POINTER);
+  private final MethodHandle WINDOW_IS_MAXIMIZED =
+      NativeLibraries.downcall(GTK, "gtk_window_is_maximized", Signatures.INT_POINTER);
+  private final MethodHandle WINDOW_FULLSCREEN =
+      NativeLibraries.downcall(GTK, "gtk_window_fullscreen", Signatures.VOID_POINTER);
+  private final MethodHandle WINDOW_UNFULLSCREEN =
+      NativeLibraries.downcall(GTK, "gtk_window_unfullscreen", Signatures.VOID_POINTER);
+  private final MethodHandle WINDOW_SET_KEEP_ABOVE =
+      NativeLibraries.downcall(GTK, "gtk_window_set_keep_above", Signatures.VOID_POINTER_INT);
+  private final MethodHandle WINDOW_IS_ACTIVE =
+      NativeLibraries.downcall(GTK, "gtk_window_is_active", Signatures.INT_POINTER);
+  private final MethodHandle WINDOW_SET_GEOMETRY_HINTS =
+      NativeLibraries.downcall(
+          GTK, "gtk_window_set_geometry_hints", Signatures.VOID_POINTER_POINTER_POINTER_INT);
   private final MethodHandle CONTAINER_ADD =
       NativeLibraries.downcall(GTK, "gtk_container_add", Signatures.VOID_POINTER_POINTER);
   private final MethodHandle WIDGET_GET_WINDOW =
@@ -62,10 +104,101 @@ public class Gtk {
       NativeLibraries.downcall(GTK, "gtk_widget_hide", Signatures.VOID_POINTER);
   private final MethodHandle WIDGET_GET_VISIBLE =
       NativeLibraries.downcall(GTK, "gtk_widget_get_visible", Signatures.INT_POINTER);
+  private final MethodHandle WINDOW_SET_STARTUP_ID =
+      NativeLibraries.downcall(GTK, "gtk_window_set_startup_id", Signatures.VOID_POINTER_POINTER);
   private final MethodHandle WINDOW_PRESENT =
       NativeLibraries.downcall(GTK, "gtk_window_present", Signatures.VOID_POINTER);
   private final MethodHandle WINDOW_CLOSE =
       NativeLibraries.downcall(GTK, "gtk_window_close", Signatures.VOID_POINTER);
+  private final MethodHandle WINDOW_SET_TITLEBAR =
+      NativeLibraries.downcall(GTK, "gtk_window_set_titlebar", Signatures.VOID_POINTER_POINTER);
+  private final MethodHandle WINDOW_SET_DELETABLE =
+      NativeLibraries.downcall(GTK, "gtk_window_set_deletable", Signatures.VOID_POINTER_INT);
+  private final MethodHandle WINDOW_BEGIN_MOVE_DRAG =
+      NativeLibraries.downcall(
+          GTK, "gtk_window_begin_move_drag", Signatures.VOID_POINTER_INT_INT_INT_INT);
+  private final MethodHandle WINDOW_BEGIN_RESIZE_DRAG =
+      NativeLibraries.downcall(
+          GTK, "gtk_window_begin_resize_drag", Signatures.VOID_POINTER_INT_INT_INT_INT_INT);
+  private final MethodHandle WIDGET_SET_NO_SHOW_ALL =
+      NativeLibraries.downcall(GTK, "gtk_widget_set_no_show_all", Signatures.VOID_POINTER_INT);
+  private final MethodHandle BOX_NEW =
+      NativeLibraries.downcall(GTK, "gtk_box_new", Signatures.POINTER_INT_INT);
+  private final MethodHandle HEADER_BAR_NEW =
+      NativeLibraries.downcall(GTK, "gtk_header_bar_new", Signatures.POINTER_VOID);
+  private final MethodHandle HEADER_BAR_SET_TITLE =
+      NativeLibraries.downcall(GTK, "gtk_header_bar_set_title", Signatures.VOID_POINTER_POINTER);
+  private final MethodHandle HEADER_BAR_SET_SHOW_CLOSE_BUTTON =
+      NativeLibraries.downcall(
+          GTK, "gtk_header_bar_set_show_close_button", Signatures.VOID_POINTER_INT);
+  private final MethodHandle HEADER_BAR_SET_DECORATION_LAYOUT =
+      NativeLibraries.downcall(
+          GTK, "gtk_header_bar_set_decoration_layout", Signatures.VOID_POINTER_POINTER);
+  private final MethodHandle WIDGET_GET_SCREEN =
+      NativeLibraries.downcall(GTK, "gtk_widget_get_screen", Signatures.POINTER_POINTER);
+  private final MethodHandle WIDGET_SET_VISUAL =
+      NativeLibraries.downcall(GTK, "gtk_widget_set_visual", Signatures.VOID_POINTER_POINTER);
+  private final MethodHandle WIDGET_SET_APP_PAINTABLE =
+      NativeLibraries.downcall(GTK, "gtk_widget_set_app_paintable", Signatures.VOID_POINTER_INT);
+  private final MethodHandle CSS_PROVIDER_NEW =
+      NativeLibraries.downcall(GTK, "gtk_css_provider_new", Signatures.POINTER_VOID);
+  // Returns a gboolean that nothing reads: the CSS is this library's own, and it parses.
+  private final MethodHandle CSS_PROVIDER_LOAD_FROM_DATA =
+      NativeLibraries.downcall(
+          GTK, "gtk_css_provider_load_from_data", Signatures.VOID_POINTER_POINTER_LONG_POINTER);
+  private final MethodHandle STYLE_CONTEXT_ADD_PROVIDER =
+      NativeLibraries.downcall(
+          GTK, "gtk_style_context_add_provider", Signatures.VOID_POINTER_POINTER_INT);
+  private final MethodHandle WIDGET_GET_STYLE_CONTEXT =
+      NativeLibraries.downcall(GTK, "gtk_widget_get_style_context", Signatures.POINTER_POINTER);
+  private final MethodHandle STYLE_CONTEXT_ADD_CLASS =
+      NativeLibraries.downcall(GTK, "gtk_style_context_add_class", Signatures.VOID_POINTER_POINTER);
+  private final MethodHandle SETTINGS_GET_DEFAULT =
+      NativeLibraries.downcall(GTK, "gtk_settings_get_default", Signatures.POINTER_VOID);
+  // --- dialogs ---
+  private final MethodHandle FILE_CHOOSER_NATIVE_NEW =
+      NativeLibraries.downcall(
+          GTK, "gtk_file_chooser_native_new", Signatures.GTK_FILE_CHOOSER_NATIVE_NEW);
+  private final MethodHandle NATIVE_DIALOG_SHOW =
+      NativeLibraries.downcall(GTK, "gtk_native_dialog_show", Signatures.VOID_POINTER);
+  private final MethodHandle NATIVE_DIALOG_HIDE =
+      NativeLibraries.downcall(GTK, "gtk_native_dialog_hide", Signatures.VOID_POINTER);
+  private final MethodHandle FILE_CHOOSER_SET_SELECT_MULTIPLE =
+      NativeLibraries.downcall(
+          GTK, "gtk_file_chooser_set_select_multiple", Signatures.VOID_POINTER_INT);
+  private final MethodHandle FILE_CHOOSER_SET_CURRENT_FOLDER =
+      NativeLibraries.downcall(
+          GTK, "gtk_file_chooser_set_current_folder", Signatures.INT_POINTER_POINTER);
+  private final MethodHandle FILE_CHOOSER_SET_CURRENT_NAME =
+      NativeLibraries.downcall(
+          GTK, "gtk_file_chooser_set_current_name", Signatures.VOID_POINTER_POINTER);
+  private final MethodHandle FILE_CHOOSER_SET_DO_OVERWRITE_CONFIRMATION =
+      NativeLibraries.downcall(
+          GTK, "gtk_file_chooser_set_do_overwrite_confirmation", Signatures.VOID_POINTER_INT);
+  private final MethodHandle FILE_CHOOSER_ADD_FILTER =
+      NativeLibraries.downcall(GTK, "gtk_file_chooser_add_filter", Signatures.VOID_POINTER_POINTER);
+  private final MethodHandle FILE_CHOOSER_GET_FILENAMES =
+      NativeLibraries.downcall(GTK, "gtk_file_chooser_get_filenames", Signatures.POINTER_POINTER);
+  private final MethodHandle FILE_FILTER_NEW =
+      NativeLibraries.downcall(GTK, "gtk_file_filter_new", Signatures.POINTER_VOID);
+  private final MethodHandle FILE_FILTER_SET_NAME =
+      NativeLibraries.downcall(GTK, "gtk_file_filter_set_name", Signatures.VOID_POINTER_POINTER);
+  private final MethodHandle FILE_FILTER_ADD_PATTERN =
+      NativeLibraries.downcall(GTK, "gtk_file_filter_add_pattern", Signatures.VOID_POINTER_POINTER);
+  private final MethodHandle MESSAGE_DIALOG_GET_TYPE =
+      NativeLibraries.downcall(GTK, "gtk_message_dialog_get_type", Signatures.LONG_VOID);
+  private final MethodHandle MESSAGE_TYPE_GET_TYPE =
+      NativeLibraries.downcall(GTK, "gtk_message_type_get_type", Signatures.LONG_VOID);
+  private final MethodHandle DIALOG_ADD_BUTTON =
+      NativeLibraries.downcall(
+          GTK, "gtk_dialog_add_button", Signatures.POINTER_POINTER_POINTER_INT);
+  private final MethodHandle DIALOG_SET_DEFAULT_RESPONSE =
+      NativeLibraries.downcall(GTK, "gtk_dialog_set_default_response", Signatures.VOID_POINTER_INT);
+  private final MethodHandle WINDOW_SET_TRANSIENT_FOR =
+      NativeLibraries.downcall(
+          GTK, "gtk_window_set_transient_for", Signatures.VOID_POINTER_POINTER);
+  private final MethodHandle WINDOW_SET_MODAL =
+      NativeLibraries.downcall(GTK, "gtk_window_set_modal", Signatures.VOID_POINTER_INT);
   private final MethodHandle WIDGET_SET_SENSITIVE =
       NativeLibraries.downcall(GTK, "gtk_widget_set_sensitive", Signatures.VOID_POINTER_INT);
 
@@ -198,6 +331,98 @@ public class Gtk {
     return (int) WINDOW_GET_RESIZABLE.invokeExact(window) != 0;
   }
 
+  /** {@code GDK_HINT_MIN_SIZE}. */
+  private final int HINT_MIN_SIZE = 1 << 1;
+
+  /** {@code GDK_HINT_MAX_SIZE}. */
+  private final int HINT_MAX_SIZE = 1 << 2;
+
+  /**
+   * {@code struct GdkGeometry}: the size limits first, then the base size, the increments, the
+   * aspect ratios, and the gravity, none of which the backend sets.
+   */
+  private final MemoryLayout GEOMETRY =
+      MemoryLayout.structLayout(
+          MemoryLayout.sequenceLayout(8, Signatures.C_INT).withName("sizes"),
+          MemoryLayout.sequenceLayout(2, ValueLayout.JAVA_DOUBLE).withName("aspects"),
+          Signatures.C_INT.withName("gravity"),
+          MemoryLayout.paddingLayout(4));
+
+  /** Calls {@code gtk_window_iconify}. */
+  @SneakyThrows
+  public void windowIconify(MemorySegment window) {
+    WINDOW_ICONIFY.invokeExact(window);
+  }
+
+  /** Calls {@code gtk_window_deiconify}. */
+  @SneakyThrows
+  public void windowDeiconify(MemorySegment window) {
+    WINDOW_DEICONIFY.invokeExact(window);
+  }
+
+  /** Calls {@code gtk_window_maximize}. */
+  @SneakyThrows
+  public void windowMaximize(MemorySegment window) {
+    WINDOW_MAXIMIZE.invokeExact(window);
+  }
+
+  /** Calls {@code gtk_window_unmaximize}. */
+  @SneakyThrows
+  public void windowUnmaximize(MemorySegment window) {
+    WINDOW_UNMAXIMIZE.invokeExact(window);
+  }
+
+  /** Calls {@code gtk_window_is_maximized}. */
+  @SneakyThrows
+  public boolean isWindowMaximized(MemorySegment window) {
+    return (int) WINDOW_IS_MAXIMIZED.invokeExact(window) != 0;
+  }
+
+  /** Calls {@code gtk_window_fullscreen} or {@code gtk_window_unfullscreen}. */
+  @SneakyThrows
+  public void windowSetFullscreen(MemorySegment window, boolean fullscreen) {
+    if (fullscreen) {
+      WINDOW_FULLSCREEN.invokeExact(window);
+    } else {
+      WINDOW_UNFULLSCREEN.invokeExact(window);
+    }
+  }
+
+  /** Calls {@code gtk_window_set_keep_above}. */
+  @SneakyThrows
+  public void windowSetKeepAbove(MemorySegment window, boolean above) {
+    WINDOW_SET_KEEP_ABOVE.invokeExact(window, above ? 1 : 0);
+  }
+
+  /** Calls {@code gtk_window_is_active}: whether the window has the keyboard focus. */
+  @SneakyThrows
+  public boolean isWindowActive(MemorySegment window) {
+    return (int) WINDOW_IS_ACTIVE.invokeExact(window) != 0;
+  }
+
+  /**
+   * Calls {@code gtk_window_set_geometry_hints} with the size limits of the window, which replace
+   * the ones set before. Zero in a dimension means no limit there.
+   */
+  @SneakyThrows
+  public void windowSetSizeLimits(
+      MemorySegment window, int minWidth, int minHeight, int maxWidth, int maxHeight) {
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment geometry = arena.allocate(GEOMETRY);
+      int[] sizes = {
+        minWidth,
+        minHeight,
+        maxWidth == 0 ? Short.MAX_VALUE : maxWidth,
+        maxHeight == 0 ? Short.MAX_VALUE : maxHeight
+      };
+      MemorySegment.copy(sizes, 0, geometry, Signatures.C_INT, 0, sizes.length);
+      int hints =
+          (minWidth > 0 || minHeight > 0 ? HINT_MIN_SIZE : 0)
+              | (maxWidth > 0 || maxHeight > 0 ? HINT_MAX_SIZE : 0);
+      WINDOW_SET_GEOMETRY_HINTS.invokeExact(window, MemorySegment.NULL, geometry, hints);
+    }
+  }
+
   /** Calls {@code gtk_container_add}: the container sinks the floating reference of the child. */
   @SneakyThrows
   public void containerAdd(MemorySegment container, MemorySegment child) {
@@ -246,10 +471,289 @@ public class Gtk {
     WINDOW_CLOSE.invokeExact(window);
   }
 
+  /**
+   * Calls {@code gtk_window_set_startup_id}: the next present of the window hands {@code token} to
+   * the compositor, which on Wayland is what lets the window take the focus.
+   */
+  @SneakyThrows
+  public void windowSetStartupId(MemorySegment window, String token) {
+    try (Arena arena = Arena.ofConfined()) {
+      WINDOW_SET_STARTUP_ID.invokeExact(window, arena.allocateFrom(token));
+    }
+  }
+
   /** Calls {@code gtk_window_present}: shows the window and asks the desktop to raise it. */
   @SneakyThrows
   public void windowPresent(MemorySegment window) {
     WINDOW_PRESENT.invokeExact(window);
+  }
+
+  /** {@code GTK_ORIENTATION_HORIZONTAL}. */
+  public final int ORIENTATION_HORIZONTAL = 0;
+
+  /**
+   * Calls {@code gtk_window_set_titlebar}: the widget takes the place of the title bar, and the
+   * window draws its own decorations, on X11 too. Before the window is shown.
+   */
+  @SneakyThrows
+  public void windowSetTitlebar(MemorySegment window, MemorySegment titlebar) {
+    WINDOW_SET_TITLEBAR.invokeExact(window, titlebar);
+  }
+
+  /** Calls {@code gtk_window_set_deletable}: whether the title bar has a close button. */
+  @SneakyThrows
+  public void windowSetDeletable(MemorySegment window, boolean deletable) {
+    WINDOW_SET_DELETABLE.invokeExact(window, deletable ? 1 : 0);
+  }
+
+  /**
+   * Calls {@code gtk_window_begin_move_drag}: the window manager moves the window with the pointer
+   * until the button is released. On Wayland, the compositor takes the pointer only while the
+   * button that started the drag is still down.
+   */
+  @SneakyThrows
+  public void windowBeginMoveDrag(MemorySegment window, int button, int rootX, int rootY) {
+    WINDOW_BEGIN_MOVE_DRAG.invokeExact(window, button, rootX, rootY, Gdk.CURRENT_TIME);
+  }
+
+  /**
+   * Calls {@code gtk_window_begin_resize_drag} with a {@code GdkWindowEdge}: the window manager
+   * resizes the window from that edge until the button is released.
+   */
+  @SneakyThrows
+  public void windowBeginResizeDrag(
+      MemorySegment window, int edge, int button, int rootX, int rootY) {
+    WINDOW_BEGIN_RESIZE_DRAG.invokeExact(window, edge, button, rootX, rootY, Gdk.CURRENT_TIME);
+  }
+
+  /** Calls {@code gtk_widget_set_no_show_all}: {@code gtk_widget_show_all} passes the widget by. */
+  @SneakyThrows
+  public void widgetSetNoShowAll(MemorySegment widget, boolean noShowAll) {
+    WIDGET_SET_NO_SHOW_ALL.invokeExact(widget, noShowAll ? 1 : 0);
+  }
+
+  /** Calls {@code gtk_box_new}. The box is floating until a container takes it. */
+  @SneakyThrows
+  public MemorySegment boxNew(int orientation, int spacing) {
+    return (MemorySegment) BOX_NEW.invokeExact(orientation, spacing);
+  }
+
+  /** Calls {@code gtk_header_bar_new}. The bar is floating until a window takes it. */
+  @SneakyThrows
+  public MemorySegment headerBarNew() {
+    return (MemorySegment) HEADER_BAR_NEW.invokeExact();
+  }
+
+  /** Calls {@code gtk_header_bar_set_title}. */
+  @SneakyThrows
+  public void headerBarSetTitle(MemorySegment headerBar, String title) {
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment value = title == null ? MemorySegment.NULL : arena.allocateFrom(title);
+      HEADER_BAR_SET_TITLE.invokeExact(headerBar, value);
+    }
+  }
+
+  /** Calls {@code gtk_header_bar_set_show_close_button}: whether the bar has the window buttons. */
+  @SneakyThrows
+  public void headerBarSetShowCloseButton(MemorySegment headerBar, boolean show) {
+    HEADER_BAR_SET_SHOW_CLOSE_BUTTON.invokeExact(headerBar, show ? 1 : 0);
+  }
+
+  /** Calls {@code gtk_header_bar_set_decoration_layout}: which window buttons, on which side. */
+  @SneakyThrows
+  public void headerBarSetDecorationLayout(MemorySegment headerBar, String layout) {
+    try (Arena arena = Arena.ofConfined()) {
+      HEADER_BAR_SET_DECORATION_LAYOUT.invokeExact(headerBar, arena.allocateFrom(layout));
+    }
+  }
+
+  /**
+   * Leaves the background of a window that isn't realized yet to what is under it: the visual with
+   * an alpha channel, and no background of the theme. What its child leaves clear shows the desktop
+   * through a compositor, and black without one.
+   */
+  @SneakyThrows
+  public void windowClearBackground(MemorySegment window) {
+    MemorySegment visual =
+        Gdk.screenRgbaVisual((MemorySegment) WIDGET_GET_SCREEN.invokeExact(window));
+    if (!visual.equals(MemorySegment.NULL)) {
+      WIDGET_SET_VISUAL.invokeExact(window, visual);
+    }
+    WIDGET_SET_APP_PAINTABLE.invokeExact(window, 1);
+  }
+
+  /**
+   * Styles {@code widget} and its own nodes, such as the decoration of a window, with {@code css}.
+   */
+  @SneakyThrows
+  public void widgetAddCss(MemorySegment widget, String css) {
+    MemorySegment provider = (MemorySegment) CSS_PROVIDER_NEW.invokeExact();
+    try (Arena arena = Arena.ofConfined()) {
+      CSS_PROVIDER_LOAD_FROM_DATA.invokeExact(
+          provider, arena.allocateFrom(css), -1L, MemorySegment.NULL);
+    }
+    MemorySegment context = (MemorySegment) WIDGET_GET_STYLE_CONTEXT.invokeExact(widget);
+    STYLE_CONTEXT_ADD_PROVIDER.invokeExact(context, provider, STYLE_PROVIDER_PRIORITY_APPLICATION);
+    Glib.unref(provider);
+  }
+
+  /** Adds a CSS class to the style context of a widget. */
+  @SneakyThrows
+  public void widgetAddCssClass(MemorySegment widget, String cssClass) {
+    MemorySegment context = (MemorySegment) WIDGET_GET_STYLE_CONTEXT.invokeExact(widget);
+    try (Arena arena = Arena.ofConfined()) {
+      STYLE_CONTEXT_ADD_CLASS.invokeExact(context, arena.allocateFrom(cssClass));
+    }
+  }
+
+  /** Calls {@code gtk_settings_get_default}: the settings of the desktop, which GTK owns. */
+  @SneakyThrows
+  public MemorySegment settingsGetDefault() {
+    return (MemorySegment) SETTINGS_GET_DEFAULT.invokeExact();
+  }
+
+  /** {@code GTK_FILE_CHOOSER_ACTION_OPEN}. */
+  public final int FILE_CHOOSER_ACTION_OPEN = 0;
+
+  /** {@code GTK_FILE_CHOOSER_ACTION_SAVE}. */
+  public final int FILE_CHOOSER_ACTION_SAVE = 1;
+
+  /** {@code GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER}. */
+  public final int FILE_CHOOSER_ACTION_SELECT_FOLDER = 2;
+
+  /** {@code GTK_RESPONSE_ACCEPT}: the native file chooser picked something. */
+  public final int RESPONSE_ACCEPT = -3;
+
+  /** {@code GTK_RESPONSE_OK}. */
+  public final int RESPONSE_OK = -5;
+
+  /** {@code GTK_RESPONSE_CANCEL}. */
+  public final int RESPONSE_CANCEL = -6;
+
+  /** {@code GTK_RESPONSE_YES}. */
+  public final int RESPONSE_YES = -8;
+
+  /** {@code GTK_RESPONSE_NO}. */
+  public final int RESPONSE_NO = -9;
+
+  /**
+   * Calls {@code gtk_file_chooser_native_new} with the default labels: a file chooser that the
+   * desktop portal shows inside a sandbox, and GTK outside one. The caller owns it.
+   *
+   * @param title The title, or {@code null} for GTK's own.
+   */
+  @SneakyThrows
+  public MemorySegment fileChooserNativeNew(String title, MemorySegment parent, int action) {
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment text = title == null ? MemorySegment.NULL : arena.allocateFrom(title);
+      return (MemorySegment)
+          FILE_CHOOSER_NATIVE_NEW.invokeExact(
+              text, parent, action, MemorySegment.NULL, MemorySegment.NULL);
+    }
+  }
+
+  /** Calls {@code gtk_native_dialog_show}: shows it and returns; {@code response} answers. */
+  @SneakyThrows
+  public void nativeDialogShow(MemorySegment dialog) {
+    NATIVE_DIALOG_SHOW.invokeExact(dialog);
+  }
+
+  /** Calls {@code gtk_native_dialog_hide}: closes it without a {@code response}. */
+  @SneakyThrows
+  public void nativeDialogHide(MemorySegment dialog) {
+    NATIVE_DIALOG_HIDE.invokeExact(dialog);
+  }
+
+  /** Calls {@code gtk_file_chooser_set_select_multiple}. */
+  @SneakyThrows
+  public void fileChooserSetSelectMultiple(MemorySegment chooser, boolean multiple) {
+    FILE_CHOOSER_SET_SELECT_MULTIPLE.invokeExact(chooser, multiple ? 1 : 0);
+  }
+
+  /** Calls {@code gtk_file_chooser_set_current_folder}. */
+  @SneakyThrows
+  public void fileChooserSetCurrentFolder(MemorySegment chooser, String folder) {
+    try (Arena arena = Arena.ofConfined()) {
+      int _ =
+          (int) FILE_CHOOSER_SET_CURRENT_FOLDER.invokeExact(chooser, arena.allocateFrom(folder));
+    }
+  }
+
+  /** Calls {@code gtk_file_chooser_set_current_name}: the name that a save dialog proposes. */
+  @SneakyThrows
+  public void fileChooserSetCurrentName(MemorySegment chooser, String name) {
+    try (Arena arena = Arena.ofConfined()) {
+      FILE_CHOOSER_SET_CURRENT_NAME.invokeExact(chooser, arena.allocateFrom(name));
+    }
+  }
+
+  /** Calls {@code gtk_file_chooser_set_do_overwrite_confirmation}. */
+  @SneakyThrows
+  public void fileChooserSetOverwriteConfirmation(MemorySegment chooser, boolean confirm) {
+    FILE_CHOOSER_SET_DO_OVERWRITE_CONFIRMATION.invokeExact(chooser, confirm ? 1 : 0);
+  }
+
+  /**
+   * Adds a filter named {@code name} that shows the files that match any of {@code patterns}, glob
+   * patterns such as {@code *.png}.
+   */
+  @SneakyThrows
+  public void fileChooserAddFilter(MemorySegment chooser, String name, List<String> patterns) {
+    MemorySegment filter = (MemorySegment) FILE_FILTER_NEW.invokeExact();
+    try (Arena arena = Arena.ofConfined()) {
+      FILE_FILTER_SET_NAME.invokeExact(filter, arena.allocateFrom(name));
+      for (String pattern : patterns) {
+        FILE_FILTER_ADD_PATTERN.invokeExact(filter, arena.allocateFrom(pattern));
+      }
+    }
+    // The chooser sinks the floating reference of the filter.
+    FILE_CHOOSER_ADD_FILTER.invokeExact(chooser, filter);
+  }
+
+  /** The paths that the chooser picked, from {@code gtk_file_chooser_get_filenames}. */
+  @SneakyThrows
+  public List<String> fileChooserFilenames(MemorySegment chooser) {
+    return Glib.takeStringList((MemorySegment) FILE_CHOOSER_GET_FILENAMES.invokeExact(chooser));
+  }
+
+  /** The {@code GType} of {@code GtkMessageDialog}. */
+  @SneakyThrows
+  public long messageDialogType() {
+    return (long) MESSAGE_DIALOG_GET_TYPE.invokeExact();
+  }
+
+  /** The {@code GType} of the {@code GtkMessageType} enum. */
+  @SneakyThrows
+  public long messageTypeType() {
+    return (long) MESSAGE_TYPE_GET_TYPE.invokeExact();
+  }
+
+  /** Calls {@code gtk_dialog_add_button}: a button that answers with {@code response}. */
+  @SneakyThrows
+  public void dialogAddButton(MemorySegment dialog, String label, int response) {
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment _ =
+          (MemorySegment)
+              DIALOG_ADD_BUTTON.invokeExact(dialog, arena.allocateFrom(label), response);
+    }
+  }
+
+  /** Calls {@code gtk_dialog_set_default_response}: the button that Enter presses. */
+  @SneakyThrows
+  public void dialogSetDefaultResponse(MemorySegment dialog, int response) {
+    DIALOG_SET_DEFAULT_RESPONSE.invokeExact(dialog, response);
+  }
+
+  /** Calls {@code gtk_window_set_transient_for}: the dialog stays over {@code parent}. */
+  @SneakyThrows
+  public void windowSetTransientFor(MemorySegment window, MemorySegment parent) {
+    WINDOW_SET_TRANSIENT_FOR.invokeExact(window, parent);
+  }
+
+  /** Calls {@code gtk_window_set_modal}. */
+  @SneakyThrows
+  public void windowSetModal(MemorySegment window, boolean modal) {
+    WINDOW_SET_MODAL.invokeExact(window, modal ? 1 : 0);
   }
 
   /** Calls {@code gtk_widget_set_sensitive}: an insensitive widget is grayed out. */
@@ -322,5 +826,41 @@ public class Gtk {
   @SneakyThrows
   public void statusIconSetVisible(MemorySegment icon, boolean visible) {
     STATUS_ICON_SET_VISIBLE.invokeExact(icon, visible ? 1 : 0);
+  }
+
+  /** Puts {@code text} on the clipboard that Ctrl+C fills. */
+  @SneakyThrows
+  public void clipboardSetText(String text) {
+    MemorySegment clipboard = (MemorySegment) CLIPBOARD_GET.invokeExact(SELECTION_CLIPBOARD);
+    try (Arena arena = Arena.ofConfined()) {
+      CLIPBOARD_SET_TEXT.invokeExact(clipboard, arena.allocateFrom(text), -1);
+    }
+  }
+
+  /**
+   * The text on the clipboard, or {@code null} for none: {@code gtk_clipboard_wait_for_text}, which
+   * runs the main loop until the owner of the clipboard answered.
+   */
+  @SneakyThrows
+  public String clipboardWaitForText() {
+    MemorySegment clipboard = (MemorySegment) CLIPBOARD_GET.invokeExact(SELECTION_CLIPBOARD);
+    return Glib.takeString((MemorySegment) CLIPBOARD_WAIT_FOR_TEXT.invokeExact(clipboard));
+  }
+
+  /** Puts {@code pixbuf} on the clipboard, which takes a reference of its own. */
+  @SneakyThrows
+  public void clipboardSetImage(MemorySegment pixbuf) {
+    MemorySegment clipboard = (MemorySegment) CLIPBOARD_GET.invokeExact(SELECTION_CLIPBOARD);
+    CLIPBOARD_SET_IMAGE.invokeExact(clipboard, pixbuf);
+  }
+
+  /**
+   * The image on the clipboard as a pixbuf that the caller gives back with {@link Glib#unref}, or
+   * {@code NULL}: {@code gtk_clipboard_wait_for_image}, which runs the main loop meanwhile.
+   */
+  @SneakyThrows
+  public MemorySegment clipboardWaitForImage() {
+    MemorySegment clipboard = (MemorySegment) CLIPBOARD_GET.invokeExact(SELECTION_CLIPBOARD);
+    return (MemorySegment) CLIPBOARD_WAIT_FOR_IMAGE.invokeExact(clipboard);
   }
 }

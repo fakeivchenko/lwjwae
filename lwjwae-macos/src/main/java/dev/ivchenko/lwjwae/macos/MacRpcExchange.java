@@ -60,7 +60,9 @@ final class MacRpcExchange implements RpcExchange {
    */
   static void stop(MemorySegment task) {
     MacRpcExchange exchange = RUNNING.remove(task.address());
-    if (exchange == null) return;
+    if (exchange == null) {
+      return;
+    }
     exchange.stopped = true;
     Foundation.release(exchange.task);
     Runnable action = exchange.onCancel;

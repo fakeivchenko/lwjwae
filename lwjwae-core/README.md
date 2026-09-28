@@ -12,7 +12,7 @@ the window; a codec module supplies JSON when you use the typed bridge methods.
 | Type                                                                                                                                                                                                                                                                                                                      | Role                                                                                                                                                                                                                                                                                                                                                   |
 |---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | [`Application`](src/main/java/dev/ivchenko/lwjwae/Application.java)                                                                                                                                                                                                                                                       | Entry point and the process-wide half: `create` picks a backend; `open` adds a window; `run`, `quit`; the bridge across every window.                                                                                                                                                                                                                  |
-| [`Window`](src/main/java/dev/ivchenko/lwjwae/Window.java)                                                                                                                                                                                                                                                                 | One native window with a web view inside: title, size, position, `show`/`hide`, navigation, `eval`, the bridge of that window.                                                                                                                                                                                                                         |
+| [`Window`](src/main/java/dev/ivchenko/lwjwae/Window.java)                                                                                                                                                                                                                                                                 | One native window with a web view inside: title, size and its limits, position, minimized, maximized, full screen, on top, focus, `show`/`hide`, navigation, `eval`, the bridge of that window. |
 | [`ApplicationParameters`](src/main/java/dev/ivchenko/lwjwae/ApplicationParameters.java)                                                                                                                                                                                                                                   | What the application starts with: development server, codec, and the name that notifications show.                                                                                                                                                                                                                                                     |
 | [`WindowParameters`](src/main/java/dev/ivchenko/lwjwae/WindowParameters.java)                                                                                                                                                                                                                                             | What a window starts with: title, size, position, URL or resource, and its close action.                                                                                                                                                                                                                                                               |
 | [`CloseAction`](src/main/java/dev/ivchenko/lwjwae/CloseAction.java)                                                                                                                                                                                                                                                       | What the close button of the title bar does: `CLOSE`, or `HIDE` for an application that lives in the tray; `HIDE` hides only while a tray icon is up. `Window.closeAction(...)` changes it at run time; `requestClose()` does what the button does, `close()` always closes.                                                                                                                      |
@@ -21,25 +21,52 @@ the window; a codec module supplies JSON when you use the typed bridge methods.
 | [`rpc.RpcHandler`](src/main/java/dev/ivchenko/lwjwae/rpc/RpcHandler.java), [`rpc.RpcCall`](src/main/java/dev/ivchenko/lwjwae/rpc/RpcCall.java), [`rpc.RpcStream`](src/main/java/dev/ivchenko/lwjwae/rpc/RpcStream.java), [`rpc.RpcException`](src/main/java/dev/ivchenko/lwjwae/rpc/RpcException.java) | Calls with a body and an answer of bytes, text, a value, or a stream: `handle(name, handler)` on a window or the application, `lwjwae.call` and `lwjwae.invoke` on the page. |
 | [`event.Event`](src/main/java/dev/ivchenko/lwjwae/event/Event.java)                                                                                                                                                                                                                                                       | What a Java listener receives: name, payload, and the window that the event came through.                                                                                                                                                                                                                                                              |
 | [`event.LoadEvent`](src/main/java/dev/ivchenko/lwjwae/event/LoadEvent.java), [`event.LoadState`](src/main/java/dev/ivchenko/lwjwae/event/LoadState.java)                                                                                                                                                                  | Page load lifecycle notifications.                                                                                                                                                                                                                                                                                                                     |
-| [`tray.TrayIcon`](src/main/java/dev/ivchenko/lwjwae/tray/TrayIcon.java), [`tray.TrayMenuItem`](src/main/java/dev/ivchenko/lwjwae/tray/TrayMenuItem.java), [`tray.Tray`](src/main/java/dev/ivchenko/lwjwae/tray/Tray.java)                                                                                                 | A system tray icon: what it shows, its menu, and the handle that changes or removes it. `Application.tray(TrayIcon)` puts one up; it belongs to the application, keeps `run()` going with no window open, and goes away with the application at the latest. A backend without tray support throws `UnsupportedOperationException`.                     |
-| [`notification.Notification`](src/main/java/dev/ivchenko/lwjwae/notification/Notification.java), [`notification.NotificationAction`](src/main/java/dev/ivchenko/lwjwae/notification/NotificationAction.java), [`notification.NotificationHandle`](src/main/java/dev/ivchenko/lwjwae/notification/NotificationHandle.java) | A desktop notification: its title, body, image, buttons, and click handler, and the handle that takes it back. `Application.showNotification(Notification)` shows one; it doesn't keep `run()` going, and `quit()` takes it back. A backend without notifications, or a desktop without a notification server, throws `UnsupportedOperationException`. |
-| `exception.*`                                                                                                                                                                                                                                                                                                             | [`BackendNotAvailableException`](src/main/java/dev/ivchenko/lwjwae/exception/BackendNotAvailableException.java), [`ResourceNotFoundException`](src/main/java/dev/ivchenko/lwjwae/exception/ResourceNotFoundException.java), [`ScriptEvaluationFailedException`](src/main/java/dev/ivchenko/lwjwae/exception/ScriptEvaluationFailedException.java).     |
+| [`tray.TrayIcon`](src/main/java/dev/ivchenko/lwjwae/tray/TrayIcon.java), [`tray.TrayMenuItem`](src/main/java/dev/ivchenko/lwjwae/tray/TrayMenuItem.java), [`tray.Tray`](src/main/java/dev/ivchenko/lwjwae/tray/Tray.java)                                                                                                 | A system tray icon: what it shows, its menu, and the handle that changes or removes it. The image is PNG bytes or a PNG among the resources of the application, `icon("app/tray.png")`. `Application.tray(TrayIcon)` puts one up; it belongs to the application, keeps `run()` going with no window open, and goes away with the application at the latest. A backend without tray support throws `UnsupportedOperationException`.                     |
+| [`notification.Notification`](src/main/java/dev/ivchenko/lwjwae/notification/Notification.java), [`notification.NotificationAction`](src/main/java/dev/ivchenko/lwjwae/notification/NotificationAction.java), [`notification.NotificationHandle`](src/main/java/dev/ivchenko/lwjwae/notification/NotificationHandle.java) | A desktop notification: its title, body, image, buttons, and click handler, and the handle that takes it back. `Notification.of(title, body)` is the plain one; the image is PNG bytes or a resource path. `Application.showNotification(Notification)` shows one; it doesn't keep `run()` going, and `quit()` takes it back. A backend without notifications, or a desktop without a notification server, throws `UnsupportedOperationException`. |
+| [`shortcut.Shortcut`](src/main/java/dev/ivchenko/lwjwae/shortcut/Shortcut.java), [`shortcut.ShortcutKey`](src/main/java/dev/ivchenko/lwjwae/shortcut/ShortcutKey.java), [`shortcut.ShortcutModifier`](src/main/java/dev/ivchenko/lwjwae/shortcut/ShortcutModifier.java) | A combination of keys for `Application.globalShortcut`, which runs a handler on it whichever application has the keyboard. `Shortcut.parse("CmdOrCtrl+Shift+K")` reads one. |
+| `exception.*`                                                                                                                                                                                                                                                                                                             | [`BackendNotAvailableException`](src/main/java/dev/ivchenko/lwjwae/exception/BackendNotAvailableException.java), [`ResourceNotFoundException`](src/main/java/dev/ivchenko/lwjwae/exception/ResourceNotFoundException.java), [`ScriptEvaluationFailedException`](src/main/java/dev/ivchenko/lwjwae/exception/ScriptEvaluationFailedException.java), [`ShortcutUnavailableException`](src/main/java/dev/ivchenko/lwjwae/exception/ShortcutUnavailableException.java).     |
 
-A minimal application:
+A minimal application, in one line:
+
+```java
+Application.launch("Docs", "app/index.html");
+```
+
+The same, step by step:
 
 ```java
 try (Application application = Application.create()) {
   Window window = application.open(WindowParameters.builder()
       .title("Docs")
-      .width(1280)
-      .height(800)
+      .size(1280, 800)
       .build());
   window.bind("reverse", text -> new StringBuilder(text).reverse().toString());
-  window.loadResource("app/index.html");
+  window.load("app/index.html");
   window.show();
   application.run();
 }
 ```
+
+### Short paths and the detailed API
+
+Every short path is a call of the detailed API that states the common choice, so the two mix
+freely:
+
+| Short path                                        | Stands for                                                                                     |
+|---------------------------------------------------|------------------------------------------------------------------------------------------------|
+| `Application.launch(title, target)`               | `create`, `open`, `load`, `show`, `run`, and `close`, for one window                           |
+| `Application.launch(parameters, setup)`           | The same with `WindowParameters`, and `setup` to bind before the page loads                    |
+| `application.show(target)`, `show(parameters)`    | `open`, `load`, and `show`                                                                     |
+| `window.load(target)`                             | `navigate` for a URL, which has a scheme such as `https:`, `loadResource` for a path          |
+| `WindowParameters.of(title, target)`, `of(title, width, height)` | The builder with a title and a page, or a title and a size                      |
+| `window.alert(message)`, `confirm(message)`       | `showMessageDialog` with OK, or with OK and Cancel as a question                              |
+| `window.pickFile(types...)`, `pickFiles(types...)`, `pickFolder()`, `pickSaveFile(name, types...)` | `showOpenDialog` and `showSaveDialog` with one file, many, a folder, or a file to save |
+| `application.tray(icon, items...)`                | `tray(TrayIcon)` with an image among the resources and a menu                                 |
+| `application.showNotification(title, body)`       | `showNotification(Notification.of(title, body))`                                              |
+| `call.replyResource(path)`                        | `reply` with a file of the application and the type of its extension                          |
+| `size(WindowSize)`, `position(WindowPosition)`, `minimumSize(WindowSize)`, `maximumSize(WindowSize)` | The same as the two numbers                                            |
+
+A canceled short dialog closes its dialog, as the detailed one does.
 
 ### Application and windows
 
@@ -56,17 +83,310 @@ wants to stay alive without a window loops. `quit()`, which `close()` also calls
 window, releases every thread blocked in `run()`, and refuses every `open` from then on.
 
 A page opens and closes windows too. `window.lwjwae.open(options)` takes the same options as
-`WindowParameters` (`title`, `width`, `height`, `x`, `y`, `centered`, `url`, `resource`), shows
+`WindowParameters` (`title`, `width`, `height`, `x`, `y`, `centered`, `url`, `resource`,
+`decorated`, `closable`, `minimizable`, `maximizable`, `transparent`), shows
 the window, and resolves to its ID. `window.lwjwae.close()` closes the window of the page.
 
 ### Placing the window
 
-`WindowParameters.x`/`y` open the window at a screen position, `centered` in the middle of
-the screen; `position(x, y)`, `center()`, and `position()` on the window do the same later. The
+`WindowParameters.position` opens the window at a screen position, `centered` in the middle of
+the screen; `position(x, y)` or `position(WindowPosition)`, `center()`, and `position()` on the
+window do the same later. `size()` reads the content area as a `WindowSize`, and `size(width,
+height)` or `size(WindowSize)` changes it. The
 coordinates are those of the window frame, from the top left of the screen, in the units of the
 platform. Wayland is the exception: the protocol keeps window placement with the compositor, so
 there `position(x, y)` does nothing, `position()` returns `0, 0`, and `center()` is a request that
 the compositor may ignore. X11, Windows, and macOS place windows as asked.
+
+### Screens
+
+`application.screens()` lists the screens of the desktop, the primary one first, and
+`primaryScreen()` and `window.screen()` pick one. A `Screen` has a name for a person, its
+`bounds`, its `workArea` without the taskbar, the menu bar, the Dock, or the panels, its `scale`,
+the physical pixels per unit, and whether it's `primary`. Areas are `ScreenArea`s in the units of
+`WindowPosition`, from the top left of the primary screen, so a screen to its left has negative
+coordinates:
+
+```java
+Screen screen = window.screen();
+ScreenArea area = screen.workArea();
+window.position(area.x() + area.width() - 420, area.y() + 20);
+```
+
+A window with a state key opens where it closed only if the top of it, where the title bar is,
+would be on one of the screens of now: a monitor that was unplugged, or a resolution that shrank,
+leaves the window where the platform puts it, with its size.
+
+The list is read at the moment of the call; the Javadoc of `Screen` says what each platform
+reports, since Wayland has no primary screen and tells no work area, and GTK 4 knows neither.
+
+### The state of the window
+
+`minimize()`, `maximize()`, `restore()`, `fullscreen(boolean)`, `alwaysOnTop(boolean)`, and
+`focus()` change the state of the window, and `isMinimized()`, `isMaximized()`, `isFullscreen()`,
+`isAlwaysOnTop()`, and `isFocused()` read it. The window manager applies a change
+asynchronously, so a read right after a change may still see the old state. `minimumSize` and
+`maximumSize`, each with two numbers or a `WindowSize`, keep the user within limits of the content
+area, zero meaning no limit, and resize a window that is outside them; `WindowParameters` takes the limits
+and `alwaysOnTop` for a window from its start. A hidden window keeps a minimize or a maximize
+until it's shown.
+
+### Window events
+
+`window.onWindowEvent(listener)` hears every change of the window as a
+[`WindowEvent`](src/main/java/dev/ivchenko/lwjwae/event/WindowEvent.java): `RESIZED`, `MOVED`,
+`FOCUSED`, `BLURRED`, `MINIMIZED`, `UNMINIMIZED`, `MAXIMIZED`, `UNMAXIMIZED`, `FULLSCREEN_ENTERED`,
+`FULLSCREEN_EXITED`, each with the size and the position after it. The page hears the same through
+`window.lwjwae.window.listen((event) => ...)`, with `event.type` as `resized`, `fullscreenEntered`,
+and so on, and `width`, `height`, `x`, `y`.
+
+A backend doesn't work out what changed: from every toolkit callback that may mean a change, it
+calls `windowChanged()`, and [`WindowEvents`](src/main/java/dev/ivchenko/lwjwae/event/WindowEvents.java)
+reads the window on the UI thread, once the toolkit is done, and compares it with the last reading.
+The events are the same on every platform, a callback that changed nothing yields nothing, and a
+burst of callbacks, as a drag of the edge of a window makes, yields one reading. Java listeners run
+on a thread of the window, in order.
+
+### Remembering a window
+
+With `WindowParameters.stateKey("main")`, a window opens the way it last closed: the size and the
+position it had while it was neither maximized nor in full screen, and maximized if it was. The
+state follows the window events, and is written to `window-state.properties` in
+`ApplicationParameters.dataDirectory()` when the window closes, through a temporary file, so a crash
+leaves the old one. The data directory defaults to the one that the platform has for the data of an
+application named after `ApplicationParameters.name`; without a name and a directory, a state key
+does nothing. Where the platform never reports a position, on Wayland and GTK 4, none is saved, and
+the window opens where the desktop puts it.
+
+### A window without a title bar
+
+`WindowParameters.decorated(false)` takes the title bar away, and the page draws its own. The
+window keeps what a window has around its title bar: the shadow, the rounded corners, and resize
+edges, native wherever the platform has them. `closable`, `minimizable`, and `maximizable` take a
+button off the title bar; `closable(false)` also refuses the close of the user, from the shortcut
+or a menu of the desktop, while `close()` from Java still closes. Java's `minimize()` and
+`maximize()` work either way.
+
+The page marks where the user grabs the window:
+
+```html
+<header data-lwjwae-drag>
+  <span>My app</span>
+  <button onclick="lwjwae.window.minimize()">_</button>
+  <button onclick="lwjwae.window.toggleMaximize()">□</button>
+  <button onclick="lwjwae.window.close()">×</button>
+</header>
+```
+
+A press inside an element with `data-lwjwae-drag` moves the window once the pointer moves a few
+pixels with the button down, and a double click maximizes it, as a title bar does, or does what
+macOS is set to do. A control inside the region (a button, a link, a field) keeps the press, and so
+does an element with `data-lwjwae-drag="false"` and a press that the page already handled with
+`preventDefault()`. A click alone never reaches the window manager: one of X11 that took the
+pointer for a click would take the next click with it.
+
+`window.lwjwae.window` has what a title bar of the page needs: `minimize()`, `maximize()`,
+`restore()`, `toggleMaximize()`, `fullscreen(on)`, `close()`, which is `requestClose()` and so
+hides or refuses as the window says, `state()`, which resolves to `{ width, height, x, y,
+minimized, maximized, fullscreen, focused, resizable }`, and, for a page that handles the pointer
+itself, `startMove()` and `startResize(edge)`, called while the button is down, with `edge` as
+`top`, `bottom-left`, and so on. These are calls under the reserved name `lwjwae:control`.
+
+| Platform | Without a title bar |
+|---|---|
+| GTK 3, GTK 4 | A title bar that never shows: the window keeps the frame it draws itself, with its shadow, and resizes from it. With a button off, the window draws its own bar, like GTK's own, with the layout of the desktop minus that button. |
+| Windows | `WM_NCCALCSIZE` gives the whole window to the client area except the resize edges on the left, the right, and at the bottom; the style stays, and with it snapping and the animations. The top edge is a strip that the page lays over itself and resizes from. |
+| macOS | A titled window with its content under a transparent title bar, and no buttons: rounded corners, a shadow, resize edges, and the keyboard, which a borderless window can't take. `startResize` does nothing: AppKit resizes only from the edges. |
+
+### A transparent window
+
+`WindowParameters.transparent(true)` takes the background of the window and of its web view away:
+wherever the page draws nothing, the desktop shows through, and a half-transparent color blends
+with it. The page draws its own shape, usually in a window without a title bar:
+
+```java
+application.open(
+    WindowParameters.builder()
+        .size(420, 300)
+        .decorated(false)
+        .transparent(true)
+        .resource("app/widget.html")
+        .build());
+```
+
+```css
+html, body { background: transparent; }
+.card { border-radius: 24px; background: rgba(30, 30, 40, 0.85); }
+```
+
+Without a title bar, a transparent window loses its whole frame too: the shadow and the border
+would outline the rectangle around the shape of the page. The page takes the pointer along every
+edge instead, in a strip of 5 pixels, and resizes the window from there, as `startResize` does.
+Those strips lie on the edges of the window, not of the shape, so a shape that the user resizes
+reaches the edges of the window. A decorated window keeps its
+title bar and its frame. The choice is made once, when the window opens, and a page asks for it
+with `lwjwae.open({ transparent: true })`.
+
+| Platform | Transparent window |
+|---|---|
+| GTK 3 | The visual of the screen with an alpha channel, and no background of the theme. Without a title bar, CSS of the window takes the shadow and the border off the frame that GTK draws: `gtk_window_set_decorated(FALSE)` would make KWin on Wayland add a title bar of its own. X11 needs a compositing window manager; without one, the clear parts are black. |
+| GTK 4 | The `background` CSS class comes off the window, whose surface has an alpha channel already. Without a title bar, `gtk_window_set_decorated(FALSE)`. X11 needs a compositing window manager, as on GTK 3. |
+| Windows | `WS_EX_NOREDIRECTIONBITMAP`: the window has no surface of its own, only what WebView2 draws, over a transparent `DefaultBackgroundColor`. Without a title bar, `WM_NCCALCSIZE` gives the whole window to the client area, and the style stays, with snapping and the animations. |
+| macOS | A window that isn't opaque, with a clear background, and a web view without `drawsBackground`. Without a title bar, the window stays titled, for the keyboard, and keeps its resize edges and its shadow, which follows what the page draws. |
+
+### Dialogs
+
+`showOpenDialog`, `showSaveDialog`, and `showMessageDialog` on a window show the dialogs of the
+platform over it, and return a future at once:
+
+```java
+window.showOpenDialog(OpenDialogParameters.builder()
+        .fileTypes(List.of(FileType.of("Images", "png", "jpg")))
+        .multiple(true)
+        .build())
+    .thenAccept(paths -> ...);             // none if the user cancelled
+window.showSaveDialog(SaveDialogParameters.builder().fileName("notes.txt").build());
+window.showMessageDialog(MessageDialogParameters.builder()
+    .message("Delete it?").level(MessageLevel.QUESTION).buttons(MessageButtons.YES_NO).build());
+```
+
+`directories(true)` picks folders; a save dialog asks before it picks a file that exists; a message
+answers `true` for OK or yes. Extensions match without regard to case. Cancelling the future closes
+the dialog, and a window that closes cancels its dialogs. The page has the same in
+`window.lwjwae.dialog.open(options)`, `save(options)`, and `message(options)`, with `fileTypes` as
+`[{ name, extensions }]`, `level` as `info`, `warning`, `error`, or `question`, `buttons` as `ok`,
+`okCancel`, or `yesNo`, and a `signal` whose abort closes the dialog; they are calls under the
+reserved name `lwjwae:dialog`.
+
+A backend shows a dialog on the UI thread in `presentOpenDialog` and its siblings, and answers the
+[`DialogCompletion`](src/main/java/dev/ivchenko/lwjwae/dialog/DialogCompletion.java) that it gets;
+it registers how to close the dialog before it shows it, since a modal dialog of Windows returns
+only when the user answers.
+
+| Platform | Files | Messages |
+|---|---|---|
+| GTK 3, GTK 4 | `GtkFileChooserNative`: the portal of the desktop inside a sandbox, GTK's own outside one | `GtkMessageDialog`, with the button labels of GTK in the language of the user |
+| Windows | `IFileOpenDialog` and `IFileSaveDialog`; the first extension of the chosen kind completes a name without one | `MessageBoxW`; the title of the window as its caption when there's none |
+| macOS | `NSOpenPanel` and `NSSavePanel` as sheets of the window; an open panel has no menu of kinds, so it shows the files of every kind | `NSAlert` as a sheet, which has no title |
+
+### Clipboard
+
+`application.clipboard()` is the clipboard of the desktop, the one of Ctrl+C or Command-C. A read
+returns a future, since the application that copied may answer later; a write takes the clipboard
+at once:
+
+```java
+Clipboard clipboard = application.clipboard();
+clipboard.writeText("https://example.com");
+Optional<String> text = clipboard.readText().get();
+
+clipboard.writeImage("app/logo.png");               // or PNG bytes
+Optional<byte[]> png = clipboard.readImage().get(); // PNG, whatever form was copied
+```
+
+An image goes in the forms that other applications of the platform read: PNG and a bitmap on
+Windows, PNG and TIFF on macOS, every format that GTK writes on Linux. It comes back as PNG, from
+whichever form the application that copied it chose, a screenshot included.
+
+The page has the same through `window.lwjwae.clipboard`, without the permission prompts and the
+user gesture that `navigator.clipboard` asks for in a web view:
+
+```js
+await lwjwae.clipboard.writeText("copied");
+const text = await lwjwae.clipboard.readText(); // null when there is no text
+```
+
+Windows keeps what was written after the application exits, and so does macOS; on Linux, a
+clipboard manager of the desktop takes a copy, as most desktops have one. Wayland gives the
+clipboard only to the application whose window has the focus that the user gave it: a write or a
+read from a background thread, with no window in front, finds nothing.
+
+
+### Global shortcuts
+
+`application.globalShortcut(shortcut, handler)` runs the handler whenever the user presses the
+shortcut, whichever application has the keyboard, until the returned handle gives it back or the
+application closes. The handler runs off the UI thread, like a handler of the tray:
+
+```java
+EventSubscription shortcut =
+    application.globalShortcut("CmdOrCtrl+Shift+Space", window::focus);
+shortcut.unlisten(); // gives the shortcut back
+```
+
+A shortcut is written with the modifiers first and the key last: `Ctrl`, `Alt`, `Shift`, `Meta`,
+which is Win, Command, or Super, and `CmdOrCtrl`, which is Command on macOS and Ctrl elsewhere; the
+key is a letter, a digit, `F1` to `F24`, or a named key such as `Space`, `Enter`, `PageUp`, or
+`Left`. `Shortcut.of(ShortcutKey.K, ShortcutModifier.CONTROL)` says the same in code. A key other
+than a function key needs a modifier, since the shortcut takes the key away from every application.
+A shortcut that another application holds throws `ShortcutUnavailableException`, and so does one
+that this application holds already.
+
+| Platform | Global shortcut |
+|---|---|
+| Windows | `RegisterHotKey` on the message window of the UI thread, so a shortcut keeps working while every window is hidden. Holding the keys down runs the handler once. |
+| macOS | A hot key of Carbon, which needs no permission of the user. A letter names the key at its place on a US keyboard, as the menu shortcuts of macOS do. |
+| Linux, X11 | A grab of the key on the root window, with and without Caps Lock and Num Lock. |
+| Linux, Wayland | The `GlobalShortcuts` portal, which KDE Plasma and GNOME 48 and later have. The desktop asks the user to confirm the shortcut the first time and may let them pick other keys; `globalShortcut` returns before that. `focus()` from the handler brings the window to the front where the portal hands on the activation token of the press, as GNOME does; KDE Plasma hands none on, so there the window only asks for attention. Without the portal, the call throws `UnsupportedOperationException`. |
+
+### Links that leave the application
+
+A click in a page of the application on a link to another origin or a `mailto:` link,
+`window.open` of such a URL, and `window.lwjwae.openExternal(url)` open the URL where the system
+opens it, the browser or the mail client, and the window stays on its page. So does a request for
+a new window, `target="_blank"` or `window.open`, of a URL from elsewhere; one of the application's
+own origin opens in the window itself, since a web view has no tabs, and no engine opens a window
+of its own. A link that the page already handled with `preventDefault()`, a download, a link inside
+the application, and a navigation that a script or Java starts stay in the window, as does
+everything in a page from elsewhere that the window shows.
+
+`window.externalLinkHandler(url -> ...)` decides instead, for example to open a sign-in page in a
+window of the application; `Application.openExternal(url)` is what the default does, and takes
+only `http`, `https`, and `mailto`: a `file:` URL or the scheme of another application would run
+whatever the system associates with it. It goes through `g_app_info_launch_default_for_uri` on
+Linux, the OpenURI portal inside a sandbox included, `ShellExecuteW` on Windows, and `NSWorkspace`
+on macOS.
+
+### One instance
+
+`Application.createSingleInstance(parameters, args)` in place of `create` keeps one process of the
+application running per user. The first start creates the application as `create` does. A later
+one hands its arguments and its working directory to the first and gets an empty `Optional`,
+having opened nothing, not even the toolkit, so `main` returns and the process ends:
+
+```java
+public static void main(String[] args) {
+  ApplicationParameters parameters = ApplicationParameters.builder().name("notes").build();
+  Optional<Application> created = Application.createSingleInstance(parameters, args);
+  if (created.isEmpty()) {
+    return;
+  }
+  try (Application application = created.get()) {
+    application.onSecondInstance(start -> openFiles(start.workingDirectory(), start.arguments()));
+    ...
+  }
+}
+```
+
+In the first process, the oldest window comes to the front, shown and restored if it was hidden or
+minimized, and then the `onSecondInstance` listeners get a `SecondInstanceEvent`. A listener runs
+on a virtual thread, and the later process waits until it returns, so it ends knowing that it was
+heard. A start that comes before any listener waits for the first one. Where the system doesn't
+let a process take the focus, on Wayland, the window comes back but may only ask for attention.
+
+The processes meet on a Unix domain socket named after a hash of the user and
+`ApplicationParameters.name()`, which is therefore required: in `$XDG_RUNTIME_DIR` on Linux, the
+temporary directory elsewhere, Windows 10 and later included. A lock file next to it lets only one
+of two processes that start at the same moment become the first. The socket file stays when the
+process ends, and the next first start replaces it. `quit()` gives the name up.
+
+Where the platform can't, the call does what it can and the reads say so:
+
+| Platform      | What's missing                                                                                                   |
+|---------------|------------------------------------------------------------------------------------------------------------------|
+| Wayland       | `isMinimized()` is always `false`; `focus()` can't take the focus from another application; `alwaysOnTop` is up to the compositor. |
+| GTK 4         | No `maximumSize` and no `alwaysOnTop`: both do nothing and read back as none. `size()` sizes a window only before it's first shown. |
+| Windows       | A process in the background can't take the focus, only make the taskbar entry flash, nor put a window on top; `WindowParameters.alwaysOnTop` can, since the window is created on top. |
 
 Every method of `Application` and `Window` is safe to call from any thread. The backend forwards
 the call to its UI thread, and a getter blocks until the UI thread has answered.
@@ -210,9 +530,9 @@ name before the first. A listener that throws is reported and the others still r
 ### Windows from the page
 
 `window.lwjwae.open(options)` and `window.lwjwae.close()` go through the same path as a call, under
-the reserved names `lwjwae:open` and `lwjwae:close`. The options travel as the components of
-`WindowParameters` in declaration order, separated by the unit separator, an empty field for one the
-page left out, so no codec is needed. The window opens through `Application.open`, is shown, and
+the reserved names `lwjwae:open` and `lwjwae:close`. The options travel as fields separated by the
+unit separator: the title, the size, the position, `centered`, `url`, `resource`, and the four flags
+of the frame, an empty field for one the page left out, so no codec is needed. The window opens through `Application.open`, is shown, and
 its ID resolves the promise. `close` closes the window of the page, so its promise never settles.
 
 ### Typed calls
@@ -248,6 +568,7 @@ like `fetch` does:
 
 ```java
 application.handle("thumbnail", call -> call.reply(render(call.body()), "image/png"));
+application.handle("manual", call -> call.replyResource("docs/manual.pdf"));
 application.handle("export", call -> {
     try (RpcStream stream = call.stream("text/csv")) {
         for (Row row : rows) {
@@ -265,7 +586,8 @@ const point = await lwjwae.invoke("move", { x: 1, y: 2 }); // through the codec
 
 The body is a string, bytes (`ArrayBuffer`, a typed array, a `Blob`), or an object, which the codec
 encodes. `RpcCall` reads it as bytes, `text()`, or `value(Class)`, and answers once: `reply` with
-bytes or text, `replyValue` through the codec, or `stream`, which the page reads part by part as
+bytes or text, `replyResource` with a file among the resources of the application, of the type of
+its extension, `replyValue` through the codec, or `stream`, which the page reads part by part as
 Java writes it. `lwjwae.invoke` is the shortcut for a value in and a value out. A handler that
 returns without an answer answers 204. A handler that throws answers 500, or the status and code of
 an `RpcException`; the promise on the page rejects with an `RpcError` that carries them. Aborting
@@ -397,7 +719,11 @@ throwable unwind into C is undefined behavior.
 
 The display tests skip when no display is present, so a headless machine gets a passing build. With
 `-Dlwjwae.requireDisplay=true`, a missing display fails the build instead, which is what CI runs
-under Xvfb. `-Dlwjwae.screenshots=true` captures the screen while each window is open.
+under Xvfb. The window tests need a window manager, or nobody answers a request to minimize or
+maximize; CI runs openbox, and `WindowContractTest` has a hook for each thing that a platform
+can't do, such as telling a Wayland client that its window is minimized. `-Dlwjwae.screenshots=true` captures the screen while each window is open, with a tool of the system:
+`import` of ImageMagick on X11, `grim` on a wlroots compositor, PowerShell on Windows, and
+`screencapture` on macOS; never `java.awt.Robot`, which showed a GTK dialog on Xvfb as a black box.
 
 The bridge tests need a [`BridgeCodec`](src/main/java/dev/ivchenko/lwjwae/bridge/codec/BridgeCodec.java). A backend module registers [`PointCodec`](src/testFixtures/java/dev/ivchenko/lwjwae/testing/PointCodec.java) from the fixtures
 in the `META-INF/services` of its test classpath, so the tests run without a JSON library.

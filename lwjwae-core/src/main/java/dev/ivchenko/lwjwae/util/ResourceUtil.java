@@ -4,6 +4,7 @@ import dev.ivchenko.lwjwae.exception.ResourceNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
+import java.util.regex.Pattern;
 import lombok.experimental.UtilityClass;
 
 /**
@@ -23,9 +24,20 @@ public class ResourceUtil {
   /** The authority of that scheme. It's a constant, because no real host is involved. */
   public final String HOST = "local";
 
+  /** A scheme and its colon, as RFC 3986 spells it, of two letters or more to leave out C:. */
+  private final Pattern URL_SCHEME = Pattern.compile("[a-zA-Z][a-zA-Z0-9+.-]+:");
+
+  /**
+   * Whether {@code target} is a URL, with a scheme such as {@code https:} or {@code file:}, rather
+   * than the path of a resource, such as {@code app/index.html}, which has none.
+   */
+  public boolean isUrl(String target) {
+    return URL_SCHEME.matcher(target).lookingAt();
+  }
+
   /** Returns the URL for {@code path}, for example {@code app://local/app/index.html}. */
   public String url(String path) {
-    return "%s://%s/%s".formatted(SCHEME, HOST, normalize(path));
+    return "%s://%s/%s".formatted(SCHEME, HOST, ResourceUtil.normalize(path));
   }
 
   /**
@@ -35,7 +47,7 @@ public class ResourceUtil {
    * @throws UncheckedIOException If the resource exists but can't be read.
    */
   public byte[] read(String path) {
-    String normalized = normalize(path);
+    String normalized = ResourceUtil.normalize(path);
     ClassLoader loader = Thread.currentThread().getContextClassLoader();
     if (loader == null) {
       loader = ResourceUtil.class.getClassLoader();

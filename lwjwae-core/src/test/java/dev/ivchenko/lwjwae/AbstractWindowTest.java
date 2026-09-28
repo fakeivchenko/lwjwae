@@ -1,18 +1,29 @@
 package dev.ivchenko.lwjwae;
 
 import dev.ivchenko.lwjwae.bridge.BridgeProtocol;
+import dev.ivchenko.lwjwae.dialog.FileType;
+import dev.ivchenko.lwjwae.dialog.MessageButtons;
+import dev.ivchenko.lwjwae.dialog.MessageDialogParameters;
+import dev.ivchenko.lwjwae.dialog.OpenDialogParameters;
+import dev.ivchenko.lwjwae.dialog.SaveDialogParameters;
 import dev.ivchenko.lwjwae.event.Event;
 import dev.ivchenko.lwjwae.event.EventSubscription;
 import dev.ivchenko.lwjwae.event.LoadEvent;
 import dev.ivchenko.lwjwae.event.LoadState;
+import dev.ivchenko.lwjwae.event.WindowEvent;
+import dev.ivchenko.lwjwae.event.WindowEventType;
 import dev.ivchenko.lwjwae.testing.FakeApplication;
 import dev.ivchenko.lwjwae.testing.FakeWindow;
 import dev.ivchenko.lwjwae.testing.Point;
 import dev.ivchenko.lwjwae.testing.PointCodec;
+import dev.ivchenko.lwjwae.testing.PresentedDialog;
 import dev.ivchenko.lwjwae.testing.RpcReply;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -233,6 +244,38 @@ class AbstractWindowTest {
   }
 
   @Test
+  void handlerRepliesWithResourceOfTheTypeOfItsExtension() throws Exception {
+    try (FakeApplication application = new FakeApplication()) {
+      FakeWindow window = application.openFake();
+      window.handle("hello", call -> call.replyResource("fixtures/hello.txt"));
+      window.call(6, "hello", "");
+      RpcReply reply = window.awaitReply(6);
+      Assertions.assertEquals(200, reply.status());
+      Assertions.assertTrue(reply.contentType().startsWith("text/plain"), reply.contentType());
+      Assertions.assertEquals("hello from the classpath", reply.body().strip());
+    }
+  }
+
+  @Test
+  void thePageWritesAndReadsTheClipboard() throws Exception {
+    try (FakeApplication application = new FakeApplication()) {
+      FakeWindow window = application.openFake();
+
+      window.call(1, BridgeProtocol.CLIPBOARD_CALL, "read-text");
+      Assertions.assertEquals("0", window.awaitReply(1).body(), "nothing copied yet");
+
+      window.call(2, BridgeProtocol.CLIPBOARD_CALL, "write-text" + SEP + "copied " + SEP + " text");
+      Assertions.assertEquals(204, window.awaitReply(2).status());
+      Assertions.assertEquals(
+          Optional.of("copied " + SEP + " text"),
+          application.clipboard().readText().get(5, TimeUnit.SECONDS));
+
+      window.call(3, BridgeProtocol.CLIPBOARD_CALL, "read-text");
+      Assertions.assertEquals("1copied " + SEP + " text", window.awaitReply(3).body());
+    }
+  }
+
+  @Test
   void anUnknownNameIsRejectedOnThePageSide() throws Exception {
     try (FakeApplication application = new FakeApplication()) {
       FakeWindow window = application.openFake();
@@ -288,7 +331,7 @@ class AbstractWindowTest {
     try (FakeApplication application = new FakeApplication()) {
       FakeWindow window = application.openFake();
       List<Throwable> reported =
-          captureUncaught(
+          AbstractWindowTest.captureUncaught(
               () -> {
                 window.receive("no separators here");
                 window.receive(
@@ -312,7 +355,7 @@ class AbstractWindowTest {
           "slow",
           _ -> {
             handlerStarted.countDown();
-            await(windowClosed);
+            AbstractWindowTest.await(windowClosed);
             return "late";
           });
 
@@ -353,7 +396,7 @@ class AbstractWindowTest {
   }
 
   @Test
-  void cancellingACallInterruptsItsHandler() throws Exception {
+  void cancelingCallInterruptsItsHandler() throws Exception {
     try (FakeApplication application = new FakeApplication()) {
       FakeWindow window = application.openFake();
       CountDownLatch started = new CountDownLatch(1);
@@ -374,6 +417,266 @@ class AbstractWindowTest {
       Assertions.assertTrue(started.await(5, TimeUnit.SECONDS));
       window.cancel(1);
       Assertions.assertTrue(interrupted.await(5, TimeUnit.SECONDS));
+    }
+  }
+
+  @Test
+  void windowEventsReportWhatChangedToJavaAndToThePage() throws Exception {
+    try (FakeApplication application = new FakeApplication()) {
+      FakeWindow window = application.openFake();
+      BlockingQueue<WindowEvent> heard = new LinkedBlockingQueue<>();
+      window.onWindowEvent(heard::add);
+      window.call(1, BridgeProtocol.EVENTS_CALL, "");
+      // The fake changes at once, not on the UI thread: the first reading must come before.
+      window.awaitUiThread();
+
+      window.maximize();
+      window.size(800, 600);
+      window.reportChange();
+      WindowEvent maximized = heard.poll(5, TimeUnit.SECONDS);
+      Assertions.assertNotNull(maximized);
+      Assertions.assertEquals(WindowEventType.MAXIMIZED, maximized.type());
+      Assertions.assertSame(window, maximized.window());
+      WindowEvent resized = heard.poll(5, TimeUnit.SECONDS);
+      Assertions.assertNotNull(resized);
+      Assertions.assertEquals(WindowEventType.RESIZED, resized.type());
+      Assertions.assertEquals(new WindowSize(800, 600), resized.size());
+
+      window.reportChange();
+      Assertions.assertNull(heard.poll(300, TimeUnit.MILLISECONDS), "nothing changed, no event");
+
+      List<String> page = window.awaitEvents(1, 2);
+      Assertions.assertEquals(
+          "0"
+              + SEP
+              + BridgeProtocol.WINDOW_EVENT
+              + SEP
+              + "{\"type\":\"maximized\",\"width\":800,\"height\":600,\"x\":0,\"y\":0}",
+          page.getFirst());
+      Assertions.assertTrue(page.get(1).contains("\"type\":\"resized\""), page.get(1));
+    }
+  }
+
+  @Test
+  void thePageControlsItsWindow() throws Exception {
+    try (FakeApplication application = new FakeApplication()) {
+      FakeWindow window = application.openFake();
+      window.call(1, BridgeProtocol.CONTROL_CALL, "maximize");
+      Assertions.assertEquals(204, window.awaitReply(1).status());
+      Assertions.assertTrue(window.isMaximized());
+      window.call(2, BridgeProtocol.CONTROL_CALL, "toggle-maximize");
+      window.awaitReply(2);
+      Assertions.assertFalse(window.isMaximized());
+      window.call(3, BridgeProtocol.CONTROL_CALL, "minimize");
+      window.awaitReply(3);
+      Assertions.assertTrue(window.isMinimized());
+      window.call(4, BridgeProtocol.CONTROL_CALL, "restore");
+      window.awaitReply(4);
+      Assertions.assertFalse(window.isMinimized());
+      window.call(5, BridgeProtocol.CONTROL_CALL, "fullscreen" + SEP + "1");
+      window.awaitReply(5);
+      Assertions.assertTrue(window.isFullscreen());
+
+      window.call(6, BridgeProtocol.CONTROL_CALL, "move");
+      window.awaitReply(6);
+      window.call(7, BridgeProtocol.CONTROL_CALL, "resize" + SEP + "top-left");
+      window.awaitReply(7);
+      Assertions.assertEquals(List.of("move", "top-left"), window.drags);
+      window.call(8, BridgeProtocol.CONTROL_CALL, "resize" + SEP + "middle");
+      Assertions.assertEquals(400, window.awaitReply(8).status());
+      window.call(9, BridgeProtocol.CONTROL_CALL, "explode");
+      Assertions.assertEquals(400, window.awaitReply(9).status());
+
+      window.call(10, BridgeProtocol.CONTROL_CALL, "state");
+      RpcReply state = window.awaitReply(10);
+      Assertions.assertEquals(200, state.status());
+      Assertions.assertEquals(
+          "{\"width\":1024,\"height\":768,\"x\":0,\"y\":0,\"minimized\":false,"
+              + "\"maximized\":false,\"fullscreen\":true,\"focused\":false,\"resizable\":true}",
+          state.body());
+
+      window.call(11, BridgeProtocol.CONTROL_CALL, "close");
+      // The window is gone before the answer could reach the page.
+      while (!window.isClosed()) {
+        Thread.onSpinWait();
+      }
+    }
+  }
+
+  @Test
+  void doubleClickOnDragRegionMaximizesOnlyMaximizableWindow() throws Exception {
+    try (FakeApplication application = new FakeApplication()) {
+      FakeWindow window = application.openFake();
+      window.call(1, BridgeProtocol.CONTROL_CALL, "title-bar-double-click");
+      window.awaitReply(1);
+      Assertions.assertTrue(window.isMaximized());
+
+      FakeWindow fixed =
+          application.openFake(WindowParameters.builder().maximizable(false).build());
+      fixed.call(1, BridgeProtocol.CONTROL_CALL, "title-bar-double-click");
+      fixed.awaitReply(1);
+      Assertions.assertFalse(fixed.isMaximized());
+      fixed.maximize();
+      Assertions.assertTrue(fixed.isMaximized(), "Java still maximizes it");
+    }
+  }
+
+  @Test
+  void windowThatIsNotClosableRefusesTheUserButNotJava() {
+    try (FakeApplication application = new FakeApplication()) {
+      FakeWindow window = application.openFake(WindowParameters.builder().closable(false).build());
+      window.requestClose();
+      Assertions.assertFalse(window.isClosed());
+      window.close();
+      Assertions.assertTrue(window.isClosed());
+    }
+  }
+
+  @Test
+  void linksThatLeaveTheApplicationGoToTheSystemOrToTheHandler() throws Exception {
+    try (FakeApplication application = new FakeApplication()) {
+      FakeWindow window = application.openFake();
+      window.call(1, BridgeProtocol.CONTROL_CALL, "open-external" + SEP + "https://example.com/a");
+      Assertions.assertEquals(204, window.awaitReply(1).status());
+      Assertions.assertEquals(List.of("https://example.com/a"), application.launched);
+
+      window.call(2, BridgeProtocol.CONTROL_CALL, "open-external" + SEP + "file:///etc/passwd");
+      Assertions.assertEquals(500, window.awaitReply(2).status() / 100 * 100);
+      Assertions.assertEquals(1, application.launched.size(), "no file: URL leaves");
+
+      BlockingQueue<String> handled = new LinkedBlockingQueue<>();
+      window.externalLinkHandler(handled::add);
+      window.call(3, BridgeProtocol.CONTROL_CALL, "open-external" + SEP + "mailto:a@b.c");
+      window.awaitReply(3);
+      Assertions.assertEquals("mailto:a@b.c", handled.poll(5, TimeUnit.SECONDS));
+      Assertions.assertEquals(1, application.launched.size(), "the handler decides instead");
+    }
+  }
+
+  @Test
+  void newWindowOfTheApplicationOpensInPlaceAndOneFromElsewhereLeaves() throws Exception {
+    try (FakeApplication application = new FakeApplication()) {
+      FakeWindow window = application.openFake();
+      BlockingQueue<String> handled = new LinkedBlockingQueue<>();
+      window.externalLinkHandler(handled::add);
+
+      window.requestNewWindow("app://local/page.html");
+      window.requestNewWindow("about:blank");
+      window.requestNewWindow("https://example.com/");
+      Assertions.assertEquals("https://example.com/", handled.poll(5, TimeUnit.SECONDS));
+      window.awaitUiThread();
+      Assertions.assertEquals(List.of("app://local/page.html"), window.navigated);
+      Assertions.assertNull(handled.poll(200, TimeUnit.MILLISECONDS), "about:blank is dropped");
+    }
+  }
+
+  @Test
+  void onlyWebAndMailLinksOpenOutside() {
+    try (FakeApplication application = new FakeApplication()) {
+      application.openExternal("HTTPS://example.com");
+      application.openExternal("mailto:someone@example.com");
+      for (String url : List.of("file:///etc/passwd", "javascript:alert(1)", "relative", "a b")) {
+        Assertions.assertThrows(
+            IllegalArgumentException.class, () -> application.openExternal(url), url);
+      }
+      Assertions.assertEquals(
+          List.of("HTTPS://example.com", "mailto:someone@example.com"), application.launched);
+    }
+  }
+
+  @Test
+  void dialogsAnswerJavaAndCancellingOneClosesIt() throws Exception {
+    try (FakeApplication application = new FakeApplication()) {
+      FakeWindow window = application.openFake();
+      final CompletableFuture<List<Path>> opened =
+          window.showOpenDialog(OpenDialogParameters.builder().multiple(true).build());
+      PresentedDialog open = window.dialogs.poll(5, TimeUnit.SECONDS);
+      Assertions.assertNotNull(open);
+      Assertions.assertTrue(((OpenDialogParameters) open.parameters()).multiple());
+      open.answer(List.of(Path.of("/a"), Path.of("/b")));
+      Assertions.assertEquals(
+          List.of(Path.of("/a"), Path.of("/b")), opened.get(5, TimeUnit.SECONDS));
+
+      CompletableFuture<Boolean> asked =
+          window.showMessageDialog(MessageDialogParameters.of("Sure?"));
+      PresentedDialog message = window.dialogs.poll(5, TimeUnit.SECONDS);
+      asked.cancel(false);
+      window.awaitUiThread();
+      Assertions.assertTrue(message.closed().get(), "cancelling the future closes the dialog");
+
+      CompletableFuture<Optional<Path>> saved =
+          window.showSaveDialog(SaveDialogParameters.createDefault());
+      final PresentedDialog save = window.dialogs.poll(5, TimeUnit.SECONDS);
+      window.close();
+      window.awaitUiThread();
+      Assertions.assertTrue(saved.isCancelled(), "a closed window cancels its dialogs");
+      Assertions.assertTrue(save.closed().get());
+    }
+  }
+
+  @Test
+  void thePageShowsDialogsAndGetsTheAnswers() throws Exception {
+    try (FakeApplication application = new FakeApplication()) {
+      FakeWindow window = application.openFake();
+      window.call(
+          1,
+          BridgeProtocol.DIALOG_CALL,
+          String.join(
+              SEP,
+              "open",
+              "Pick",
+              "/home",
+              "1",
+              "",
+              "Images"
+                  + BridgeProtocol.GROUP_SEPARATOR
+                  + "png"
+                  + BridgeProtocol.GROUP_SEPARATOR
+                  + ".JPG"
+                  + BridgeProtocol.RECORD_SEPARATOR
+                  + "Text"
+                  + BridgeProtocol.GROUP_SEPARATOR
+                  + "txt"));
+      PresentedDialog open = window.dialogs.poll(5, TimeUnit.SECONDS);
+      OpenDialogParameters parameters = (OpenDialogParameters) open.parameters();
+      Assertions.assertEquals("Pick", parameters.title());
+      Assertions.assertEquals(Path.of("/home"), parameters.directory());
+      Assertions.assertTrue(parameters.multiple());
+      Assertions.assertFalse(parameters.directories());
+      Assertions.assertEquals(
+          List.of(FileType.of("Images", "png", "jpg"), FileType.of("Text", "txt")),
+          parameters.fileTypes());
+      open.answer(List.of(Path.of("/home/a.png"), Path.of("/home/b.png")));
+      Assertions.assertEquals(
+          Path.of("/home/a.png") + SEP + Path.of("/home/b.png"), window.awaitReply(1).body());
+
+      window.call(2, BridgeProtocol.DIALOG_CALL, String.join(SEP, "save", "", "", "a.txt", ""));
+      PresentedDialog save = window.dialogs.poll(5, TimeUnit.SECONDS);
+      Assertions.assertEquals("a.txt", ((SaveDialogParameters) save.parameters()).fileName());
+      save.answer(Optional.empty());
+      Assertions.assertEquals("", window.awaitReply(2).body());
+
+      window.call(
+          3,
+          BridgeProtocol.DIALOG_CALL,
+          String.join(SEP, "message", "", "Sure?", "", "QUESTION", "YES_NO"));
+      PresentedDialog message = window.dialogs.poll(5, TimeUnit.SECONDS);
+      Assertions.assertEquals(
+          MessageButtons.YES_NO, ((MessageDialogParameters) message.parameters()).buttons());
+      message.answer(true);
+      Assertions.assertEquals("1", window.awaitReply(3).body());
+
+      window.call(
+          4, BridgeProtocol.DIALOG_CALL, String.join(SEP, "message", "", "", "", "LOUD", ""));
+      Assertions.assertEquals(400, window.awaitReply(4).status());
+
+      window.call(5, BridgeProtocol.DIALOG_CALL, String.join(SEP, "open", "", "", "", "", ""));
+      PresentedDialog abandoned = window.dialogs.poll(5, TimeUnit.SECONDS);
+      window.cancel(5);
+      for (int attempt = 0; attempt < 50 && !abandoned.closed().get(); attempt++) {
+        Thread.sleep(50);
+      }
+      Assertions.assertTrue(abandoned.closed().get(), "a call that the page gives up closes it");
     }
   }
 
@@ -409,7 +712,7 @@ class AbstractWindowTest {
       window.onLoad(heard::add);
 
       LoadEvent event = LoadEvent.of(LoadState.FINISHED, "app://local/x");
-      List<Throwable> reported = captureUncaught(() -> window.emit(event));
+      List<Throwable> reported = AbstractWindowTest.captureUncaught(() -> window.emit(event));
 
       Assertions.assertEquals(List.of(event), heard);
       Assertions.assertEquals("bad listener", reported.getFirst().getMessage());

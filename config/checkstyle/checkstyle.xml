@@ -515,6 +515,16 @@
       <property name="validateOnlyOverlapping" value="false"/>
     </module>
     <module name="AvoidStaticImport"/>
+    <!-- A static method is called by its class name, in its own class too; so is a method of a @UtilityClass. -->
+    <module name="MatchXpath">
+      <property name="id" value="staticMethodByClassName"/>
+      <property name="query"
+                value="//METHOD_CALL/IDENT[some $method in //METHOD_DEF[./MODIFIERS/LITERAL_STATIC
+                       or ../../MODIFIERS/ANNOTATION/IDENT[@text='UtilityClass']]/IDENT
+                       satisfies $method/@text = @text]"/>
+      <message key="matchxpath.match"
+               value="Call a static method by its class name, in its own class too: ''AppKit.isMiniaturized(window)''."/>
+    </module>
     <module name="MissingJavadocType">
       <property name="scope" value="public"/>
     </module>

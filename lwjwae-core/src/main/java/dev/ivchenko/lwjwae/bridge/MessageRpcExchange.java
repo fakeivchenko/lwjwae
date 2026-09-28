@@ -54,6 +54,8 @@ public final class MessageRpcExchange implements RpcExchange {
   private int parts;
 
   /**
+   * Takes a call from its message.
+   *
    * @param calls The running calls of the window, which this one leaves once it has answered.
    * @param fields The fields of a call message after the token: {@code doc}, {@code id}, the name,
    *     the media type, the encoding, and the body.
@@ -75,7 +77,7 @@ public final class MessageRpcExchange implements RpcExchange {
 
   /** The key of this call among the running calls of the window. */
   String key() {
-    return key(this.doc, this.id);
+    return MessageRpcExchange.key(this.doc, this.id);
   }
 
   static String key(String doc, String id) {
@@ -113,7 +115,7 @@ public final class MessageRpcExchange implements RpcExchange {
     this.calls.forget(this);
     String type = headers.getOrDefault("Content-Type", "");
     String encoded =
-        isText(type)
+        MessageRpcExchange.isText(type)
             ? "s" + SEPARATOR + new String(body, StandardCharsets.UTF_8)
             : "b" + SEPARATOR + Base64.getEncoder().encodeToString(body);
     this.post(this.message("r", String.valueOf(status), type, encoded));
@@ -133,7 +135,7 @@ public final class MessageRpcExchange implements RpcExchange {
     } else {
       this.post(this.message("d", seq, Base64.getEncoder().encodeToString(part)));
     }
-    return !this.cancelled;
+    return true;
   }
 
   @Override

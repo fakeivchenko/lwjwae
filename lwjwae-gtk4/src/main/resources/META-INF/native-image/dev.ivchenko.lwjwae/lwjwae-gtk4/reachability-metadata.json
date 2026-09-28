@@ -4,8 +4,9 @@
       "type": "dev.ivchenko.lwjwae.gtk4.Gtk4Window",
       "methods": [
         {
-          "name": "onDestroy",
+          "name": "onBridgeMessage",
           "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
             "java.lang.foreign.MemorySegment",
             "java.lang.foreign.MemorySegment"
           ]
@@ -14,6 +15,47 @@
           "name": "onCloseRequest",
           "parameterTypes": [
             "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
+        },
+        {
+          "name": "onContextMenu",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
+        },
+        {
+          "name": "onCreate",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
+        },
+        {
+          "name": "onDestroy",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
+        },
+        {
+          "name": "onEvaluationReady",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
+        },
+        {
+          "name": "onLayout",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "int",
+            "int",
             "java.lang.foreign.MemorySegment"
           ]
         },
@@ -36,24 +78,14 @@
           ]
         },
         {
-          "name": "onContextMenu",
+          "name": "onRealize",
           "parameterTypes": [
-            "java.lang.foreign.MemorySegment",
-            "java.lang.foreign.MemorySegment",
             "java.lang.foreign.MemorySegment",
             "java.lang.foreign.MemorySegment"
           ]
         },
         {
-          "name": "onEvaluationReady",
-          "parameterTypes": [
-            "java.lang.foreign.MemorySegment",
-            "java.lang.foreign.MemorySegment",
-            "java.lang.foreign.MemorySegment"
-          ]
-        },
-        {
-          "name": "onBridgeMessage",
+          "name": "onStateNotify",
           "parameterTypes": [
             "java.lang.foreign.MemorySegment",
             "java.lang.foreign.MemorySegment",
@@ -68,6 +100,48 @@
         {
           "name": "onResourceRequest",
           "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
+        },
+        {
+          "name": "onXlibEvent",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "dev.ivchenko.lwjwae.gtk4.Gtk4Dialogs",
+      "methods": [
+        {
+          "name": "onResponse",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "int",
+            "java.lang.foreign.MemorySegment"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "dev.ivchenko.lwjwae.gtk4.Gtk4Clipboard",
+      "methods": [
+        {
+          "name": "onImageRead",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
+        },
+        {
+          "name": "onTextRead",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
             "java.lang.foreign.MemorySegment",
             "java.lang.foreign.MemorySegment"
           ]
@@ -155,6 +229,76 @@
           "jint",
           "void*"
         ]
+      },
+      {
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "jint",
+          "jdouble",
+          "jdouble",
+          "jint"
+        ]
+      },
+      {
+        "returnType": "jint",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "void*",
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "jint",
+          "void*",
+          "jint",
+          "jdouble",
+          "jdouble",
+          "jint"
+        ]
+      },
+      {
+        "returnType": "void*",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "jint",
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "returnType": "jlong",
+        "parameterTypes": []
+      },
+      {
+        "returnType": "void*",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "jint"
+        ]
+      },
+      {
+        "returnType": "jdouble",
+        "parameterTypes": [
+          "void*"
+        ]
+      },
+      {
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "void*",
+          "void*"
+        ]
       }
     ],
     "directUpcalls": [
@@ -234,6 +378,86 @@
         "method": "onResourceRequest",
         "returnType": "void",
         "parameterTypes": [
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.gtk4.Gtk4Window",
+        "method": "onRealize",
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.gtk4.Gtk4Window",
+        "method": "onStateNotify",
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.gtk4.Gtk4Window",
+        "method": "onLayout",
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "jint",
+          "jint",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.gtk4.Gtk4Window",
+        "method": "onCreate",
+        "returnType": "void*",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.gtk4.Gtk4Dialogs",
+        "method": "onResponse",
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "jint",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.gtk4.Gtk4Clipboard",
+        "method": "onTextRead",
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.gtk4.Gtk4Clipboard",
+        "method": "onImageRead",
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.gtk4.Gtk4Application",
+        "method": "onXlibEvent",
+        "returnType": "jint",
+        "parameterTypes": [
+          "void*",
           "void*",
           "void*"
         ]

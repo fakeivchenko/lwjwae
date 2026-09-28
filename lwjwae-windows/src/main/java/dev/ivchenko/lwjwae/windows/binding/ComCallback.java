@@ -91,8 +91,8 @@ public class ComCallback {
               int.class, MemorySegment.class, MemorySegment.class, MemorySegment.class),
           Signatures.INT_POINTER_POINTER_POINTER);
 
-  private static final MemorySegment COMPLETION_VTABLE = vtable(INVOKE_COMPLETION);
-  private static final MemorySegment EVENT_VTABLE = vtable(INVOKE_EVENT);
+  private static final MemorySegment COMPLETION_VTABLE = ComCallback.vtable(INVOKE_COMPLETION);
+  private static final MemorySegment EVENT_VTABLE = ComCallback.vtable(INVOKE_EVENT);
 
   private final MemorySegment object;
   private final ComCompletion completion;
@@ -174,7 +174,7 @@ public class ComCallback {
           || Com.sameGuid(riid, iid)
           || (agile && Com.sameGuid(riid, IID_IAGILE_OBJECT))) {
         result.set(Signatures.C_POINTER, 0, self);
-        addRef(self);
+        ComCallback.addRef(self);
         return Com.S_OK;
       }
       result.set(Signatures.C_POINTER, 0, MemorySegment.NULL);
@@ -218,7 +218,7 @@ public class ComCallback {
   @SuppressWarnings("unused")
   private static int invokeCompletion(MemorySegment self, int hresult, MemorySegment result) {
     try {
-      ComCallback callback = of(self);
+      ComCallback callback = ComCallback.of(self);
       if (callback != null) {
         callback.completion.invoke(hresult, result);
       }
@@ -237,7 +237,7 @@ public class ComCallback {
   private static int invokeEvent(
       MemorySegment self, MemorySegment sender, MemorySegment arguments) {
     try {
-      ComCallback callback = of(self);
+      ComCallback callback = ComCallback.of(self);
       if (callback != null) {
         callback.event.invoke(sender, arguments);
       }

@@ -2,18 +2,33 @@ package dev.ivchenko.lwjwae;
 
 import dev.ivchenko.lwjwae.bridge.BridgeProtocol;
 import dev.ivchenko.lwjwae.bridge.codec.BridgeCodec;
+import dev.ivchenko.lwjwae.clipboard.Clipboard;
 import dev.ivchenko.lwjwae.event.Event;
 import dev.ivchenko.lwjwae.event.EventSubscription;
+import dev.ivchenko.lwjwae.event.SecondInstanceEvent;
+import dev.ivchenko.lwjwae.exception.ShortcutUnavailableException;
+import dev.ivchenko.lwjwae.instance.InstanceLock;
 import dev.ivchenko.lwjwae.notification.Notification;
 import dev.ivchenko.lwjwae.notification.NotificationHandle;
 import dev.ivchenko.lwjwae.rpc.RpcHandler;
+import dev.ivchenko.lwjwae.shortcut.Shortcut;
+import dev.ivchenko.lwjwae.state.SavedWindowState;
+import dev.ivchenko.lwjwae.state.WindowStateStore;
+import dev.ivchenko.lwjwae.state.WindowStateTracker;
 import dev.ivchenko.lwjwae.tray.Tray;
 import dev.ivchenko.lwjwae.tray.TrayIcon;
 import dev.ivchenko.lwjwae.ui.UiDispatcher;
+import dev.ivchenko.lwjwae.util.HandlerUtil;
 import dev.ivchenko.lwjwae.util.ThrowableUtil;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -45,6 +60,13 @@ import java.util.function.Function;
  * #rpcHandler} before it answers {@code 404}.
  */
 public abstract class AbstractApplication implements Application {
+  private static final Set<String> EXTERNAL_SCHEMES = Set.of("http", "https", "mailto");
+
+  /** How much of the top of a window must be on a screen for the user to grab it, in units. */
+  private static final int GRAB_WIDTH = 100;
+
+  private static final int GRAB_HEIGHT = 40;
+
   private final UiDispatcher dispatcher;
   private final ApplicationParameters parameters;
   private final Map<Long, AbstractWindow> windows = new ConcurrentHashMap<>();
@@ -54,11 +76,20 @@ public abstract class AbstractApplication implements Application {
   private final AtomicLong windowIds = new AtomicLong();
   private final Map<String, String> bindingScripts = new ConcurrentHashMap<>();
   private final EventListeners listeners = new EventListeners("lwjwae-application-events");
+  private final Map<Long, WindowStateTracker> stateTrackers = new ConcurrentHashMap<>();
 
   private final ReentrantLock lifecycle = new ReentrantLock();
   private final Condition idle = this.lifecycle.newCondition();
 
   private final AtomicBoolean closed = new AtomicBoolean();
+
+  private volatile Clipboard clipboard;
+  private final Map<Shortcut, EventSubscription> globalShortcuts = new HashMap<>();
+
+  // --- single instance, under the lock of the listener list ---
+  private final List<Consumer<SecondInstanceEvent>> secondInstanceListeners = new ArrayList<>();
+  private final List<SecondInstanceEvent> unheardStarts = new ArrayList<>();
+  private volatile InstanceLock instanceLock;
 
   /**
    * Creates an application on the UI thread of a toolkit. Opens no window.
@@ -99,6 +130,8 @@ public abstract class AbstractApplication implements Application {
     long id = this.windowIds.incrementAndGet();
     AbstractWindow window = this.createWindow(id, parameters);
     window.closeAction(parameters.closeAction());
+    AbstractApplication.applyLimits(window, parameters);
+    this.restoreState(window, parameters);
     this.windows.put(id, window);
     // Closed while it was being created: leave the list the way markClosed would have.
     if (this.closed.get()) {
@@ -113,6 +146,67 @@ public abstract class AbstractApplication implements Application {
       window.navigate(parameters.url());
     }
     return window;
+  }
+
+  /**
+   * Opens a window with a state key the way it was when it last closed, and follows it from now on,
+   * to save it when it closes. Without a data directory, a state key does nothing.
+   */
+  private void restoreState(Window window, WindowParameters parameters) {
+    Path directory = this.parameters.dataDirectory();
+    String key = parameters.stateKey();
+    if (key == null || directory == null) {
+      return;
+    }
+    SavedWindowState saved = new WindowStateStore(directory).load(key).orElse(null);
+    if (saved != null) {
+      window.size(saved.width(), saved.height());
+      if (saved.hasPosition() && AbstractApplication.isReachable(saved, this.screens())) {
+        window.position(saved.x(), saved.y());
+      }
+      if (saved.maximized()) {
+        window.maximize();
+      }
+    }
+    WindowStateTracker tracker = new WindowStateTracker(key, window, saved);
+    window.onWindowEvent(tracker::update);
+    this.stateTrackers.put(window.id(), tracker);
+  }
+
+  /**
+   * Whether a window put back where {@code saved} says would be within reach: the strip along its
+   * top, where a title bar is, lies on one of {@code screens} far enough for the user to grab it. A
+   * screen that was unplugged since, or a resolution that shrank, leaves it out, and the window
+   * opens where the platform puts it instead. Without a list of screens, it's taken as within
+   * reach.
+   */
+  private static boolean isReachable(SavedWindowState saved, List<Screen> screens) {
+    if (screens.isEmpty()) {
+      return true;
+    }
+    ScreenArea top =
+        new ScreenArea(saved.x(), saved.y(), saved.width(), Math.min(saved.height(), GRAB_HEIGHT));
+    for (Screen screen : screens) {
+      ScreenArea visible = top.intersection(screen.workArea());
+      if (visible.width() >= Math.min(top.width(), GRAB_WIDTH)
+          && visible.height() >= Math.min(top.height(), GRAB_HEIGHT / 2)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** Applies what a window starts with beyond what the backend creates it with. */
+  private static void applyLimits(Window window, WindowParameters parameters) {
+    if (!parameters.minimumSize().equals(WindowSize.NONE)) {
+      window.minimumSize(parameters.minimumSize());
+    }
+    if (!parameters.maximumSize().equals(WindowSize.NONE)) {
+      window.maximumSize(parameters.maximumSize());
+    }
+    if (parameters.alwaysOnTop()) {
+      window.alwaysOnTop(true);
+    }
   }
 
   @Override
@@ -151,7 +245,7 @@ public abstract class AbstractApplication implements Application {
       String name, Class<T> argumentType, BiFunction<Window, T, R> handler) {
     Objects.requireNonNull(argumentType, "argumentType");
     Objects.requireNonNull(handler, "handler");
-    this.publish(name, typed(this.requireCodec(), argumentType, handler), true);
+    this.publish(name, AbstractApplication.typed(this.requireCodec(), argumentType, handler), true);
   }
 
   /**
@@ -270,6 +364,78 @@ public abstract class AbstractApplication implements Application {
     return tray;
   }
 
+  @Override
+  public final EventSubscription globalShortcut(Shortcut shortcut, Runnable handler) {
+    Objects.requireNonNull(shortcut, "shortcut");
+    Objects.requireNonNull(handler, "handler");
+    this.checkOpen();
+    EventSubscription binding;
+    synchronized (this.globalShortcuts) {
+      if (this.globalShortcuts.containsKey(shortcut)) {
+        throw new ShortcutUnavailableException(
+            shortcut + " is a shortcut of this application already");
+      }
+      binding = this.bindGlobalShortcut(shortcut, () -> HandlerUtil.runOffTheUiThread(handler));
+      this.globalShortcuts.put(shortcut, binding);
+    }
+    // Bound while quit() gave the others back: this one missed it.
+    if (this.closed.get()) {
+      this.releaseGlobalShortcut(shortcut, binding);
+      throw new IllegalStateException("The application is closed");
+    }
+    return () -> this.releaseGlobalShortcut(shortcut, binding);
+  }
+
+  private void releaseGlobalShortcut(Shortcut shortcut, EventSubscription binding) {
+    boolean bound;
+    synchronized (this.globalShortcuts) {
+      bound = this.globalShortcuts.remove(shortcut, binding);
+    }
+    if (bound) {
+      binding.unlisten();
+    }
+  }
+
+  /**
+   * Binds {@code shortcut} in the system, the way {@link #globalShortcut} describes. The default
+   * throws, for a backend without global shortcuts.
+   *
+   * @param pressed To run on every press, on any thread; it returns at once.
+   * @return What gives the shortcut back to the system, called once, on any thread.
+   * @throws ShortcutUnavailableException If the system refuses the shortcut.
+   * @throws UnsupportedOperationException If the backend or the desktop has no global shortcuts.
+   */
+  protected EventSubscription bindGlobalShortcut(Shortcut shortcut, Runnable pressed) {
+    throw new UnsupportedOperationException(
+        "The " + this.engine() + " backend has no global shortcuts yet");
+  }
+
+  @Override
+  public final Clipboard clipboard() {
+    this.checkOpen();
+    Clipboard current = this.clipboard;
+    if (current == null) {
+      synchronized (this) {
+        if (this.clipboard == null) {
+          this.clipboard = this.createClipboard();
+        }
+        current = this.clipboard;
+      }
+    }
+    return current;
+  }
+
+  /**
+   * The clipboard of the backend, created on the first {@link #clipboard()}. The default throws,
+   * for a backend without one.
+   *
+   * @throws UnsupportedOperationException If the backend has no clipboard.
+   */
+  protected Clipboard createClipboard() {
+    throw new UnsupportedOperationException(
+        "The " + this.engine() + " backend has no clipboard yet");
+  }
+
   /**
    * Puts up the native tray icon. The default throws, for a backend without tray support.
    *
@@ -281,6 +447,90 @@ public abstract class AbstractApplication implements Application {
   protected Tray createTray(TrayIcon icon, Consumer<Tray> closed) {
     throw new UnsupportedOperationException("The " + this.engine() + " backend has no tray yet");
   }
+
+  @Override
+  public final EventSubscription onSecondInstance(Consumer<SecondInstanceEvent> listener) {
+    Objects.requireNonNull(listener, "listener");
+    List<SecondInstanceEvent> unheard;
+    synchronized (this.secondInstanceListeners) {
+      this.secondInstanceListeners.add(listener);
+      unheard = List.copyOf(this.unheardStarts);
+      this.unheardStarts.clear();
+    }
+    unheard.forEach(listener);
+    return () -> {
+      synchronized (this.secondInstanceListeners) {
+        this.secondInstanceListeners.remove(listener);
+      }
+    };
+  }
+
+  /**
+   * Takes over {@code lock}, whose name this application now holds, and answers the processes that
+   * start after it, until {@link #quit()}.
+   */
+  final void serveInstances(InstanceLock lock) {
+    this.instanceLock = lock;
+    lock.serve(this::secondInstanceStarted);
+    if (this.closed.get()) {
+      lock.close();
+    }
+  }
+
+  /**
+   * Another process of the application started and handed its start over: the oldest window comes
+   * to the front, and the listeners hear of it.
+   */
+  private void secondInstanceStarted(SecondInstanceEvent start) {
+    List<Window> open = this.windows();
+    if (!open.isEmpty()) {
+      try {
+        open.getFirst().focus();
+      } catch (Throwable t) {
+        ThrowableUtil.report(t);
+      }
+    }
+    List<Consumer<SecondInstanceEvent>> listeners;
+    synchronized (this.secondInstanceListeners) {
+      if (this.secondInstanceListeners.isEmpty()) {
+        this.unheardStarts.add(start);
+        return;
+      }
+      listeners = List.copyOf(this.secondInstanceListeners);
+    }
+    for (Consumer<SecondInstanceEvent> listener : listeners) {
+      try {
+        listener.accept(start);
+      } catch (Throwable t) {
+        ThrowableUtil.report(t);
+      }
+    }
+  }
+
+  @Override
+  public final void openExternal(String url) {
+    Objects.requireNonNull(url, "url");
+    this.checkOpen();
+    URI uri;
+    try {
+      uri = new URI(url);
+    } catch (URISyntaxException e) {
+      throw new IllegalArgumentException("Not a URL: " + url, e);
+    }
+    String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase(Locale.ROOT);
+    if (!EXTERNAL_SCHEMES.contains(scheme)) {
+      throw new IllegalArgumentException("Only http, https, and mailto open outside: " + url);
+    }
+    this.launchExternal(uri.toString());
+  }
+
+  /**
+   * Hands a URL, checked to be {@code http}, {@code https}, or {@code mailto}, to the system, which
+   * opens it in the application it chose for it.
+   *
+   * @throws IllegalStateException If the system refused it.
+   */
+  protected abstract void launchExternal(String url);
 
   @Override
   public final NotificationHandle showNotification(Notification notification) {
@@ -317,6 +567,10 @@ public abstract class AbstractApplication implements Application {
   /** Called by a window once its native window is gone. The last one wakes {@link #run()}. */
   final void windowClosed(AbstractWindow window) {
     this.windows.remove(window.id(), window);
+    WindowStateTracker tracker = this.stateTrackers.remove(window.id());
+    if (tracker != null) {
+      new WindowStateStore(this.parameters.dataDirectory()).save(tracker.key(), tracker.state());
+    }
     if (!this.isRunnable()) {
       this.signalIdle();
     }
@@ -374,6 +628,21 @@ public abstract class AbstractApplication implements Application {
       } catch (Throwable t) {
         ThrowableUtil.report(t);
       }
+    }
+    List<Map.Entry<Shortcut, EventSubscription>> shortcuts;
+    synchronized (this.globalShortcuts) {
+      shortcuts = List.copyOf(this.globalShortcuts.entrySet());
+    }
+    for (Map.Entry<Shortcut, EventSubscription> shortcut : shortcuts) {
+      try {
+        this.releaseGlobalShortcut(shortcut.getKey(), shortcut.getValue());
+      } catch (Throwable t) {
+        ThrowableUtil.report(t);
+      }
+    }
+    InstanceLock lock = this.instanceLock;
+    if (lock != null) {
+      lock.close();
     }
     this.listeners.shutdown();
     this.signalIdle();
@@ -437,7 +706,7 @@ public abstract class AbstractApplication implements Application {
     Objects.requireNonNull(name, "name");
     BridgeProtocol.checkIdentifier(name);
     String script = BridgeProtocol.bindingScript(name, typed);
-    this.rpcHandlers.put(name, bindingHandler(handler, typed));
+    this.rpcHandlers.put(name, AbstractApplication.bindingHandler(handler, typed));
     // The page looks the handler up by name on every call, so a new handler of the same form takes
     // over without a new script; injecting it again would stack a copy on every document.
     if (script.equals(this.bindingScripts.put(name, script))) {

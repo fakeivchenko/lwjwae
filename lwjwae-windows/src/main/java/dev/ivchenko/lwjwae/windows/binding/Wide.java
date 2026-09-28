@@ -23,7 +23,7 @@ public class Wide {
 
   /** Reads a string that the callee allocated with {@code CoTaskMemAlloc}, and then frees it. */
   public String take(MemorySegment pointer) {
-    String value = read(pointer);
+    String value = Wide.read(pointer);
     if (value != null) {
       Ole32.coTaskMemFree(pointer);
     }

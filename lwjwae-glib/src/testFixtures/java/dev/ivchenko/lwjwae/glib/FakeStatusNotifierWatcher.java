@@ -84,7 +84,7 @@ public final class FakeStatusNotifierWatcher {
     dispatcher.run(
         () -> {
           MemorySegment bus = Dbus.privateSessionBus();
-          if (hasOwner(bus)) {
+          if (FakeStatusNotifierWatcher.hasOwner(bus)) {
             Dbus.close(bus);
             return;
           }

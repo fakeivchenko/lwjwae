@@ -1,6 +1,7 @@
 package dev.ivchenko.lwjwae;
 
 import dev.ivchenko.lwjwae.testing.PointCodec;
+import java.nio.file.Path;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -46,5 +47,20 @@ class ApplicationParametersTest {
     ApplicationParameters changed = base.toBuilder().codec(new PointCodec()).build();
     Assertions.assertEquals("http://localhost:5173", changed.devServerUrl());
     Assertions.assertNotNull(changed.codec());
+  }
+
+  @Test
+  void theDataDirectoryIsNamedAfterTheApplication() {
+    Assertions.assertNull(ApplicationParameters.createDefault().dataDirectory());
+    Path directory = ApplicationParameters.builder().name("Notes").build().dataDirectory();
+    Assertions.assertEquals("Notes", directory.getFileName().toString());
+    Path chosen = Path.of("state");
+    Assertions.assertEquals(
+        chosen,
+        ApplicationParameters.builder()
+            .name("Notes")
+            .dataDirectory(chosen)
+            .build()
+            .dataDirectory());
   }
 }

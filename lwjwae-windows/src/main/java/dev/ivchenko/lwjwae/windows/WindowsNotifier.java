@@ -62,8 +62,8 @@ final class WindowsNotifier {
    */
   WindowsNotifier(UiDispatcher dispatcher, String applicationName) {
     this.dispatcher = dispatcher;
-    String displayName = applicationName == null ? defaultName() : applicationName;
-    this.applicationId = idFor(displayName);
+    String displayName = applicationName == null ? WindowsNotifier.defaultName() : applicationName;
+    this.applicationId = WindowsNotifier.idFor(displayName);
     this.dispatcher.run(
         () -> {
           Advapi32.writeString(
@@ -102,21 +102,22 @@ final class WindowsNotifier {
               + setting
               + ")");
     }
-    MemorySegment toast = Toasts.notification(xml(notification, image));
+    MemorySegment toast = Toasts.notification(WindowsNotifier.xml(notification, image));
     try {
       WindowsNotification handle =
           new WindowsNotification(this, toast, notification, image, closed);
-      subscribe(
+      WindowsNotifier.subscribe(
           toast,
           Toasts.IID_ACTIVATED_HANDLER,
           Toasts::onActivated,
           (_, arguments) -> handle.activated(Toasts.activatedArguments(arguments)));
-      subscribe(
+      WindowsNotifier.subscribe(
           toast,
           Toasts.IID_DISMISSED_HANDLER,
           Toasts::onDismissed,
           (_, arguments) -> handle.dismissed(Toasts.dismissalReason(arguments)));
-      subscribe(toast, Toasts.IID_FAILED_HANDLER, Toasts::onFailed, (_, _) -> handle.failed());
+      WindowsNotifier.subscribe(
+          toast, Toasts.IID_FAILED_HANDLER, Toasts::onFailed, (_, _) -> handle.failed());
       Toasts.show(current, toast);
       return handle;
     } catch (ComCallFailedException e) {
@@ -179,13 +180,13 @@ final class WindowsNotifier {
     StringBuilder xml = new StringBuilder();
     xml.append("<toast launch=\"").append(AbstractNotification.DEFAULT_ACTION).append("\">");
     xml.append("<visual><binding template=\"ToastGeneric\">");
-    xml.append("<text>").append(escape(notification.title())).append("</text>");
+    xml.append("<text>").append(WindowsNotifier.escape(notification.title())).append("</text>");
     if (notification.body() != null) {
-      xml.append("<text>").append(escape(notification.body())).append("</text>");
+      xml.append("<text>").append(WindowsNotifier.escape(notification.body())).append("</text>");
     }
     if (image != null) {
       xml.append("<image placement=\"appLogoOverride\" src=\"")
-          .append(escape(image.toUri().toString()))
+          .append(WindowsNotifier.escape(image.toUri().toString()))
           .append("\"/>");
     }
     xml.append("</binding></visual>");
@@ -194,7 +195,7 @@ final class WindowsNotifier {
       xml.append("<actions>");
       for (int index = 0; index < actions.size(); index++) {
         xml.append("<action content=\"")
-            .append(escape(actions.get(index).label()))
+            .append(WindowsNotifier.escape(actions.get(index).label()))
             .append("\" arguments=\"")
             .append(AbstractNotification.buttonAction(index))
             .append("\"/>");

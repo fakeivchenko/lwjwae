@@ -17,6 +17,7 @@ The provider [`MacBackendProvider`](src/main/java/dev/ivchenko/lwjwae/macos/MacB
 | [`MacWindow`](src/main/java/dev/ivchenko/lwjwae/macos/MacWindow.java)                   | The window. Forwards every call to the main thread.                           |
 | [`MacRpcExchange`](src/main/java/dev/ivchenko/lwjwae/macos/MacRpcExchange.java) | One RPC call over a `WKURLSchemeTask`. |
 | [`MacDispatcher`](src/main/java/dev/ivchenko/lwjwae/macos/MacDispatcher.java)           | The main thread of the process, and how work reaches it.                      |
+| [`MacMainMenu`](src/main/java/dev/ivchenko/lwjwae/macos/MacMainMenu.java) | The menu bar, with the shortcuts of editing, and Quit as `Application.quit()`. |
 | [`MacTray`](src/main/java/dev/ivchenko/lwjwae/macos/MacTray.java)                       | A tray icon: an `NSStatusItem` in the menu bar.                               |
 | [`MacNotifier`](src/main/java/dev/ivchenko/lwjwae/macos/MacNotifier.java), [`MacNotification`](src/main/java/dev/ivchenko/lwjwae/macos/MacNotification.java) | Notifications, through `UNUserNotificationCenter`. |
 | [`PendingEvaluation`](src/main/java/dev/ivchenko/lwjwae/macos/PendingEvaluation.java)   | A future and the arena of its completion block.                               |
@@ -140,6 +141,21 @@ A `POST` under `app://local/__lwjwae/rpc/` is a call, handled by [`MacRpcExchang
 
 This path is compiled but not yet run on macOS.
 
+## Window state
+
+`miniaturize:`, `zoom:`, and `toggleFullScreen:` change the state; the last two toggle, so they're
+sent only when the state differs. On top is the floating window level; focus is the key window.
+`setContentMinSize:` and `setContentMaxSize:` set the limits, and a window outside them is resized
+into them, since AppKit only keeps the user within them.
+
+A window without a title bar stays titled, with `NSWindowStyleMaskFullSizeContentView`, a
+transparent title bar, a hidden title, and hidden buttons, the way Electron makes a frameless
+window: a borderless one would lose the rounded corners and the shadow, and couldn't become the key
+window without a subclass. `closable` and `minimizable` are bits of the style mask; `maximizable`
+grays out the zoom button, which `zoom:` enables for the moment it zooms. A drag region moves the
+window with `performWindowDragWithEvent:` and the mouse event being handled, and a double click on
+one does what `AppleActionOnDoubleClick` says.
+
 ## Evaluating scripts
 
 `evaluateJavaScript:completionHandler:` takes a block. The backend builds one by hand:
@@ -221,6 +237,35 @@ called through their invoke pointer.
 The display tests run the contract only where the process is a bundle whose notifications are
 allowed; the test JVM on CI is neither, and there the tests check that the refusal is clean.
 
+## Dialogs
+
+`NSOpenPanel`, `NSSavePanel`, and `NSAlert` are sheets of the window, begun with
+`beginSheetModalForWindow:completionHandler:`, which returns at once and calls the block when the
+user answers: `runModal` would hold up the work of other threads until then. The block is a
+global literal like the one of `evaluateJavaScript:`, and a cancellation ends the sheet with
+`endSheet:`, which calls it too. A panel has no menu of kinds of file, so it takes the extensions of
+every kind through `setAllowedFileTypes:`, and the title of the dialog goes to `setMessage:`, since
+a sheet has no title bar.
+
+## The menu bar
+
+On macOS, the shortcuts of editing belong to the menu bar: Command-C is the key equivalent of an
+item that sends `copy:` to the first responder, and a `WKWebView` hands back to the menu every key
+that the page leaves. Without a menu bar, a text field takes no Command-C, V, X, A, or Z. The first
+application installs the menu bar of every Mac application, in place of the bare one that AppKit
+makes up when `run` starts without one: the
+application menu (About, Hide, Hide Others, Show All, Quit), File (Close Window), Edit (Undo, Redo,
+Cut, Copy, Paste, Paste and Match Style, Delete, Select All), and Window (Minimize, Zoom, Bring All
+to Front, and the list of windows). The items have no target, so each goes along the responder
+chain, which also enables it. The titles take `ApplicationParameters.name()`, or the name of the
+process without one.
+
+Quit, from the menu, the Dock, or a logout, is `terminate:`, which asks the delegate of
+`NSApplication` `applicationShouldTerminate:` and then calls `exit` under the JVM. The delegate
+answers `NSTerminateCancel` and quits every open application instead, so their windows close as on
+`Application.quit()`, `run()` returns, and the program ends on its own terms. With no application
+open, it lets AppKit terminate.
+
 ## Closing
 
 `close()` calls `-[NSWindow close]` on the main thread. The delegate receives `windowWillClose:`
@@ -237,5 +282,5 @@ stays, and another application can be created on it.
 ```
 
 With `-Dlwjwae.screenshots=true`, the display tests capture the screen with the `screencapture`
-tool of the system instead of `java.awt.Robot`, because AWT would bring a second `NSApplication`
-into a process that already runs one.
+tool of the system, as every platform does with its own tool: AWT would also bring a second
+`NSApplication` into a process that already runs one.

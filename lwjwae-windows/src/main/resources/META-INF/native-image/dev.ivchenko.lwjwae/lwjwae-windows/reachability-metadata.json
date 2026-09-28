@@ -71,6 +71,34 @@
           ]
         }
       ]
+    },
+    {
+      "type": "dev.ivchenko.lwjwae.windows.WindowsDispatcher",
+      "methods": [
+        {
+          "name": "windowProc",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "int",
+            "long",
+            "long"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "dev.ivchenko.lwjwae.windows.WindowsScreens",
+      "methods": [
+        {
+          "name": "onMonitor",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "long"
+          ]
+        }
+      ]
     }
   ],
   "resources": [
@@ -145,6 +173,28 @@
           "void*",
           "jint",
           "jlong",
+          "jlong"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.windows.WindowsDispatcher",
+        "method": "windowProc",
+        "returnType": "jlong",
+        "parameterTypes": [
+          "void*",
+          "jint",
+          "jlong",
+          "jlong"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.windows.WindowsScreens",
+        "method": "onMonitor",
+        "returnType": "jint",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "void*",
           "jlong"
         ]
       }
@@ -459,6 +509,112 @@
           "void*",
           "jint",
           "void*"
+        ]
+      },
+      {
+        "returnType": "jint",
+        "parameterTypes": [
+          "jint",
+          "jint",
+          "jint"
+        ]
+      },
+      {
+        "returnType": "jshort",
+        "parameterTypes": [
+          "jint"
+        ]
+      },
+      {
+        "returnType": "jint",
+        "parameterTypes": [
+          "void*",
+          "jint",
+          "jint"
+        ]
+      },
+      {
+        "returnType": "void*",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "void*",
+          "void*",
+          "void*",
+          "jint"
+        ]
+      },
+      {
+        "returnType": "jint",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "jint",
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "returnType": "jint",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "returnType": "jint",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "void*",
+          "jint"
+        ]
+      },
+      {
+        "returnType": "jint",
+        "parameterTypes": [
+          "void*",
+          "jlong"
+        ]
+      },
+      {
+        "returnType": "jint",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "void*",
+          "jlong"
+        ]
+      },
+      {
+        "returnType": "jint",
+        "parameterTypes": [
+          "void*",
+          "jint",
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "returnType": "void*",
+        "parameterTypes": [
+          "jint"
+        ]
+      },
+      {
+        "returnType": "void*",
+        "parameterTypes": [
+          "jint",
+          "void*"
+        ]
+      },
+      {
+        "returnType": "void*",
+        "parameterTypes": [
+          "jint",
+          "jlong"
         ]
       }
     ]

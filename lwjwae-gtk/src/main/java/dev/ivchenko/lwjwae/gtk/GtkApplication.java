@@ -3,18 +3,26 @@ package dev.ivchenko.lwjwae.gtk;
 import dev.ivchenko.lwjwae.AbstractApplication;
 import dev.ivchenko.lwjwae.AbstractWindow;
 import dev.ivchenko.lwjwae.ApplicationParameters;
+import dev.ivchenko.lwjwae.Screen;
 import dev.ivchenko.lwjwae.WindowParameters;
+import dev.ivchenko.lwjwae.clipboard.Clipboard;
+import dev.ivchenko.lwjwae.event.EventSubscription;
 import dev.ivchenko.lwjwae.exception.ResourceNotFoundException;
 import dev.ivchenko.lwjwae.foreign.NativeLibraries;
+import dev.ivchenko.lwjwae.glib.DesktopShortcuts;
 import dev.ivchenko.lwjwae.glib.FreedesktopNotifier;
+import dev.ivchenko.lwjwae.glib.PortalShortcuts;
 import dev.ivchenko.lwjwae.glib.StatusNotifierTray;
+import dev.ivchenko.lwjwae.glib.X11Shortcuts;
 import dev.ivchenko.lwjwae.glib.binding.Glib;
 import dev.ivchenko.lwjwae.gtk.binding.AppIndicator;
+import dev.ivchenko.lwjwae.gtk.binding.Gdk;
 import dev.ivchenko.lwjwae.gtk.binding.Signatures;
 import dev.ivchenko.lwjwae.gtk.binding.WebKit;
 import dev.ivchenko.lwjwae.notification.Notification;
 import dev.ivchenko.lwjwae.notification.NotificationHandle;
 import dev.ivchenko.lwjwae.rpc.RpcExchange;
+import dev.ivchenko.lwjwae.shortcut.Shortcut;
 import dev.ivchenko.lwjwae.tray.Tray;
 import dev.ivchenko.lwjwae.tray.TrayIcon;
 import dev.ivchenko.lwjwae.util.MimeTypeUtil;
@@ -23,6 +31,7 @@ import dev.ivchenko.lwjwae.util.ThrowableUtil;
 import java.lang.foreign.MemorySegment;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
+import java.util.List;
 import java.util.function.Consumer;
 
 /**
@@ -47,7 +56,20 @@ public class GtkApplication extends AbstractApplication {
           MethodType.methodType(void.class, MemorySegment.class, MemorySegment.class),
           Signatures.URI_SCHEME_REQUEST_CALLBACK);
 
+  private static final MemorySegment ON_XLIB_EVENT =
+      NativeLibraries.upcall(
+          MethodHandles.lookup(),
+          GtkApplication.class,
+          "onXlibEvent",
+          MethodType.methodType(
+              int.class, MemorySegment.class, MemorySegment.class, MemorySegment.class),
+          Signatures.GDK_FILTER_FUNC);
+
+  /** Whether the filter that hands key presses to {@link X11Shortcuts} is in, once a process. */
+  private static boolean filtering;
+
   private FreedesktopNotifier notifier;
+  private DesktopShortcuts shortcuts;
 
   /** Creates an application with {@link ApplicationParameters#createDefault()}. */
   public GtkApplication() {
@@ -76,6 +98,16 @@ public class GtkApplication extends AbstractApplication {
   }
 
   @Override
+  protected Clipboard createClipboard() {
+    return new GtkClipboard(this.dispatcher());
+  }
+
+  @Override
+  public List<Screen> screens() {
+    return this.dispatcher().call(GtkScreens::all);
+  }
+
+  @Override
   protected AbstractWindow createWindow(long id, WindowParameters parameters) {
     return new GtkWindow(this, id, parameters);
   }
@@ -101,6 +133,11 @@ public class GtkApplication extends AbstractApplication {
   }
 
   @Override
+  protected void launchExternal(String url) {
+    this.dispatcher().run(() -> Glib.launchDefaultForUri(url));
+  }
+
+  @Override
   protected NotificationHandle createNotification(
       Notification notification, Consumer<NotificationHandle> closed) {
     return this.notifier().show(notification, closed);
@@ -115,14 +152,70 @@ public class GtkApplication extends AbstractApplication {
   }
 
   @Override
+  protected EventSubscription bindGlobalShortcut(Shortcut shortcut, Runnable pressed) {
+    return this.shortcuts().bind(shortcut, pressed);
+  }
+
+  /**
+   * The global shortcuts, set up on the first: key grabs on X11, the portal elsewhere, where the
+   * compositor keeps the keys from a client.
+   */
+  private synchronized DesktopShortcuts shortcuts() {
+    if (this.shortcuts == null) {
+      if (this.dispatcher().call(Gdk::isX11)) {
+        MemorySegment display =
+            this.dispatcher()
+                .call(
+                    () -> {
+                      if (!GtkApplication.filtering) {
+                        Gdk.addEventFilter(ON_XLIB_EVENT, MemorySegment.NULL);
+                        GtkApplication.filtering = true;
+                      }
+                      return Gdk.xlibDisplay();
+                    });
+        this.shortcuts = new X11Shortcuts(this.dispatcher(), display, Gdk::trapped);
+      } else {
+        String name = this.parameters().name();
+        this.shortcuts =
+            new PortalShortcuts(this.dispatcher(), name == null ? "Application" : name);
+      }
+    }
+    return this.shortcuts;
+  }
+
+  @Override
   protected void onClose() {
     FreedesktopNotifier current;
+    DesktopShortcuts currentShortcuts;
     synchronized (this) {
       current = this.notifier;
       this.notifier = null;
+      currentShortcuts = this.shortcuts;
+      this.shortcuts = null;
     }
     if (current != null) {
       current.close();
+    }
+    if (currentShortcuts != null) {
+      currentShortcuts.close();
+    }
+  }
+
+  /**
+   * Hands every {@code XEvent} to {@link X11Shortcuts}, and takes the press of a shortcut out of
+   * the way of GDK, which has no window for it.
+   *
+   * <p>Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
+   * binds it by name, so no Java code calls it and the compiler sees a dead private method.
+   */
+  @SuppressWarnings("unused")
+  private static int onXlibEvent(
+      MemorySegment xlibEvent, MemorySegment event, MemorySegment userData) {
+    try {
+      return X11Shortcuts.handleEvent(xlibEvent) ? Gdk.FILTER_REMOVE : Gdk.FILTER_CONTINUE;
+    } catch (Throwable t) {
+      ThrowableUtil.report(t);
+      return Gdk.FILTER_CONTINUE;
     }
   }
 

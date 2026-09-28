@@ -6,6 +6,7 @@ import java.lang.foreign.Arena;
 import java.lang.foreign.MemoryLayout;
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.SymbolLookup;
+import java.lang.foreign.ValueLayout;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.VarHandle;
 import lombok.SneakyThrows;
@@ -22,9 +23,13 @@ public class User32 {
   public final int WS_OVERLAPPEDWINDOW = 0x00CF0000;
   public final int WS_THICKFRAME = 0x00040000;
   public final int WS_MAXIMIZEBOX = 0x00010000;
+  public final int WS_MINIMIZEBOX = 0x00020000;
   public final int CW_USEDEFAULT = 0x80000000;
   public final int SW_HIDE = 0;
   public final int SW_SHOW = 5;
+  public final int SW_MAXIMIZE = 3;
+  public final int SW_MINIMIZE = 6;
+  public final int SW_RESTORE = 9;
   public final int GWL_STYLE = -16;
   public final int GWLP_USERDATA = -21;
   public final int SWP_NOSIZE = 0x0001;
@@ -32,11 +37,54 @@ public class User32 {
   public final int SWP_NOZORDER = 0x0004;
   public final int SWP_NOACTIVATE = 0x0010;
   public final int SWP_FRAMECHANGED = 0x0020;
+  public final int SWP_NOOWNERZORDER = 0x0200;
+  private final int GWL_EXSTYLE = -20;
+  private final long WS_EX_TOPMOST = 0x00000008;
+
+  /**
+   * {@code WS_EX_NOREDIRECTIONBITMAP}: the window has no surface of its own for the compositor,
+   * only what its children draw with DirectComposition, as WebView2 does.
+   */
+  private final int WS_EX_NOREDIRECTIONBITMAP = 0x00200000;
+
+  /** {@code sizeof(WINDOWPLACEMENT)}. */
+  private final int WINDOWPLACEMENT_SIZE = 44;
+
+  /** Where {@code ptMinTrackSize} and {@code ptMaxTrackSize} sit in a {@code MINMAXINFO}. */
+  private final int MIN_TRACK_SIZE_OFFSET = 24;
+
+  private final int MAX_TRACK_SIZE_OFFSET = 32;
   public final int MONITOR_DEFAULTTONEAREST = 2;
+
+  /** {@code MONITORINFOF_PRIMARY}: the flag of the primary monitor in {@code MONITORINFO}. */
+  private final int MONITORINFOF_PRIMARY = 1;
+
   public final int PM_NOREMOVE = 0x0000;
   public final int WM_DESTROY = 0x0002;
+  public final int WM_MOVE = 0x0003;
   public final int WM_SIZE = 0x0005;
+  public final int WM_ACTIVATE = 0x0006;
   public final int WM_CLOSE = 0x0010;
+  public final int WM_GETMINMAXINFO = 0x0024;
+  public final int WM_NCCALCSIZE = 0x0083;
+  private final int WM_COMMAND = 0x0111;
+  private final int WM_NCLBUTTONDOWN = 0x00A1;
+
+  // --- hit-test codes of WM_NCHITTEST, what a press on the frame means ---
+  public final int HTCAPTION = 2;
+  public final int HTLEFT = 10;
+  public final int HTRIGHT = 11;
+  public final int HTTOP = 12;
+  public final int HTTOPLEFT = 13;
+  public final int HTTOPRIGHT = 14;
+  public final int HTBOTTOM = 15;
+  public final int HTBOTTOMLEFT = 16;
+  public final int HTBOTTOMRIGHT = 17;
+
+  private final int SC_CLOSE = 0xF060;
+  private final int VK_LBUTTON = 0x01;
+  private final int SM_SWAPBUTTON = 23;
+  private final int VK_RBUTTON = 0x02;
   public final int WM_NULL = 0x0000;
   public final int WM_CONTEXTMENU = 0x007B;
   public final int WM_LBUTTONUP = 0x0202;
@@ -60,8 +108,39 @@ public class User32 {
   public final int WM_USER = 0x0400;
   public final int WM_APP = 0x8000;
 
+  /** {@code WM_HOTKEY}: a shortcut of {@code RegisterHotKey}, with its ID in {@code wParam}. */
+  public final int WM_HOTKEY = 0x0312;
+
+  /** {@code MOD_ALT}, {@code MOD_CONTROL}, {@code MOD_SHIFT}, {@code MOD_WIN}. */
+  public final int MOD_ALT = 0x0001;
+
+  public final int MOD_CONTROL = 0x0002;
+  public final int MOD_SHIFT = 0x0004;
+  public final int MOD_WIN = 0x0008;
+
+  /** {@code MOD_NOREPEAT}: holding the keys down sends one {@code WM_HOTKEY}. */
+  private final int MOD_NOREPEAT = 0x4000;
+
   /** {@code COLOR_WINDOW + 1}: the class background brush that GTK-style applications use. */
   private final MemorySegment WINDOW_BACKGROUND = MemorySegment.ofAddress(5 + 1);
+
+  // --- MessageBoxW ---
+  public final int MB_OK = 0x0;
+  public final int MB_OKCANCEL = 0x1;
+  public final int MB_YESNO = 0x4;
+  public final int MB_ICONERROR = 0x10;
+  public final int MB_ICONQUESTION = 0x20;
+  public final int MB_ICONWARNING = 0x30;
+  public final int MB_ICONINFORMATION = 0x40;
+  public final int IDOK = 1;
+  public final int IDCANCEL = 2;
+  public final int IDYES = 6;
+
+  /** {@code GW_ENABLEDPOPUP}: the enabled window that a window owns, a dialog over it. */
+  private final int GW_ENABLEDPOPUP = 6;
+
+  /** {@code HWND_MESSAGE}: the parent that makes a window message-only. */
+  private final MemorySegment HWND_MESSAGE = MemorySegment.ofAddress(-3);
 
   /** {@code WS_EX_TOOLWINDOW}: no taskbar button, no Alt+Tab entry. */
   private final int WS_EX_TOOLWINDOW = 0x00000080;
@@ -100,6 +179,10 @@ public class User32 {
       NativeLibraries.downcall(USER32, "DestroyWindow", Signatures.INT_POINTER);
   private final MethodHandle SEND_MESSAGE =
       NativeLibraries.downcall(USER32, "SendMessageW", Signatures.LONG_POINTER_INT_LONG_LONG);
+  private final MethodHandle REGISTER_HOT_KEY =
+      NativeLibraries.downcall(USER32, "RegisterHotKey", Signatures.INT_POINTER_INT_INT_INT);
+  private final MethodHandle UNREGISTER_HOT_KEY =
+      NativeLibraries.downcall(USER32, "UnregisterHotKey", Signatures.INT_POINTER_INT);
   private final MethodHandle POST_MESSAGE =
       NativeLibraries.downcall(USER32, "PostMessageW", Signatures.INT_POINTER_INT_LONG_LONG);
   private final MethodHandle REGISTER_WINDOW_MESSAGE =
@@ -115,6 +198,20 @@ public class User32 {
       NativeLibraries.downcall(USER32, "DestroyMenu", Signatures.INT_POINTER);
   private final MethodHandle GET_CURSOR_POS =
       NativeLibraries.downcall(USER32, "GetCursorPos", Signatures.INT_POINTER);
+  private final MethodHandle GET_ASYNC_KEY_STATE =
+      NativeLibraries.downcall(USER32, "GetAsyncKeyState", Signatures.SHORT_INT);
+  private final MethodHandle RELEASE_CAPTURE =
+      NativeLibraries.downcall(USER32, "ReleaseCapture", Signatures.INT_VOID);
+  private final MethodHandle GET_SYSTEM_MENU =
+      NativeLibraries.downcall(USER32, "GetSystemMenu", Signatures.POINTER_POINTER_INT);
+  private final MethodHandle ENABLE_MENU_ITEM =
+      NativeLibraries.downcall(USER32, "EnableMenuItem", Signatures.INT_POINTER_INT_INT);
+  private final MethodHandle MESSAGE_BOX =
+      NativeLibraries.downcall(USER32, "MessageBoxW", Signatures.INT_POINTER_POINTER_POINTER_INT);
+  private final MethodHandle GET_WINDOW =
+      NativeLibraries.downcall(USER32, "GetWindow", Signatures.POINTER_POINTER_INT);
+  private final MethodHandle END_DIALOG =
+      NativeLibraries.downcall(USER32, "EndDialog", Signatures.INT_POINTER_LONG);
   private final MethodHandle GET_SYSTEM_METRICS =
       NativeLibraries.downcall(USER32, "GetSystemMetrics", Signatures.INT_INT);
   private final MethodHandle CREATE_ICON_FROM_RESOURCE_EX =
@@ -124,6 +221,22 @@ public class User32 {
       NativeLibraries.downcall(USER32, "DestroyIcon", Signatures.INT_POINTER);
   private final MethodHandle IS_WINDOW_VISIBLE =
       NativeLibraries.downcall(USER32, "IsWindowVisible", Signatures.INT_POINTER);
+  private final MethodHandle IS_ICONIC =
+      NativeLibraries.downcall(USER32, "IsIconic", Signatures.INT_POINTER);
+  private final MethodHandle IS_ZOOMED =
+      NativeLibraries.downcall(USER32, "IsZoomed", Signatures.INT_POINTER);
+  private final MethodHandle GET_FOREGROUND_WINDOW =
+      NativeLibraries.downcall(USER32, "GetForegroundWindow", Signatures.POINTER_VOID);
+  private final MethodHandle GET_WINDOW_THREAD_PROCESS_ID =
+      NativeLibraries.downcall(USER32, "GetWindowThreadProcessId", Signatures.INT_POINTER_POINTER);
+  private final MethodHandle ATTACH_THREAD_INPUT =
+      NativeLibraries.downcall(USER32, "AttachThreadInput", Signatures.INT_INT_INT_INT);
+  private final MethodHandle BRING_WINDOW_TO_TOP =
+      NativeLibraries.downcall(USER32, "BringWindowToTop", Signatures.INT_POINTER);
+  private final MethodHandle GET_WINDOW_PLACEMENT =
+      NativeLibraries.downcall(USER32, "GetWindowPlacement", Signatures.INT_POINTER_POINTER);
+  private final MethodHandle SET_WINDOW_PLACEMENT =
+      NativeLibraries.downcall(USER32, "SetWindowPlacement", Signatures.INT_POINTER_POINTER);
   private final MethodHandle SET_FOREGROUND_WINDOW =
       NativeLibraries.downcall(USER32, "SetForegroundWindow", Signatures.INT_POINTER);
   private final MethodHandle SET_WINDOW_TEXT =
@@ -140,6 +253,20 @@ public class User32 {
       NativeLibraries.downcall(USER32, "MonitorFromWindow", Signatures.POINTER_POINTER_INT);
   private final MethodHandle GET_MONITOR_INFO =
       NativeLibraries.downcall(USER32, "GetMonitorInfoW", Signatures.INT_POINTER_POINTER);
+  private final MethodHandle OPEN_CLIPBOARD =
+      NativeLibraries.downcall(USER32, "OpenClipboard", Signatures.INT_POINTER);
+  private final MethodHandle CLOSE_CLIPBOARD =
+      NativeLibraries.downcall(USER32, "CloseClipboard", Signatures.INT_VOID);
+  private final MethodHandle EMPTY_CLIPBOARD =
+      NativeLibraries.downcall(USER32, "EmptyClipboard", Signatures.INT_VOID);
+  private final MethodHandle SET_CLIPBOARD_DATA =
+      NativeLibraries.downcall(USER32, "SetClipboardData", Signatures.POINTER_INT_POINTER);
+  private final MethodHandle REGISTER_CLIPBOARD_FORMAT =
+      NativeLibraries.downcall(USER32, "RegisterClipboardFormatW", Signatures.INT_POINTER);
+  private final MethodHandle GET_CLIPBOARD_DATA =
+      NativeLibraries.downcall(USER32, "GetClipboardData", Signatures.POINTER_INT);
+  private final MethodHandle ENUM_DISPLAY_MONITORS =
+      NativeLibraries.downcall(USER32, "EnumDisplayMonitors", Signatures.INT_POINTER_X3_LONG);
   private final MethodHandle SET_WINDOW_POS =
       NativeLibraries.downcall(USER32, "SetWindowPos", Signatures.INT_POINTER_POINTER_INT_X5);
   private final MethodHandle GET_WINDOW_LONG_PTR =
@@ -193,20 +320,33 @@ public class User32 {
   }
 
   /**
-   * A hidden top-level window of {@code className}. {@code show} makes it visible. {@code x} and
-   * {@code y} place the frame; {@code CW_USEDEFAULT} for both lets Windows choose.
+   * A hidden top-level window of {@code className}, with {@code style}, a subset of {@code
+   * WS_OVERLAPPEDWINDOW}. {@code show} makes it visible. {@code x} and {@code y} place the frame;
+   * {@code CW_USEDEFAULT} for both lets Windows choose. {@code topmost} creates it above the
+   * windows that aren't, with {@code WS_EX_TOPMOST}: later, {@link #topmost(MemorySegment,
+   * boolean)} works only for the process in the foreground. A {@code transparent} window has no
+   * surface of its own, so where its web view draws nothing, the desktop shows through.
    */
   @SneakyThrows
   public MemorySegment createWindow(
-      String className, String title, int x, int y, int width, int height) {
+      String className,
+      String title,
+      int x,
+      int y,
+      int width,
+      int height,
+      int style,
+      boolean topmost,
+      boolean transparent) {
     try (Arena arena = Arena.ofConfined()) {
       MemorySegment hwnd =
           (MemorySegment)
               CREATE_WINDOW_EX.invokeExact(
-                  0,
+                  (topmost ? (int) WS_EX_TOPMOST : 0)
+                      | (transparent ? WS_EX_NOREDIRECTIONBITMAP : 0),
                   Wide.allocate(arena, className),
                   Wide.allocate(arena, title),
-                  WS_OVERLAPPEDWINDOW,
+                  style,
                   x,
                   y,
                   width,
@@ -229,12 +369,6 @@ public class User32 {
     return (long) DEF_WINDOW_PROC.invokeExact(hwnd, message, wordParameter, longParameter);
   }
 
-  /** Calls {@code ShowWindow(hwnd, SW_SHOW)}. */
-  @SneakyThrows
-  public void show(MemorySegment hwnd) {
-    int _ = (int) SHOW_WINDOW.invokeExact(hwnd, SW_SHOW);
-  }
-
   /** Calls {@code ShowWindow(hwnd, SW_HIDE)}: the window leaves the screen and the taskbar. */
   @SneakyThrows
   public void hide(MemorySegment hwnd) {
@@ -246,7 +380,7 @@ public class User32 {
    * procedure. Called on the thread of the window, it runs the procedure before it returns.
    */
   public void requestClose(MemorySegment hwnd) {
-    long _ = send(hwnd, WM_CLOSE, 0L, 0L);
+    long _ = User32.send(hwnd, WM_CLOSE, 0L, 0L);
   }
 
   /**
@@ -256,6 +390,25 @@ public class User32 {
   @SneakyThrows
   public long send(MemorySegment hwnd, int message, long wordParameter, long longParameter) {
     return (long) SEND_MESSAGE.invokeExact(hwnd, message, wordParameter, longParameter);
+  }
+
+  /**
+   * Calls {@code RegisterHotKey}: {@code hwnd} hears {@code WM_HOTKEY} with {@code id} whenever the
+   * user presses {@code virtualKey} with {@code modifiers}, once however long the keys are held.
+   * Call on the thread of {@code hwnd}.
+   *
+   * @return Whether Windows took the shortcut: not when another application holds it, or Windows
+   *     keeps it for itself.
+   */
+  @SneakyThrows
+  public boolean registerHotKey(MemorySegment hwnd, int id, int modifiers, int virtualKey) {
+    return (int) REGISTER_HOT_KEY.invokeExact(hwnd, id, modifiers | MOD_NOREPEAT, virtualKey) != 0;
+  }
+
+  /** Calls {@code UnregisterHotKey}. Call on the thread of {@code hwnd}. */
+  @SneakyThrows
+  public void unregisterHotKey(MemorySegment hwnd, int id) {
+    int _ = (int) UNREGISTER_HOT_KEY.invokeExact(hwnd, id);
   }
 
   /** Calls {@code PostMessageW}: queues {@code message} for {@code hwnd} and returns at once. */
@@ -300,6 +453,75 @@ public class User32 {
         throw new IllegalStateException("CreateWindowExW failed, error " + Kernel32.lastError());
       }
       return hwnd;
+    }
+  }
+
+  /**
+   * A message-only window of {@code className}: never shown, never enumerated, it exists to receive
+   * the messages posted to it, in the loop of a modal dialog as in the main one.
+   */
+  @SneakyThrows
+  public MemorySegment createMessageWindow(String className) {
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment hwnd =
+          (MemorySegment)
+              CREATE_WINDOW_EX.invokeExact(
+                  0,
+                  Wide.allocate(arena, className),
+                  Wide.allocate(arena, className),
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  HWND_MESSAGE,
+                  MemorySegment.NULL,
+                  Kernel32.moduleHandle(),
+                  MemorySegment.NULL);
+      if (hwnd.equals(MemorySegment.NULL)) {
+        throw new IllegalStateException("CreateWindowExW failed, error " + Kernel32.lastError());
+      }
+      return hwnd;
+    }
+  }
+
+  /**
+   * Calls {@code MessageBoxW} over {@code owner}: a modal dialog with its own loop, which returns
+   * the {@code ID} of the button that closed it.
+   */
+  @SneakyThrows
+  public int messageBox(MemorySegment owner, String text, String caption, int type) {
+    try (Arena arena = Arena.ofConfined()) {
+      return (int)
+          MESSAGE_BOX.invokeExact(
+              owner, Wide.allocate(arena, text), Wide.allocate(arena, caption), type);
+    }
+  }
+
+  /**
+   * Cancels the dialog that {@code owner} has up, as its Cancel button does: {@code WM_COMMAND}
+   * with {@code IDCANCEL}. {@code IFileDialog::Close} answers {@code S_OK} from the loop of the
+   * dialog and leaves it on screen. Nothing happens without a dialog.
+   */
+  @SneakyThrows
+  public void cancelOwnedDialog(MemorySegment owner) {
+    MemorySegment dialog = (MemorySegment) GET_WINDOW.invokeExact(owner, GW_ENABLEDPOPUP);
+    if (!dialog.equals(MemorySegment.NULL) && !dialog.equals(owner)) {
+      int _ = (int) POST_MESSAGE.invokeExact(dialog, WM_COMMAND, (long) IDCANCEL, 0L);
+    }
+  }
+
+  /**
+   * Closes the modal dialog that {@code owner} has up, a message box among them, as if its button
+   * {@code result} was pressed, which a message box without a Cancel button needs. Call it on the
+   * thread of the dialog, from a message that its loop dispatched; nothing happens without a
+   * dialog.
+   */
+  @SneakyThrows
+  public void endOwnedDialog(MemorySegment owner, int result) {
+    MemorySegment dialog = (MemorySegment) GET_WINDOW.invokeExact(owner, GW_ENABLEDPOPUP);
+    if (!dialog.equals(MemorySegment.NULL) && !dialog.equals(owner)) {
+      int _ = (int) END_DIALOG.invokeExact(dialog, (long) result);
     }
   }
 
@@ -401,6 +623,139 @@ public class User32 {
     int _ = (int) SET_FOREGROUND_WINDOW.invokeExact(hwnd);
   }
 
+  /** Calls {@code ShowWindow} with one of the {@code SW_} commands. */
+  @SneakyThrows
+  public void showWindow(MemorySegment hwnd, int command) {
+    int _ = (int) SHOW_WINDOW.invokeExact(hwnd, command);
+  }
+
+  /** Calls {@code IsIconic}: whether the window is minimized. */
+  @SneakyThrows
+  public boolean isMinimized(MemorySegment hwnd) {
+    return (int) IS_ICONIC.invokeExact(hwnd) != 0;
+  }
+
+  /** Calls {@code IsZoomed}: whether the window is maximized. */
+  @SneakyThrows
+  public boolean isMaximized(MemorySegment hwnd) {
+    return (int) IS_ZOOMED.invokeExact(hwnd) != 0;
+  }
+
+  /**
+   * Whether {@code hwnd} is the window that the user works with, by {@code GetForegroundWindow}.
+   */
+  @SneakyThrows
+  public boolean isForeground(MemorySegment hwnd) {
+    return ((MemorySegment) GET_FOREGROUND_WINDOW.invokeExact()).address() == hwnd.address();
+  }
+
+  /**
+   * Brings {@code hwnd} to the front and gives it the focus, from a process that may be in the
+   * background.
+   *
+   * <p>{@code SetForegroundWindow} is granted only to the process that the user last worked with.
+   * When it isn't, the thread of the window joins the input of the thread that owns the foreground
+   * window for the time of the call, which puts the two on the same footing, and leaves again. This
+   * is the one call that the application makes to come to the front on purpose, from its tray icon
+   * or a second instance, so it's worth the step.
+   */
+  @SneakyThrows
+  public void bringToFront(MemorySegment hwnd) {
+    MemorySegment foreground = (MemorySegment) GET_FOREGROUND_WINDOW.invokeExact();
+    if (foreground.address() == hwnd.address()) {
+      return;
+    }
+    int ours = Kernel32.currentThreadId();
+    int theirs =
+        foreground.equals(MemorySegment.NULL)
+            ? ours
+            : (int) GET_WINDOW_THREAD_PROCESS_ID.invokeExact(foreground, MemorySegment.NULL);
+    boolean attached =
+        theirs != ours && (int) ATTACH_THREAD_INPUT.invokeExact(theirs, ours, 1) != 0;
+    try {
+      int _ = (int) BRING_WINDOW_TO_TOP.invokeExact(hwnd);
+      int _ = (int) SET_FOREGROUND_WINDOW.invokeExact(hwnd);
+    } finally {
+      if (attached) {
+        int _ = (int) ATTACH_THREAD_INPUT.invokeExact(theirs, ours, 0);
+      }
+    }
+  }
+
+  /** Whether the window has {@code WS_EX_TOPMOST}: it stays above windows that don't. */
+  @SneakyThrows
+  public boolean isTopmost(MemorySegment hwnd) {
+    return ((long) GET_WINDOW_LONG_PTR.invokeExact(hwnd, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0;
+  }
+
+  /**
+   * Puts the window into the topmost band of the z-order, or takes it out, without activating it.
+   */
+  @SneakyThrows
+  public void topmost(MemorySegment hwnd, boolean topmost) {
+    MemorySegment insertAfter = MemorySegment.ofAddress(topmost ? -1 : -2);
+    int _ =
+        (int)
+            SET_WINDOW_POS.invokeExact(
+                hwnd, insertAfter, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+  }
+
+  /**
+   * Calls {@code GetWindowPlacement}: the normal position, size, and state of the window, as the
+   * bytes of a {@code WINDOWPLACEMENT} that {@link #placement(MemorySegment, byte[])} takes back.
+   */
+  @SneakyThrows
+  public byte[] placement(MemorySegment hwnd) {
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment placement = arena.allocate(WINDOWPLACEMENT_SIZE);
+      placement.set(Signatures.C_INT, 0, WINDOWPLACEMENT_SIZE);
+      int _ = (int) GET_WINDOW_PLACEMENT.invokeExact(hwnd, placement);
+      return placement.toArray(ValueLayout.JAVA_BYTE);
+    }
+  }
+
+  /** Calls {@code SetWindowPlacement} with what {@link #placement(MemorySegment)} returned. */
+  @SneakyThrows
+  public void placement(MemorySegment hwnd, byte[] placement) {
+    try (Arena arena = Arena.ofConfined()) {
+      int _ =
+          (int)
+              SET_WINDOW_PLACEMENT.invokeExact(
+                  hwnd, arena.allocateFrom(ValueLayout.JAVA_BYTE, placement));
+    }
+  }
+
+  /** Moves and resizes the frame of the window to cover {@code {left, top, right, bottom}}. */
+  @SneakyThrows
+  public void bounds(MemorySegment hwnd, int[] rect) {
+    int _ =
+        (int)
+            SET_WINDOW_POS.invokeExact(
+                hwnd,
+                MemorySegment.NULL,
+                rect[0],
+                rect[1],
+                rect[2] - rect[0],
+                rect[3] - rect[1],
+                SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+  }
+
+  /**
+   * Writes the smallest and largest frame sizes that the user may resize the window to into the
+   * {@code MINMAXINFO} of a {@code WM_GETMINMAXINFO}. {@code null} leaves a limit as it is.
+   */
+  public void sizeLimits(long minMaxInfo, int[] minimum, int[] maximum) {
+    MemorySegment info = MemorySegment.ofAddress(minMaxInfo).reinterpret(40);
+    if (minimum != null) {
+      info.set(Signatures.C_INT, MIN_TRACK_SIZE_OFFSET, minimum[0]);
+      info.set(Signatures.C_INT, MIN_TRACK_SIZE_OFFSET + 4, minimum[1]);
+    }
+    if (maximum != null) {
+      info.set(Signatures.C_INT, MAX_TRACK_SIZE_OFFSET, maximum[0]);
+      info.set(Signatures.C_INT, MAX_TRACK_SIZE_OFFSET + 4, maximum[1]);
+    }
+  }
+
   /** {@code DestroyWindow}: sends {@code WM_DESTROY} synchronously before returning. */
   @SneakyThrows
   public void destroy(MemorySegment hwnd) {
@@ -464,6 +819,100 @@ public class User32 {
                 hwnd, MemorySegment.NULL, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
   }
 
+  /** {@code CF_UNICODETEXT}: text in UTF-16, the one text format that every application reads. */
+  public final int CF_UNICODETEXT = 13;
+
+  /** {@code CF_BITMAP}: an {@code HBITMAP}, from which Windows makes the DIB formats on request. */
+  public final int CF_BITMAP = 2;
+
+  /**
+   * Opens the clipboard for {@code owner}, trying a few times over 100 milliseconds, since another
+   * application may hold it for a moment.
+   *
+   * @return Whether it's open; {@link #closeClipboard()} closes it.
+   */
+  @SneakyThrows
+  public boolean openClipboard(MemorySegment owner) {
+    for (int attempt = 0; attempt < 10; attempt++) {
+      if ((int) OPEN_CLIPBOARD.invokeExact(owner) != 0) {
+        return true;
+      }
+      Thread.sleep(10);
+    }
+    return false;
+  }
+
+  /** Calls {@code CloseClipboard}. */
+  @SneakyThrows
+  public void closeClipboard() {
+    int _ = (int) CLOSE_CLIPBOARD.invokeExact();
+  }
+
+  /** Empties the open clipboard and makes its owner the one that opened it. */
+  @SneakyThrows
+  public void emptyClipboard() {
+    int _ = (int) EMPTY_CLIPBOARD.invokeExact();
+  }
+
+  /**
+   * Adds {@code memory} in {@code format} to what the open clipboard has; the clipboard owns it
+   * from then on.
+   *
+   * @return Whether the clipboard took it; the caller frees the memory when it didn't.
+   */
+  @SneakyThrows
+  public boolean setClipboardData(int format, MemorySegment memory) {
+    return !((MemorySegment) SET_CLIPBOARD_DATA.invokeExact(format, memory))
+        .equals(MemorySegment.NULL);
+  }
+
+  /** The number of the clipboard format named {@code name}, registered on first use. */
+  @SneakyThrows
+  public int registerClipboardFormat(String name) {
+    try (Arena arena = Arena.ofConfined()) {
+      return (int) REGISTER_CLIPBOARD_FORMAT.invokeExact(Wide.allocate(arena, name));
+    }
+  }
+
+  /** What the open clipboard has in {@code format}, which it keeps owning, or {@code NULL}. */
+  @SneakyThrows
+  public MemorySegment clipboardData(int format) {
+    return (MemorySegment) GET_CLIPBOARD_DATA.invokeExact(format);
+  }
+
+  /**
+   * Calls {@code callback}, a {@code MONITORENUMPROC}, for every monitor of the desktop, on the
+   * calling thread, before it returns.
+   */
+  @SneakyThrows
+  public void enumDisplayMonitors(MemorySegment callback) {
+    int _ =
+        (int)
+            ENUM_DISPLAY_MONITORS.invokeExact(MemorySegment.NULL, MemorySegment.NULL, callback, 0L);
+  }
+
+  /** The monitor that holds most of the window, or the nearest one. */
+  @SneakyThrows
+  public MemorySegment monitorOf(MemorySegment hwnd) {
+    return (MemorySegment) MONITOR_FROM_WINDOW.invokeExact(hwnd, MONITOR_DEFAULTTONEAREST);
+  }
+
+  /** What {@code GetMonitorInfoW} tells about {@code monitor}. */
+  @SneakyThrows
+  public MonitorInfo monitorInfo(MemorySegment monitor) {
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment info = arena.allocate(Signatures.MONITORINFOEX);
+      info.set(Signatures.C_INT, 0, (int) Signatures.MONITORINFOEX.byteSize());
+      int _ = (int) GET_MONITOR_INFO.invokeExact(monitor, info);
+      int[] fields = info.asSlice(0, Signatures.MONITORINFO.byteSize()).toArray(Signatures.C_INT);
+      return new MonitorInfo(
+          new int[] {fields[1], fields[2], fields[3], fields[4]},
+          new int[] {fields[5], fields[6], fields[7], fields[8]},
+          (fields[9] & MONITORINFOF_PRIMARY) != 0,
+          Wide.read(info.asSlice(Signatures.MONITORINFO.byteSize())));
+    }
+  }
+
   /**
    * {@code {left, top, right, bottom}} of the work area of the monitor that holds most of the
    * window: the monitor minus the taskbar.
@@ -485,26 +934,132 @@ public class User32 {
     }
   }
 
-  /** Resizes the window so that its client area is {@code width} by {@code height}. */
+  /**
+   * Resizes the window so that its client area is {@code width} by {@code height} inside {@code
+   * frame}.
+   */
   @SneakyThrows
-  public void resizeClient(MemorySegment hwnd, int width, int height) {
+  public void resizeClient(MemorySegment hwnd, int width, int height, WindowFrame frame) {
+    int[] size = User32.frameSize(hwnd, width, height, frame);
+    int _ =
+        (int)
+            SET_WINDOW_POS.invokeExact(
+                hwnd,
+                MemorySegment.NULL,
+                0,
+                0,
+                size[0],
+                size[1],
+                SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+  }
+
+  /**
+   * {@code {width, height}} of the frame around a client area of {@code width} by {@code height},
+   * with the current style of the window, by {@code AdjustWindowRectEx}. Without the title bar, the
+   * frame has nothing above the client area, and {@link WindowFrame#NONE} has nothing around it.
+   */
+  @SneakyThrows
+  public int[] frameSize(MemorySegment hwnd, int width, int height, WindowFrame frame) {
+    if (frame == WindowFrame.NONE) {
+      return new int[] {width, height};
+    }
     try (Arena arena = Arena.ofConfined()) {
       MemorySegment rect = arena.allocate(Signatures.RECT);
       RECT_RIGHT.set(rect, 0L, width);
       RECT_BOTTOM.set(rect, 0L, height);
-      int _ = (int) ADJUST_WINDOW_RECT_EX.invokeExact(rect, (int) style(hwnd), 0, 0);
-      int outerWidth = (int) RECT_RIGHT.get(rect, 0L) - (int) RECT_LEFT.get(rect, 0L);
-      int outerHeight = (int) RECT_BOTTOM.get(rect, 0L) - (int) RECT_TOP.get(rect, 0L);
-      int _ =
-          (int)
-              SET_WINDOW_POS.invokeExact(
-                  hwnd,
-                  MemorySegment.NULL,
-                  0,
-                  0,
-                  outerWidth,
-                  outerHeight,
-                  SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+      int _ = (int) ADJUST_WINDOW_RECT_EX.invokeExact(rect, (int) User32.style(hwnd), 0, 0);
+      return new int[] {
+        (int) RECT_RIGHT.get(rect, 0L) - (int) RECT_LEFT.get(rect, 0L),
+        (int) RECT_BOTTOM.get(rect, 0L)
+            - (frame == WindowFrame.FULL ? (int) RECT_TOP.get(rect, 0L) : 0)
+      };
+    }
+  }
+
+  /**
+   * Answers {@code WM_NCCALCSIZE} for a window without a title bar: the frame that {@code
+   * DefWindowProc} works out, minus the part above the client area, or, for {@link
+   * WindowFrame#NONE}, minus all of it. The window keeps everything that its style gives a window
+   * with a title bar: snapping, and the animations of minimize and maximize. A maximized window
+   * reaches past its monitor by the width of its frame, which the client area leaves out on every
+   * side.
+   *
+   * @param parameters The {@code NCCALCSIZE_PARAMS} of the message, whose first rectangle is the
+   *     proposed window on the way in and the client area on the way out.
+   * @return What the window procedure returns.
+   */
+  @SneakyThrows
+  public long removeFrame(
+      MemorySegment hwnd, long wordParameter, long parameters, WindowFrame frame) {
+    MemorySegment rect =
+        MemorySegment.ofAddress(parameters).reinterpret(Signatures.RECT.byteSize());
+    int windowLeft = (int) RECT_LEFT.get(rect, 0L);
+    int windowTop = (int) RECT_TOP.get(rect, 0L);
+    int windowRight = (int) RECT_RIGHT.get(rect, 0L);
+    int windowBottom = (int) RECT_BOTTOM.get(rect, 0L);
+    long _ = User32.defWindowProc(hwnd, WM_NCCALCSIZE, wordParameter, parameters);
+    boolean maximized = User32.isMaximized(hwnd);
+    int edge = maximized ? (int) RECT_LEFT.get(rect, 0L) - windowLeft : 0;
+    RECT_TOP.set(rect, 0L, windowTop + edge);
+    if (frame == WindowFrame.NONE && !maximized) {
+      RECT_LEFT.set(rect, 0L, windowLeft);
+      RECT_RIGHT.set(rect, 0L, windowRight);
+      RECT_BOTTOM.set(rect, 0L, windowBottom);
+    }
+    return 0;
+  }
+
+  /**
+   * Grays out {@code Close} in the system menu of the window, which grays out the close button of
+   * the title bar too and takes away {@code Alt+F4}.
+   */
+  @SneakyThrows
+  public void disableClose(MemorySegment hwnd) {
+    MemorySegment menu = (MemorySegment) GET_SYSTEM_MENU.invokeExact(hwnd, 0);
+    int _ = (int) ENABLE_MENU_ITEM.invokeExact(menu, SC_CLOSE, MF_GRAYED);
+  }
+
+  /**
+   * Hands the pointer to Windows, which moves or resizes the window the way a press on its frame at
+   * {@code hitTest} does, until the button is released: {@code WM_NCLBUTTONDOWN}, posted after the
+   * web view lets the pointer go. Does nothing once the primary button is up, as it may be after a
+   * quick click: the loop would then wait for the next one.
+   *
+   * @param hitTest {@link #HTCAPTION} to move, {@link #HTLEFT} and the like to resize.
+   */
+  @SneakyThrows
+  public void beginFrameDrag(MemorySegment hwnd, int hitTest) {
+    int primary =
+        (int) GET_SYSTEM_METRICS.invokeExact(SM_SWAPBUTTON) != 0 ? VK_RBUTTON : VK_LBUTTON;
+    if (((short) GET_ASYNC_KEY_STATE.invokeExact(primary) & 0x8000) == 0) {
+      return;
+    }
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment point = arena.allocate(Signatures.C_INT, 2);
+      int _ = (int) GET_CURSOR_POS.invokeExact(point);
+      long position =
+          (point.getAtIndex(Signatures.C_INT, 0) & 0xFFFFL)
+              | ((point.getAtIndex(Signatures.C_INT, 1) & 0xFFFFL) << 16);
+      int _ = (int) RELEASE_CAPTURE.invokeExact();
+      int _ = (int) POST_MESSAGE.invokeExact(hwnd, WM_NCLBUTTONDOWN, (long) hitTest, position);
+    }
+  }
+
+  /** {@code {left, top, right, bottom}} of the whole monitor that holds most of the window. */
+  @SneakyThrows
+  public int[] monitorRect(MemorySegment hwnd) {
+    MemorySegment monitor =
+        (MemorySegment) MONITOR_FROM_WINDOW.invokeExact(hwnd, MONITOR_DEFAULTTONEAREST);
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment info = arena.allocate(Signatures.MONITORINFO);
+      info.set(Signatures.C_INT, 0, (int) Signatures.MONITORINFO.byteSize());
+      int _ = (int) GET_MONITOR_INFO.invokeExact(monitor, info);
+      return new int[] {
+        info.get(Signatures.C_INT, 4),
+        info.get(Signatures.C_INT, 8),
+        info.get(Signatures.C_INT, 12),
+        info.get(Signatures.C_INT, 16)
+      };
     }
   }
 

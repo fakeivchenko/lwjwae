@@ -38,13 +38,17 @@ public class WebKit {
   public void setDeveloperExtrasEnabled(MemorySegment webView, boolean enabled) {
     MemorySegment number = ObjC.send(ObjC.cls("NSNumber"), "numberWithBool:", enabled);
     ObjC.sendVoid(
-        preferences(webView), "setValue:forKey:", number, Foundation.string(DEVELOPER_EXTRAS_KEY));
+        WebKit.preferences(webView),
+        "setValue:forKey:",
+        number,
+        Foundation.string(DEVELOPER_EXTRAS_KEY));
   }
 
   /** Reads {@code developerExtrasEnabled} from the preferences of {@code webView}. */
   public boolean isDeveloperExtrasEnabled(MemorySegment webView) {
     MemorySegment number =
-        ObjC.send(preferences(webView), "valueForKey:", Foundation.string(DEVELOPER_EXTRAS_KEY));
+        ObjC.send(
+            WebKit.preferences(webView), "valueForKey:", Foundation.string(DEVELOPER_EXTRAS_KEY));
     return !ObjC.isNull(number) && ObjC.sendLong(number, "integerValue") != 0;
   }
 
@@ -82,9 +86,32 @@ public class WebKit {
     return webView;
   }
 
+  /**
+   * Stops {@code webView} from filling what the page leaves clear, with {@code drawsBackground}: a
+   * private key that WebKit has kept since the first {@code WKWebView}, and the one that every
+   * embedding with a transparent window uses.
+   */
+  public void clearBackground(MemorySegment webView) {
+    ObjC.sendVoid(
+        webView,
+        "setValue:forKey:",
+        ObjC.send(ObjC.cls("NSNumber"), "numberWithBool:", false),
+        Foundation.string("drawsBackground"));
+  }
+
   /** Calls {@code -[WKWebView setNavigationDelegate:]}. {@code NULL} detaches the delegate. */
   public void setNavigationDelegate(MemorySegment webView, MemorySegment delegate) {
     ObjC.sendVoid(webView, "setNavigationDelegate:", delegate);
+  }
+
+  /** Calls {@code -[WKWebView setUIDelegate:]}. {@code NULL} detaches the delegate. */
+  public void setUiDelegate(MemorySegment webView, MemorySegment delegate) {
+    ObjC.sendVoid(webView, "setUIDelegate:", delegate);
+  }
+
+  /** The URL that a {@code WKNavigationAction} goes to. */
+  public String navigationActionUrl(MemorySegment action) {
+    return Foundation.urlString(ObjC.send(ObjC.send(action, "request"), "URL"));
   }
 
   /**

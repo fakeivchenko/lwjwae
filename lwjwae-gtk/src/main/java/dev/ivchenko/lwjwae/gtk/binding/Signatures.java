@@ -51,6 +51,21 @@ public class Signatures {
   /** {@code T* f(gint)}. */
   public final FunctionDescriptor POINTER_INT = FunctionDescriptor.of(C_POINTER, C_INT);
 
+  /** {@code T* f(gint, gint)}: {@code gtk_box_new}. */
+  public final FunctionDescriptor POINTER_INT_INT = FunctionDescriptor.of(C_POINTER, C_INT, C_INT);
+
+  /** {@code void f(T*, U*, int)}: {@code gtk_clipboard_set_text}. */
+  public final FunctionDescriptor VOID_POINTER_POINTER_INT =
+      FunctionDescriptor.ofVoid(C_POINTER, C_POINTER, C_INT);
+
+  /** {@code T* f(U*, int)}: {@code gdk_display_get_monitor}. */
+  public final FunctionDescriptor POINTER_POINTER_INT =
+      FunctionDescriptor.of(C_POINTER, C_POINTER, C_INT);
+
+  /** {@code T* f(const gchar*, U*, gint, const gchar*, const gchar*)}: the native file chooser. */
+  public final FunctionDescriptor GTK_FILE_CHOOSER_NATIVE_NEW =
+      FunctionDescriptor.of(C_POINTER, C_POINTER, C_POINTER, C_INT, C_POINTER, C_POINTER);
+
   /** {@code gint f(T*)}. */
   public final FunctionDescriptor INT_POINTER = FunctionDescriptor.of(C_INT, C_POINTER);
 
@@ -86,6 +101,25 @@ public class Signatures {
   /** {@code void f(T*, gint, gint)}. */
   public final FunctionDescriptor VOID_POINTER_INT_INT =
       FunctionDescriptor.ofVoid(C_POINTER, C_INT, C_INT);
+
+  /** {@code void f(T*, U*, V*, W*)}: {@code gdk_device_get_position}. */
+  public final FunctionDescriptor VOID_POINTER_POINTER_POINTER_POINTER =
+      FunctionDescriptor.ofVoid(C_POINTER, C_POINTER, C_POINTER, C_POINTER);
+
+  /** {@code void f(T*, gint, gint, gint, guint32)}: {@code gtk_window_begin_move_drag}. */
+  public final FunctionDescriptor VOID_POINTER_INT_INT_INT_INT =
+      FunctionDescriptor.ofVoid(C_POINTER, C_INT, C_INT, C_INT, C_INT);
+
+  /**
+   * {@code void f(T*, GdkWindowEdge, gint, gint, gint, guint32)}: {@code
+   * gtk_window_begin_resize_drag}.
+   */
+  public final FunctionDescriptor VOID_POINTER_INT_INT_INT_INT_INT =
+      FunctionDescriptor.ofVoid(C_POINTER, C_INT, C_INT, C_INT, C_INT, C_INT);
+
+  /** {@code void f(T*, U*, V*, gint)}: {@code gtk_window_set_geometry_hints}. */
+  public final FunctionDescriptor VOID_POINTER_POINTER_POINTER_INT =
+      FunctionDescriptor.ofVoid(C_POINTER, C_POINTER, C_POINTER, C_INT);
 
   /** {@code void f(T*, guint, const gchar*)}: {@code webkit_uri_scheme_response_set_status}. */
   public final FunctionDescriptor VOID_POINTER_INT_POINTER =
@@ -194,6 +228,12 @@ public class Signatures {
       FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_POINTER);
 
   /**
+   * {@code GdkFilterReturn (*)(GdkXEvent*, GdkEvent*, gpointer)}: a filter of {@code
+   * gdk_window_add_filter}, which sees every {@code XEvent} before GDK does.
+   */
+  public final FunctionDescriptor GDK_FILTER_FUNC = DELETE_EVENT_CALLBACK;
+
+  /**
    * {@code void (*)(GtkStatusIcon*, guint button, guint activate_time, gpointer)}: the {@code
    * popup-menu} signal of a status icon.
    */
@@ -208,6 +248,18 @@ public class Signatures {
 
   /** {@code void (*WebKitURISchemeRequestCallback)(WebKitURISchemeRequest*, gpointer)}. */
   public final FunctionDescriptor URI_SCHEME_REQUEST_CALLBACK = VOID_POINTER_POINTER;
+
+  /**
+   * {@code GtkWidget* (*)(WebKitWebView*, WebKitNavigationAction*, gpointer)}: {@code create}, the
+   * request for a new window, which a {@code NULL} answer declines.
+   */
+  public final FunctionDescriptor CREATE_CALLBACK = POINTER_POINTER_POINTER_POINTER;
+
+  /**
+   * {@code void (*)(T*, gint response_id, gpointer)}: the {@code response} signal of a dialog and
+   * of a native dialog.
+   */
+  public final FunctionDescriptor RESPONSE_CALLBACK = VOID_POINTER_INT_POINTER;
 
   /** {@code void (*)(WebKitWebView*, WebKitLoadEvent, gpointer)}: {@code load-changed}. */
   public final FunctionDescriptor LOAD_CHANGED_CALLBACK =

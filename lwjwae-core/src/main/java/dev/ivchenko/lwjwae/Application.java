@@ -1,15 +1,23 @@
 package dev.ivchenko.lwjwae;
 
 import dev.ivchenko.lwjwae.bridge.codec.BridgeCodec;
+import dev.ivchenko.lwjwae.clipboard.Clipboard;
 import dev.ivchenko.lwjwae.event.Event;
 import dev.ivchenko.lwjwae.event.EventSubscription;
+import dev.ivchenko.lwjwae.event.SecondInstanceEvent;
 import dev.ivchenko.lwjwae.exception.BackendNotAvailableException;
+import dev.ivchenko.lwjwae.exception.ShortcutUnavailableException;
+import dev.ivchenko.lwjwae.instance.InstanceLock;
 import dev.ivchenko.lwjwae.notification.Notification;
 import dev.ivchenko.lwjwae.notification.NotificationHandle;
 import dev.ivchenko.lwjwae.rpc.RpcHandler;
+import dev.ivchenko.lwjwae.shortcut.Shortcut;
 import dev.ivchenko.lwjwae.tray.Tray;
 import dev.ivchenko.lwjwae.tray.TrayIcon;
+import dev.ivchenko.lwjwae.tray.TrayMenuItem;
 import dev.ivchenko.lwjwae.util.PlatformUtil;
+import java.io.UncheckedIOException;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -61,19 +69,150 @@ public interface Application extends AutoCloseable {
    * @throws BackendNotAvailableException If no backend on the classpath supports this machine.
    */
   static Application create() {
-    return create(ApplicationParameters.createDefault());
+    return Application.create(ApplicationParameters.createDefault());
   }
 
   /**
    * Creates an application on the backend of this machine. No window exists yet: {@link #open}
    * creates one.
    *
+   * <p>Platforms:
+   *
+   * <ul>
+   *   <li>Windows: The {@code win32-webview2} backend, on x64, with the WebView2 Evergreen runtime,
+   *       which Windows 11 ships and Edge installs on Windows 10.
+   *   <li>macOS: The {@code cocoa-wkwebview} backend. The first application also gives the process
+   *       the menu bar of a Mac application: the application menu, File, Edit, and Window, which
+   *       carry Command-C, V, X, A, Z, and Quit.
+   *   <li>Linux, GTK 3: The {@code gtk3-webkit2gtk-4.1} backend, with GTK 3 and WebKitGTK 2.40 or
+   *       newer with the 4.1 API. It wins when both Linux backends could run.
+   *   <li>Linux, GTK 4: The {@code gtk4-webkitgtk-6.0} backend, with GTK 4 and WebKitGTK 6.0, which
+   *       runs its web processes in a bubblewrap sandbox. The sandbox needs unprivileged user
+   *       namespaces: Ubuntu 23.10 and newer allow them only through an AppArmor profile for the
+   *       executable.
+   * </ul>
+   *
    * @throws BackendNotAvailableException If no backend on the classpath supports this machine.
    */
   static Application create(ApplicationParameters parameters) {
     BackendProvider provider =
-        provider().orElseThrow(() -> new BackendNotAvailableException(noBackendMessage()));
+        Application.provider()
+            .orElseThrow(() -> new BackendNotAvailableException(Application.noBackendMessage()));
     return provider.create(parameters);
+  }
+
+  /**
+   * Runs an application of one window titled {@code title} that shows {@code target}, a URL or a
+   * file of the application such as {@code app/index.html}, and returns when the window closes.
+   *
+   * <pre>{@code
+   * public static void main(String[] args) {
+   *   Application.launch("Notes", "app/index.html");
+   * }
+   * }</pre>
+   *
+   * @throws BackendNotAvailableException If no backend on the classpath supports this machine.
+   */
+  static void launch(String title, String target) {
+    Application.launch(WindowParameters.of(title, target), _ -> {});
+  }
+
+  /** The same as {@link #launch(WindowParameters, Consumer)}, with nothing to set up. */
+  static void launch(WindowParameters parameters) {
+    Application.launch(parameters, _ -> {});
+  }
+
+  /**
+   * Runs an application of one window that opens with {@code parameters}, and returns when every
+   * window closed. {@code setup} gets the window before it loads its page and shows, to bind what
+   * the page calls; {@link Window#application()} reaches the rest.
+   *
+   * <pre>{@code
+   * Application.launch(
+   *     WindowParameters.of("Notes", "app/index.html"),
+   *     window -> window.bind("save", text -> store.save(text)));
+   * }</pre>
+   *
+   * @throws BackendNotAvailableException If no backend on the classpath supports this machine.
+   */
+  static void launch(WindowParameters parameters, Consumer<Window> setup) {
+    try (Application application = Application.create()) {
+      Window window = application.open(parameters.toBuilder().url(null).resource(null).build());
+      setup.accept(window);
+      if (parameters.resource() != null) {
+        window.loadResource(parameters.resource());
+      } else if (parameters.url() != null) {
+        window.navigate(parameters.url());
+      }
+      window.show();
+      application.run();
+    }
+  }
+
+  /**
+   * Creates the application unless another process of it runs already. That one gets the arguments
+   * of this process, its oldest window comes to the front, and its {@link #onSecondInstance}
+   * listeners hear of it; this process gets nothing and should end, having opened nothing, not even
+   * the toolkit.
+   *
+   * <pre>{@code
+   * public static void main(String[] args) {
+   *   ApplicationParameters parameters = ApplicationParameters.builder().name("notes").build();
+   *   Optional<Application> created = Application.createSingleInstance(parameters, args);
+   *   if (created.isEmpty()) {
+   *     return;
+   *   }
+   *   try (Application application = created.get()) {
+   *     application.onSecondInstance(start -> openFiles(start.arguments()));
+   *     ...
+   *   }
+   * }
+   * }</pre>
+   *
+   * <p>The processes find each other by {@link ApplicationParameters#name()} and the user, so two
+   * users each run their own.
+   *
+   * <p>Platforms:
+   *
+   * <ul>
+   *   <li>Windows: The socket is in the temporary directory of the user, which needs Windows 10 or
+   *       later. The window comes forward from the background too.
+   *   <li>macOS: The socket is in the temporary directory of the user, or in {@code /tmp} when that
+   *       path leaves no room for it.
+   *   <li>Linux, GTK 3: The socket is in {@code $XDG_RUNTIME_DIR}. X11: as described. Wayland: the
+   *       window comes back but may only ask for attention.
+   *   <li>Linux, GTK 4: As on GTK 3.
+   * </ul>
+   *
+   * @param parameters The parameters of the application, with a name.
+   * @param arguments The arguments of this process, as {@code main} received them.
+   * @return The application, or empty when another process of it runs and took over.
+   * @throws IllegalArgumentException If {@code parameters} has no name.
+   * @throws UncheckedIOException If the processes can't reach each other.
+   * @throws BackendNotAvailableException If no backend on the classpath supports this machine.
+   */
+  static Optional<Application> createSingleInstance(
+      ApplicationParameters parameters, String... arguments) {
+    if (parameters.name() == null) {
+      throw new IllegalArgumentException("A single instance needs the name of the application");
+    }
+    SecondInstanceEvent start =
+        new SecondInstanceEvent(List.of(arguments), Path.of("").toAbsolutePath());
+    Optional<InstanceLock> claimed = InstanceLock.claim(parameters.name(), start);
+    if (claimed.isEmpty()) {
+      return Optional.empty();
+    }
+    InstanceLock lock = claimed.get();
+    Application application;
+    try {
+      application = Application.create(parameters);
+    } catch (RuntimeException | Error e) {
+      try (lock) {
+        throw e;
+      }
+    }
+    ((AbstractApplication) application).serveInstances(lock);
+    return Optional.of(application);
   }
 
   /**
@@ -81,8 +220,8 @@ public interface Application extends AutoCloseable {
    * the one that {@link #BACKEND_PROPERTY} or {@link #BACKEND_VARIABLE} names, if it's supported.
    */
   static Optional<BackendProvider> provider() {
-    String requested = requestedBackend();
-    return providers().stream()
+    String requested = Application.requestedBackend();
+    return Application.providers().stream()
         .filter(BackendProvider::isSupported)
         .filter(provider -> requested == null || provider.name().equals(requested))
         .max(Comparator.comparingInt(BackendProvider::priority));
@@ -102,8 +241,8 @@ public interface Application extends AutoCloseable {
   }
 
   private static String noBackendMessage() {
-    List<BackendProvider> providers = providers();
-    String requested = requestedBackend();
+    List<BackendProvider> providers = Application.providers();
+    String requested = Application.requestedBackend();
     if (requested != null) {
       return "Backend '"
           + requested
@@ -131,7 +270,18 @@ public interface Application extends AutoCloseable {
   /** The parameters that the application was created with, defaults applied. */
   ApplicationParameters parameters();
 
-  /** The name and version of the engine that draws the pages, such as {@code WebKitGTK 2.46.5}. */
+  /**
+   * The name and version of the engine that draws the pages, such as {@code WebKitGTK 2.46.5}.
+   *
+   * <p>Platforms:
+   *
+   * <ul>
+   *   <li>Windows: {@code WebView2} and the version of the runtime.
+   *   <li>macOS: {@code WKWebView} and the version of WebKit.
+   *   <li>Linux, GTK 3: {@code WebKitGTK} and its version.
+   *   <li>Linux, GTK 4: {@code WebKitGTK} and its version.
+   * </ul>
+   */
   String engine();
 
   /** Opens a window with every default. The window stays hidden until {@link Window#show()}. */
@@ -145,6 +295,36 @@ public interface Application extends AutoCloseable {
    * @throws IllegalStateException If the application is closed.
    */
   Window open(WindowParameters parameters);
+
+  /**
+   * Opens a window that loads {@code target}, a URL or a file of the application such as {@code
+   * app/index.html}, and shows it: {@link #open()}, {@link Window#load}, and {@link Window#show()}.
+   */
+  default Window show(String target) {
+    Window window = this.open();
+    window.load(target);
+    window.show();
+    return window;
+  }
+
+  /** Opens a window with {@code parameters} and shows it. */
+  default Window show(WindowParameters parameters) {
+    Window window = this.open(parameters);
+    window.show();
+    return window;
+  }
+
+  /**
+   * The screens of the desktop, the primary one first, at the moment of the call: screens come and
+   * go, so a program that keeps the list reads it again when it needs it.
+   */
+  List<Screen> screens();
+
+  /** The primary screen: the one that holds the menu bar or the taskbar. */
+  default Screen primaryScreen() {
+    List<Screen> screens = this.screens();
+    return screens.stream().filter(Screen::primary).findFirst().orElse(screens.getFirst());
+  }
 
   /** The windows that are open right now, oldest first. */
   List<Window> windows();
@@ -248,10 +428,94 @@ public interface Application extends AutoCloseable {
    * closed, and it keeps {@link #run()} running, which is what lets an application live in the tray
    * with its window hidden or gone. It goes away with {@link Tray#close()} or with the application.
    *
+   * <p>Platforms:
+   *
+   * <ul>
+   *   <li>Windows: An icon in the notification area. A left click runs {@code onActivate}, or opens
+   *       the menu without it; a right click opens the menu. The icon comes back after Explorer
+   *       restarts.
+   *   <li>macOS: An item in the menu bar, with the image scaled to 18 points. Without {@code
+   *       onActivate}, any click opens the menu; with it, a primary click runs it, and a secondary
+   *       or Control click opens the menu.
+   *   <li>Linux, GTK 3: The first that works: libappindicator, where any click opens the menu and
+   *       {@code onActivate} never runs; a StatusNotifierItem that the library serves itself, where
+   *       the session has a StatusNotifier host; or {@code GtkStatusIcon} on X11 with a panel that
+   *       has a legacy tray. Without any, the call throws.
+   *   <li>Linux, GTK 4: A StatusNotifierItem that the library serves itself, so it needs a
+   *       StatusNotifier host, which KDE and GNOME with the AppIndicator extension have; without
+   *       one, the call throws.
+   * </ul>
+   *
    * @throws UnsupportedOperationException If this backend has no tray support yet.
    * @throws IllegalStateException If the application is closed.
    */
   Tray tray(TrayIcon icon);
+
+  /**
+   * Puts an icon in the system tray: a PNG among the resources of the application, such as {@code
+   * app/tray.png}, with {@code menu}.
+   */
+  default Tray tray(String icon, TrayMenuItem... menu) {
+    return this.tray(TrayIcon.builder().icon(icon).menu(menu).build());
+  }
+
+  /**
+   * Runs {@code handler} whenever the user presses {@code shortcut}, whichever application has the
+   * keyboard, until the returned handle gives the shortcut back or the application closes.
+   *
+   * <p>The shortcut belongs to the application while it is bound: the key press goes to the
+   * handler, not to the application in front. The handler runs off the UI thread, like a handler of
+   * the tray, so it may block or call back into a window, often {@link Window#focus()}.
+   *
+   * <pre>{@code
+   * application.globalShortcut("CmdOrCtrl+Shift+Space", window::focus);
+   * }</pre>
+   *
+   * <p>Platforms:
+   *
+   * <ul>
+   *   <li>Windows: {@code RegisterHotKey}. A shortcut that another application holds throws, and so
+   *       does one that Windows keeps, such as {@code Win+L}. Holding the keys down runs the
+   *       handler once.
+   *   <li>macOS: {@code RegisterEventHotKey} of Carbon, which needs no permission of the user. A
+   *       shortcut of the system, such as {@code Command+Space} for Spotlight, may still go to the
+   *       system first.
+   *   <li>Linux, GTK 3: X11: a grab of the key on the root window, which throws when another client
+   *       holds it. Wayland: the {@code GlobalShortcuts} portal, which KDE Plasma and GNOME 48 and
+   *       later have. The desktop asks the user to confirm the shortcuts the first time and may let
+   *       the user pick other keys; the call returns before that, and a shortcut that the user
+   *       turns down never runs. Without the portal, the call throws {@link
+   *       UnsupportedOperationException}. {@link Window#focus()} from the handler brings the window
+   *       to the front where the portal hands on the activation token of the press, as GNOME does;
+   *       KDE Plasma hands none on, and the window only asks for attention in the task bar.
+   *   <li>Linux, GTK 4: As on GTK 3.
+   * </ul>
+   *
+   * @return The handle that gives the shortcut back. Giving it back twice is harmless.
+   * @throws ShortcutUnavailableException If another application, or this one, holds the shortcut.
+   * @throws UnsupportedOperationException If the desktop has no global shortcuts, or the backend
+   *     has none yet.
+   * @throws IllegalStateException If the application is closed.
+   */
+  EventSubscription globalShortcut(Shortcut shortcut, Runnable handler);
+
+  /**
+   * Runs {@code handler} whenever the user presses {@code shortcut}, written as {@link
+   * Shortcut#parse} reads it, such as {@code Ctrl+Shift+K}.
+   *
+   * @throws IllegalArgumentException If the text isn't a shortcut.
+   */
+  default EventSubscription globalShortcut(String shortcut, Runnable handler) {
+    return this.globalShortcut(Shortcut.parse(shortcut), handler);
+  }
+
+  /**
+   * The clipboard of the desktop.
+   *
+   * @throws UnsupportedOperationException If this backend has no clipboard yet.
+   * @throws IllegalStateException If the application is closed.
+   */
+  Clipboard clipboard();
 
   /**
    * Shows a desktop notification and returns the handle that takes it back.
@@ -260,20 +524,83 @@ public interface Application extends AutoCloseable {
    * doesn't keep {@link #run()} running, and it goes away with the application, because its buttons
    * and its {@code onActivate} handler go with it.
    *
+   * <p>Platforms:
+   *
+   * <ul>
+   *   <li>Windows: A toast, filed under an ID made from {@link ApplicationParameters#name()} that
+   *       the library registers for the user. A toast that times out moves to Notification Center,
+   *       where it can still be clicked, and under Do Not Disturb every toast goes there at once.
+   *   <li>macOS: Only for an application packaged as an {@code .app} bundle with an identifier:
+   *       under the {@code java} launcher or as a bare executable, the call throws. The first
+   *       notification asks the user for permission; after a no, every call throws until the user
+   *       allows them in System Settings.
+   *   <li>Linux, GTK 3: Through {@code org.freedesktop.Notifications} over D-Bus; without a session
+   *       bus or a notification server, the call throws. How much of the image and the buttons
+   *       shows is up to the server.
+   *   <li>Linux, GTK 4: As on GTK 3.
+   * </ul>
+   *
    * @throws UnsupportedOperationException If this backend has no notifications yet, or the desktop
    *     has nothing that shows them.
    * @throws IllegalStateException If the application is closed.
    */
   NotificationHandle showNotification(Notification notification);
 
+  /** Shows a notification of {@code title} and {@code body}, and nothing else. */
+  default NotificationHandle showNotification(String title, String body) {
+    return this.showNotification(Notification.of(title, body));
+  }
+
+  /**
+   * Listens to the starts of other processes of the application, when it was created by {@link
+   * #createSingleInstance}; before the listeners hear of one, the oldest window has come to the
+   * front. A listener runs on a virtual thread, and the process that started waits until every
+   * listener returned. A start that came before any listener reaches the first one on the thread
+   * that registers it.
+   */
+  EventSubscription onSecondInstance(Consumer<SecondInstanceEvent> listener);
+
+  /**
+   * Opens {@code url} where the system opens it: a web page in the default browser, a {@code
+   * mailto:} link in the mail client. Returns once the system has taken the URL, not when it shows.
+   *
+   * <p>Only {@code http}, {@code https}, and {@code mailto} go through: a {@code file:} URL or the
+   * scheme of another application would run whatever the system associates with it, which a page
+   * must never be able to ask for.
+   *
+   * <p>Platforms:
+   *
+   * <ul>
+   *   <li>Windows: Through {@code ShellExecuteW}.
+   *   <li>macOS: Through {@code NSWorkspace}.
+   *   <li>Linux, GTK 3: Through {@code g_app_info_launch_default_for_uri}, which goes to the
+   *       OpenURI portal inside a sandbox such as Flatpak.
+   *   <li>Linux, GTK 4: As on GTK 3.
+   * </ul>
+   *
+   * @throws IllegalArgumentException If {@code url} isn't an absolute URL of one of those schemes.
+   * @throws IllegalStateException If the system couldn't open it, or the application is closed.
+   */
+  void openExternal(String url);
+
   /**
    * Blocks the calling thread while any window is open or any tray icon is up, or until {@link
    * #quit()}. Returns at once when there is neither. A window opened from another thread, or from a
    * page, in the meantime keeps the application running.
    *
+   * <p>Platforms:
+   *
+   * <ul>
+   *   <li>Windows: As described.
+   *   <li>macOS: On the main thread of a process that hasn't started the application loop, as in
+   *       the {@code main} method of a native image, the call runs the loop itself and returns when
+   *       the last window closes or on {@link #quit()}. Elsewhere, it waits as described.
+   *   <li>Linux, GTK 3: As described.
+   *   <li>Linux, GTK 4: As described.
+   * </ul>
+   *
    * @throws IllegalStateException If called from the UI thread, where blocking would freeze every
-   *     window. The macOS backend is the exception: there the main thread runs the application loop
-   *     itself, and {@code run()} on it returns when the last window closes.
+   *     window, except on macOS.
    */
   void run();
 

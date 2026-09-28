@@ -90,6 +90,16 @@ it, once per process, because neither can be undone:
 
 The window stays hidden until `show()`, which calls `gtk_widget_show_all`.
 
+A window without a title bar gets a title bar that never shows, an empty box that
+`gtk_widget_set_no_show_all` keeps out of `gtk_widget_show_all`. The window draws its own frame
+then, on X11 too, with the shadow and the resize edges in it; `gtk_window_set_decorated(FALSE)`
+would take those away, and an empty box that shows would still take the height that the theme
+gives a title bar. A window without its minimize or maximize button gets a `GtkHeaderBar` with the
+style class of GTK's own bar and the `gtk-decoration-layout` of the desktop minus those buttons:
+neither the window manager of X11 nor GTK's own bar drops one of them alone. A drag from the page
+is `gtk_window_begin_move_drag` or `gtk_window_begin_resize_drag`, only while the first button is
+down: a window manager of X11 would otherwise take the next click.
+
 ## Callbacks
 
 Every signal handler follows the same shape: look up the window by user data, do the work, catch
@@ -190,6 +200,21 @@ keeps `Application.run()` going, so an application can live in the tray with no 
 of [`lwjwae-glib`](../lwjwae-glib#notifications): `org.freedesktop.Notifications` over GDBus, the
 same under GTK 3 and GTK 4.
 
+## Dialogs
+
+Files go through `GtkFileChooserNative`, which is the dialog of the desktop portal inside a sandbox,
+where an application sees no file of the user until the user picks it, and GTK's own outside one.
+It answers through `response`, and never blocks the GTK thread; a cancellation hides it with
+`gtk_native_dialog_hide`, which answers nothing. A kind of file is a `GtkFileFilter` with a glob
+pattern per extension, every letter in brackets of both cases, since GTK matches with case.
+
+A message is a `GtkMessageDialog` made with `g_object_new_with_properties` and its properties:
+`gtk_message_dialog_new` takes a `printf` format and variadic arguments. Its buttons come from
+`gtk_dialog_add_button`, labelled from the translations of GTK itself (`g_dgettext("gtk30", "_OK")`)
+so they're in the language of the user. [`GtkDialogs`](src/main/java/dev/ivchenko/lwjwae/gtk/GtkDialogs.java)
+holds both, and GTK 4 has the same in `Gtk4Dialogs`, with `GFile` and `GListModel` where GTK 3 has
+paths and lists.
+
 ## Closing
 
 `close()` calls `gtk_widget_destroy` on the window, on the GTK thread. GTK emits `destroy`
@@ -208,7 +233,8 @@ can't be called twice, and another application can be created on the same thread
 ```
 
 The metadata test initializes the binding classes, which loads GTK and WebKitGTK but opens no
-window, so it runs on a headless Linux machine. On CI, run the display tests under Xvfb with
+window, so it runs on a headless Linux machine. On CI, run the display tests under Xvfb with a
+window manager, as `scripts/linux/with-window-manager.sh` does with openbox, and with
 `-Dlwjwae.requireDisplay=true`, and keep `GDK_BACKEND=x11`,
 `WEBKIT_DISABLE_DMABUF_RENDERER=1`, and `WEBKIT_DISABLE_COMPOSITING_MODE=1` in the environment,
 because a runner has no GPU.

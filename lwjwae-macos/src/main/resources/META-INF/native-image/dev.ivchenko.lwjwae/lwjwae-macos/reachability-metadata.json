@@ -16,16 +16,10 @@
       "type": "dev.ivchenko.lwjwae.macos.MacWindow",
       "methods": [
         {
-          "name": "onWindowWillClose",
+          "name": "onCreateWebView",
           "parameterTypes": [
             "java.lang.foreign.MemorySegment",
             "java.lang.foreign.MemorySegment",
-            "java.lang.foreign.MemorySegment"
-          ]
-        },
-        {
-          "name": "onDidStartProvisionalNavigation",
-          "parameterTypes": [
             "java.lang.foreign.MemorySegment",
             "java.lang.foreign.MemorySegment",
             "java.lang.foreign.MemorySegment",
@@ -34,15 +28,6 @@
         },
         {
           "name": "onDidCommitNavigation",
-          "parameterTypes": [
-            "java.lang.foreign.MemorySegment",
-            "java.lang.foreign.MemorySegment",
-            "java.lang.foreign.MemorySegment",
-            "java.lang.foreign.MemorySegment"
-          ]
-        },
-        {
-          "name": "onDidFinishNavigation",
           "parameterTypes": [
             "java.lang.foreign.MemorySegment",
             "java.lang.foreign.MemorySegment",
@@ -61,9 +46,51 @@
           ]
         },
         {
+          "name": "onDidFinishNavigation",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
+        },
+        {
           "name": "onDidReceiveScriptMessage",
           "parameterTypes": [
             "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
+        },
+        {
+          "name": "onDidStartProvisionalNavigation",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
+        },
+        {
+          "name": "onEvaluationComplete",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
+        },
+        {
+          "name": "onFullScreenSettled",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
+        },
+        {
+          "name": "onFullScreenStarting",
+          "parameterTypes": [
             "java.lang.foreign.MemorySegment",
             "java.lang.foreign.MemorySegment",
             "java.lang.foreign.MemorySegment"
@@ -88,7 +115,7 @@
           ]
         },
         {
-          "name": "onEvaluationComplete",
+          "name": "onWindowChanged",
           "parameterTypes": [
             "java.lang.foreign.MemorySegment",
             "java.lang.foreign.MemorySegment",
@@ -97,6 +124,14 @@
         },
         {
           "name": "onWindowShouldClose",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
+        },
+        {
+          "name": "onWindowWillClose",
           "parameterTypes": [
             "java.lang.foreign.MemorySegment",
             "java.lang.foreign.MemorySegment",
@@ -162,6 +197,44 @@
           "parameterTypes": [
             "java.lang.foreign.MemorySegment",
             "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "dev.ivchenko.lwjwae.macos.MacDialogs",
+      "methods": [
+        {
+          "name": "onSheetEnd",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "long"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "dev.ivchenko.lwjwae.macos.MacMainMenu",
+      "methods": [
+        {
+          "name": "onShouldTerminate",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "dev.ivchenko.lwjwae.macos.MacShortcuts",
+      "methods": [
+        {
+          "name": "onHotKey",
+          "parameterTypes": [
             "java.lang.foreign.MemorySegment",
             "java.lang.foreign.MemorySegment",
             "java.lang.foreign.MemorySegment"
@@ -505,6 +578,54 @@
           "void*",
           "jlong"
         ]
+      },
+      {
+        "returnType": "jboolean",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "returnType": "jint",
+        "parameterTypes": [
+          "void*"
+        ]
+      },
+      {
+        "returnType": "jint",
+        "parameterTypes": [
+          "jint",
+          "jint",
+          "jlong",
+          "void*",
+          "jint",
+          "void*"
+        ]
+      },
+      {
+        "returnType": "jint",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "jlong",
+          "void*",
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "returnType": "jint",
+        "parameterTypes": [
+          "void*",
+          "jint",
+          "jint",
+          "void*",
+          "jlong",
+          "void*",
+          "void*"
+        ]
       }
     ],
     "directUpcalls": [
@@ -683,6 +804,78 @@
         "parameterTypes": [
           "void*",
           "void*",
+          "void*",
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.macos.MacWindow",
+        "method": "onWindowChanged",
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.macos.MacWindow",
+        "method": "onCreateWebView",
+        "returnType": "void*",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "void*",
+          "void*",
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.macos.MacDialogs",
+        "method": "onSheetEnd",
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "jlong"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.macos.MacWindow",
+        "method": "onFullScreenStarting",
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.macos.MacWindow",
+        "method": "onFullScreenSettled",
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.macos.MacMainMenu",
+        "method": "onShouldTerminate",
+        "returnType": "jlong",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.macos.MacShortcuts",
+        "method": "onHotKey",
+        "returnType": "jint",
+        "parameterTypes": [
           "void*",
           "void*",
           "void*"

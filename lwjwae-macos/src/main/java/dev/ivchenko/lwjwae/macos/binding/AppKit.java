@@ -4,6 +4,8 @@ import dev.ivchenko.lwjwae.foreign.NativeLibraries;
 import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.SymbolLookup;
+import java.util.ArrayList;
+import java.util.List;
 import lombok.experimental.UtilityClass;
 
 /** AppKit: the application object, windows, the status bar, and menus. */
@@ -17,7 +19,28 @@ public class AppKit {
   /** {@code NSWindowStyleMaskResizable}. */
   public final long STYLE_RESIZABLE = 1 << 3;
 
-  private final long STYLE_TITLED_CLOSABLE_MINIATURIZABLE = 1 | (1 << 1) | (1 << 2);
+  /** {@code NSWindowStyleMaskTitled}. */
+  public final long STYLE_TITLED = 1;
+
+  /** {@code NSWindowStyleMaskClosable}. */
+  public final long STYLE_CLOSABLE = 1 << 1;
+
+  /** {@code NSWindowStyleMaskMiniaturizable}. */
+  public final long STYLE_MINIATURIZABLE = 1 << 2;
+
+  /** {@code NSWindowStyleMaskFullSizeContentView}: the content reaches under the title bar. */
+  public final long STYLE_FULL_SIZE_CONTENT_VIEW = 1 << 15;
+
+  /** {@code NSEventModifierFlagOption}. */
+  public final long MODIFIER_OPTION = 1 << 19;
+
+  /** {@code NSEventModifierFlagCommand}. */
+  public final long MODIFIER_COMMAND = 1 << 20;
+
+  private final long WINDOW_TITLE_HIDDEN = 1;
+  private final long ZOOM_BUTTON = 2;
+  private final long EVENT_TYPE_LEFT_MOUSE_DOWN = 1;
+  private final long EVENT_TYPE_LEFT_MOUSE_DRAGGED = 6;
   private final long ACTIVATION_POLICY_REGULAR = 0;
   private final long BACKING_STORE_BUFFERED = 2;
   private final long EVENT_TYPE_APPLICATION_DEFINED = 15;
@@ -47,12 +70,12 @@ public class AppKit {
    * processes only in an application that has launched.
    */
   public void finishLaunching() {
-    ObjC.sendVoid(application(), "finishLaunching");
+    ObjC.sendVoid(AppKit.application(), "finishLaunching");
   }
 
   /** {@code -[NSApplication run]}. It returns only after {@link #stopRunLoop}. */
   public void run() {
-    ObjC.sendVoid(application(), "run");
+    ObjC.sendVoid(AppKit.application(), "run");
   }
 
   /**
@@ -61,7 +84,7 @@ public class AppKit {
    * does.
    */
   public void stopRunLoop() {
-    MemorySegment application = application();
+    MemorySegment application = AppKit.application();
     ObjC.sendVoid(application, "stop:", MemorySegment.NULL);
     try (Arena arena = Arena.ofConfined()) {
       MemorySegment event =
@@ -83,14 +106,14 @@ public class AppKit {
 
   /** Brings the application to the front, the way a newly launched application comes up. */
   public void activate() {
-    ObjC.sendVoid(application(), "activateIgnoringOtherApps:", true);
+    ObjC.sendVoid(AppKit.application(), "activateIgnoringOtherApps:", true);
   }
 
   /**
-   * A titled, closable, resizable window that owns its content rect. The caller retains it, not its
-   * closing.
+   * A window of {@code styleMask} that owns its content rect, centered. The caller retains it, not
+   * its closing.
    */
-  public MemorySegment window(int width, int height, String title) {
+  public MemorySegment window(int width, int height, String title, long styleMask) {
     MemorySegment window;
     try (Arena arena = Arena.ofConfined()) {
       window =
@@ -98,12 +121,12 @@ public class AppKit {
               ObjC.send(ObjC.cls("NSWindow"), "alloc"),
               "initWithContentRect:styleMask:backing:defer:",
               Foundation.rect(arena, 0, 0, width, height),
-              STYLE_TITLED_CLOSABLE_MINIATURIZABLE | STYLE_RESIZABLE,
+              styleMask,
               BACKING_STORE_BUFFERED,
               false);
     }
     ObjC.sendVoid(window, "setReleasedWhenClosed:", false);
-    setTitle(window, title);
+    AppKit.setTitle(window, title);
     ObjC.sendVoid(window, "center");
     return window;
   }
@@ -138,7 +161,7 @@ public class AppKit {
    */
   public int[] framePosition(MemorySegment window) {
     double[] frame = Foundation.rect(window, "frame");
-    double screenHeight = primaryScreenFrame()[3];
+    double screenHeight = AppKit.primaryScreenFrame()[3];
     return new int[] {
       (int) Math.round(frame[0]), (int) Math.round(screenHeight - frame[1] - frame[3])
     };
@@ -150,7 +173,7 @@ public class AppKit {
    */
   public void setFramePosition(MemorySegment window, int x, int y) {
     double[] frame = Foundation.rect(window, "frame");
-    double screenHeight = primaryScreenFrame()[3];
+    double screenHeight = AppKit.primaryScreenFrame()[3];
     try (Arena arena = Arena.ofConfined()) {
       // An NSPoint has the layout of an NSSize: two doubles.
       ObjC.sendVoidSize(
@@ -163,6 +186,50 @@ public class AppKit {
     ObjC.sendVoid(window, "center");
   }
 
+  /** {@code +[NSScreen screens]}: every screen, the primary one, with the menu bar, first. */
+  public List<MemorySegment> screens() {
+    MemorySegment screens = ObjC.send(ObjC.cls("NSScreen"), "screens");
+    long count = ObjC.sendLong(screens, "count");
+    List<MemorySegment> all = new ArrayList<>();
+    for (long index = 0; index < count; index++) {
+      all.add(ObjC.send(screens, "objectAtIndex:", index));
+    }
+    return all;
+  }
+
+  /** {@code -[NSWindow screen]}: the screen that holds most of the window, or {@code NULL}. */
+  public MemorySegment screenOf(MemorySegment window) {
+    return ObjC.send(window, "screen");
+  }
+
+  /**
+   * {@code {x, y, width, height}} of the {@code frame} or the {@code visibleFrame} of {@code
+   * screen}, from the top left of the primary screen, converted as {@link #framePosition} does.
+   */
+  public int[] screenArea(MemorySegment screen, boolean visible) {
+    double[] frame = Foundation.rect(screen, visible ? "visibleFrame" : "frame");
+    double primaryHeight = AppKit.primaryScreenFrame()[3];
+    return new int[] {
+      (int) Math.round(frame[0]),
+      (int) Math.round(primaryHeight - frame[1] - frame[3]),
+      (int) Math.round(frame[2]),
+      (int) Math.round(frame[3])
+    };
+  }
+
+  /** {@code -[NSScreen backingScaleFactor]}: 2.0 on a Retina screen. */
+  public double backingScaleFactor(MemorySegment screen) {
+    return Foundation.doubleValue(screen, "backingScaleFactor");
+  }
+
+  /** {@code -[NSScreen localizedName]}, from macOS 10.15 on, or {@code null} before. */
+  public String screenName(MemorySegment screen) {
+    if (!ObjC.sendBool(screen, "respondsToSelector:", ObjC.sel("localizedName"))) {
+      return null;
+    }
+    return Foundation.string(ObjC.send(screen, "localizedName"));
+  }
+
   /**
    * {@code {x, y, width, height}} of the primary screen, the one with the menu bar, whose bottom
    * left is the origin of the screen coordinates of AppKit.
@@ -170,6 +237,96 @@ public class AppKit {
   private double[] primaryScreenFrame() {
     MemorySegment screens = ObjC.send(ObjC.cls("NSScreen"), "screens");
     return Foundation.rect(ObjC.send(screens, "firstObject"), "frame");
+  }
+
+  /** {@code NSWindowStyleMaskFullScreen}: the window is in a full screen space of its own. */
+  public final long STYLE_FULL_SCREEN = 1 << 14;
+
+  /** {@code NSNormalWindowLevel}. */
+  private final long LEVEL_NORMAL = 0;
+
+  /** {@code NSFloatingWindowLevel}: above the normal windows of every application. */
+  private final long LEVEL_FLOATING = 3;
+
+  /** The content size that stands for no maximum: {@code FLT_MAX}, AppKit's own default. */
+  private final double UNLIMITED = Float.MAX_VALUE;
+
+  /**
+   * Calls {@code -[NSWindow miniaturize:]} or {@code -[NSWindow deminiaturize:]}, only when the
+   * state differs, as the other state changes are sent.
+   */
+  public void setMiniaturized(MemorySegment window, boolean miniaturized) {
+    if (AppKit.isMiniaturized(window) == miniaturized) {
+      return;
+    }
+    ObjC.sendVoid(window, miniaturized ? "miniaturize:" : "deminiaturize:", MemorySegment.NULL);
+  }
+
+  /** Calls {@code -[NSWindow isMiniaturized]}. */
+  public boolean isMiniaturized(MemorySegment window) {
+    return ObjC.sendBool(window, "isMiniaturized");
+  }
+
+  /**
+   * Zooms the window, the way the green button does with the Option key: to fill the screen, or
+   * back. {@code -[NSWindow zoom:]} toggles, so it's sent only when the state differs, and it acts
+   * as the button does, so a button that {@link #disableZoomButton} grayed out is enabled for it.
+   */
+  public void setZoomed(MemorySegment window, boolean zoomed) {
+    if (AppKit.isZoomed(window) == zoomed) {
+      return;
+    }
+    MemorySegment button = ObjC.send(window, "standardWindowButton:", ZOOM_BUTTON);
+    boolean enabled = ObjC.sendBool(button, "isEnabled");
+    ObjC.sendVoid(button, "setEnabled:", true);
+    ObjC.sendVoid(window, "zoom:", MemorySegment.NULL);
+    ObjC.sendVoid(button, "setEnabled:", enabled);
+  }
+
+  /** Calls {@code -[NSWindow isZoomed]}. */
+  public boolean isZoomed(MemorySegment window) {
+    return ObjC.sendBool(window, "isZoomed");
+  }
+
+  /**
+   * Enters or leaves full screen with {@code -[NSWindow toggleFullScreen:]}, which toggles, so it's
+   * sent only when the state differs.
+   */
+  public void setFullScreen(MemorySegment window, boolean fullScreen) {
+    if (((AppKit.styleMask(window) & STYLE_FULL_SCREEN) != 0) != fullScreen) {
+      ObjC.sendVoid(window, "toggleFullScreen:", MemorySegment.NULL);
+    }
+  }
+
+  /** Puts the window on the floating level, above normal windows, or back on the normal one. */
+  public void setFloating(MemorySegment window, boolean floating) {
+    ObjC.sendVoid(window, "setLevel:", floating ? LEVEL_FLOATING : LEVEL_NORMAL);
+  }
+
+  /** Whether the window is on a level above the normal one. */
+  public boolean isFloating(MemorySegment window) {
+    return ObjC.sendLong(window, "level") > LEVEL_NORMAL;
+  }
+
+  /** Calls {@code -[NSWindow isKeyWindow]}: whether the window takes the keyboard input. */
+  public boolean isKeyWindow(MemorySegment window) {
+    return ObjC.sendBool(window, "isKeyWindow");
+  }
+
+  /**
+   * Calls {@code -[NSWindow setContentMinSize:]} and {@code setContentMaxSize:}. Zero in a
+   * dimension means no limit there.
+   */
+  public void setContentSizeLimits(
+      MemorySegment window, int minWidth, int minHeight, int maxWidth, int maxHeight) {
+    try (Arena arena = Arena.ofConfined()) {
+      ObjC.sendVoidSize(window, "setContentMinSize:", Foundation.size(arena, minWidth, minHeight));
+      ObjC.sendVoidSize(
+          window,
+          "setContentMaxSize:",
+          Foundation.size(
+              arena, maxWidth > 0 ? maxWidth : UNLIMITED, maxHeight > 0 ? maxHeight : UNLIMITED));
+    }
   }
 
   /** Calls {@code -[NSWindow styleMask]}. */
@@ -190,6 +347,76 @@ public class AppKit {
   /** Calls {@code -[NSWindow setContentView:]}: the window retains the view. */
   public void setContentView(MemorySegment window, MemorySegment view) {
     ObjC.sendVoid(window, "setContentView:", view);
+  }
+
+  /**
+   * Takes the title bar of a window with {@link #STYLE_FULL_SIZE_CONTENT_VIEW} out of sight: no
+   * background, no title, and no buttons. The window stays titled, which keeps its rounded corners,
+   * its shadow, its resize edges, and the keyboard, which a borderless window can't take.
+   */
+  public void hideTitleBar(MemorySegment window) {
+    ObjC.sendVoid(window, "setTitlebarAppearsTransparent:", true);
+    ObjC.sendVoid(window, "setTitleVisibility:", WINDOW_TITLE_HIDDEN);
+    for (long button = 0; button <= ZOOM_BUTTON; button++) {
+      ObjC.sendVoid(ObjC.send(window, "standardWindowButton:", button), "setHidden:", true);
+    }
+  }
+
+  /**
+   * Makes a window see-through where its content draws nothing: not opaque, and a clear background.
+   * The shadow follows what the content does draw.
+   */
+  public void clearBackground(MemorySegment window) {
+    ObjC.sendVoid(window, "setOpaque:", false);
+    ObjC.sendVoid(window, "setBackgroundColor:", ObjC.send(ObjC.cls("NSColor"), "clearColor"));
+  }
+
+  /** Grays out the zoom button, the green one, which maximizes and enters full screen. */
+  public void disableZoomButton(MemorySegment window) {
+    ObjC.sendVoid(ObjC.send(window, "standardWindowButton:", ZOOM_BUTTON), "setEnabled:", false);
+  }
+
+  /**
+   * Moves the window with the pointer until the button is released, the way a drag on the title bar
+   * does: {@code -[NSWindow performWindowDragWithEvent:]} with the mouse event being handled. Does
+   * nothing when that isn't a press or a drag of the left button, or the button is already up.
+   */
+  public void performWindowDrag(MemorySegment window) {
+    if ((ObjC.sendLong(ObjC.cls("NSEvent"), "pressedMouseButtons") & 1) == 0) {
+      return;
+    }
+    MemorySegment event = ObjC.send(AppKit.application(), "currentEvent");
+    if (ObjC.isNull(event)) {
+      return;
+    }
+    long type = ObjC.sendLong(event, "type");
+    if (type == EVENT_TYPE_LEFT_MOUSE_DOWN || type == EVENT_TYPE_LEFT_MOUSE_DRAGGED) {
+      ObjC.sendVoid(window, "performWindowDragWithEvent:", event);
+    }
+  }
+
+  /**
+   * What the user chose in the Desktop and Dock settings for a double click on a title bar: {@code
+   * Maximize}, {@code Minimize}, {@code None}, or {@code null} for the default, which zooms.
+   */
+  public String titleBarDoubleClickAction() {
+    MemorySegment defaults = ObjC.send(ObjC.cls("NSUserDefaults"), "standardUserDefaults");
+    return Foundation.string(
+        ObjC.send(defaults, "stringForKey:", Foundation.string("AppleActionOnDoubleClick")));
+  }
+
+  /**
+   * Opens {@code url} in the application that the system chose for its scheme, through {@code
+   * -[NSWorkspace openURL:]}.
+   *
+   * @throws IllegalStateException If nothing opens it.
+   */
+  public void openUrl(String url) {
+    MemorySegment workspace = ObjC.send(ObjC.cls("NSWorkspace"), "sharedWorkspace");
+    MemorySegment nsUrl = Foundation.url(url);
+    if (ObjC.isNull(nsUrl) || !ObjC.sendBool(workspace, "openURL:", nsUrl)) {
+      throw new IllegalStateException("NSWorkspace could not open " + url);
+    }
   }
 
   /** Calls {@code -[NSWindow makeKeyAndOrderFront:]}: shows the window and gives it focus. */
@@ -294,7 +521,7 @@ public class AppKit {
    * button, or a click with Control held, as everywhere on macOS.
    */
   public boolean isContextClick() {
-    MemorySegment event = ObjC.send(application(), "currentEvent");
+    MemorySegment event = ObjC.send(AppKit.application(), "currentEvent");
     if (ObjC.isNull(event)) {
       return false;
     }
@@ -342,5 +569,157 @@ public class AppKit {
   /** {@code -[NSMenuItem tag]}. */
   public long menuItemTag(MemorySegment item) {
     return ObjC.sendLong(item, "tag");
+  }
+
+  // --- the menu bar ---
+
+  /** {@code -[NSApplication mainMenu]}: the menu bar, or {@code NULL} while nothing set one. */
+  public MemorySegment mainMenu() {
+    return ObjC.send(AppKit.application(), "mainMenu");
+  }
+
+  /**
+   * A new, owned {@code NSMenu} titled {@code title} whose items AppKit enables and disables along
+   * the responder chain, as the menus of a menu bar do.
+   */
+  public MemorySegment autoenabledMenu(String title) {
+    return ObjC.send(
+        ObjC.send(ObjC.cls("NSMenu"), "alloc"), "initWithTitle:", Foundation.string(title));
+  }
+
+  /**
+   * Adds an item without a target, which sends {@code action} to the first responder that takes it,
+   * with {@code key} and {@code modifiers} as its shortcut. An empty {@code key} gives no shortcut;
+   * an uppercase one implies Shift.
+   */
+  public void addResponderItem(
+      MemorySegment menu, String title, String action, String key, long modifiers) {
+    MemorySegment item = ObjC.send(ObjC.send(ObjC.cls("NSMenuItem"), "alloc"), "init");
+    ObjC.sendVoid(item, "setTitle:", Foundation.string(title));
+    ObjC.sendVoid(item, "setAction:", ObjC.sel(action));
+    ObjC.sendVoid(item, "setKeyEquivalent:", Foundation.string(key));
+    ObjC.sendVoid(item, "setKeyEquivalentModifierMask:", modifiers);
+    ObjC.sendVoid(menu, "addItem:", item);
+    Foundation.release(item);
+  }
+
+  /** Adds {@code submenu} to {@code bar} under its own title, and gives it up: the bar holds it. */
+  public void addSubmenu(MemorySegment bar, MemorySegment submenu) {
+    MemorySegment item = ObjC.send(ObjC.send(ObjC.cls("NSMenuItem"), "alloc"), "init");
+    ObjC.sendVoid(item, "setTitle:", ObjC.send(submenu, "title"));
+    ObjC.sendVoid(item, "setSubmenu:", submenu);
+    ObjC.sendVoid(bar, "addItem:", item);
+    Foundation.release(item);
+    Foundation.release(submenu);
+  }
+
+  /**
+   * Makes {@code bar} the menu bar and gives it up, with {@code windowsMenu}, one of its menus, as
+   * the one where AppKit lists the windows.
+   */
+  public void setMainMenu(MemorySegment bar, MemorySegment windowsMenu) {
+    MemorySegment application = AppKit.application();
+    ObjC.sendVoid(application, "setMainMenu:", bar);
+    ObjC.sendVoid(application, "setWindowsMenu:", windowsMenu);
+    Foundation.release(bar);
+  }
+
+  /** {@code -[NSApplication setDelegate:]}. The application holds its delegate weakly. */
+  public void setApplicationDelegate(MemorySegment delegate) {
+    ObjC.sendVoid(AppKit.application(), "setDelegate:", delegate);
+  }
+
+  // --- the pasteboard ---
+
+  /** {@code NSPasteboardTypeString}: plain text in UTF-8, as every application reads it. */
+  private final String PASTEBOARD_TYPE_STRING = "public.utf8-plain-text";
+
+  /**
+   * Replaces what the general pasteboard, the one of Command-C, has with {@code text}. {@code
+   * setString:forType:} answers whether it took the text, which is left unread: an integer result
+   * in its register, as for {@code sendActionOn:}.
+   */
+  public void setPasteboardText(String text) {
+    MemorySegment pasteboard = ObjC.send(ObjC.cls("NSPasteboard"), "generalPasteboard");
+    long _ = ObjC.sendLong(pasteboard, "clearContents");
+    ObjC.sendVoid(
+        pasteboard,
+        "setString:forType:",
+        Foundation.string(text),
+        Foundation.string(PASTEBOARD_TYPE_STRING));
+  }
+
+  /** {@code NSPasteboardTypePNG}. */
+  private final String PASTEBOARD_TYPE_PNG = "public.png";
+
+  /** {@code NSPasteboardTypeTIFF}: the image type of older applications, and of screenshots. */
+  private final String PASTEBOARD_TYPE_TIFF = "public.tiff";
+
+  /** {@code NSBitmapImageFileTypePNG}. */
+  private final long BITMAP_FILE_TYPE_PNG = 4;
+
+  /**
+   * Replaces what the general pasteboard has with the image {@code png}, as PNG and as TIFF, the
+   * type that applications from before PNG read.
+   *
+   * @throws IllegalArgumentException If AppKit can't read the image.
+   */
+  public void setPasteboardImage(byte[] png) {
+    MemorySegment data = Foundation.data(png);
+    MemorySegment image = ObjC.send(ObjC.send(ObjC.cls("NSImage"), "alloc"), "initWithData:", data);
+    if (ObjC.isNull(image)) {
+      throw new IllegalArgumentException("Not an image AppKit can read");
+    }
+    try {
+      MemorySegment pasteboard = ObjC.send(ObjC.cls("NSPasteboard"), "generalPasteboard");
+      long _ = ObjC.sendLong(pasteboard, "clearContents");
+      ObjC.sendVoid(pasteboard, "setData:forType:", data, Foundation.string(PASTEBOARD_TYPE_PNG));
+      ObjC.sendVoid(
+          pasteboard,
+          "setData:forType:",
+          ObjC.send(image, "TIFFRepresentation"),
+          Foundation.string(PASTEBOARD_TYPE_TIFF));
+    } finally {
+      Foundation.release(image);
+    }
+  }
+
+  /**
+   * The image on the general pasteboard as PNG, or {@code null} for none: its PNG, or its TIFF,
+   * which screenshots and older applications write, encoded as PNG.
+   */
+  public byte[] pasteboardImage() {
+    MemorySegment pasteboard = ObjC.send(ObjC.cls("NSPasteboard"), "generalPasteboard");
+    MemorySegment png =
+        ObjC.send(pasteboard, "dataForType:", Foundation.string(PASTEBOARD_TYPE_PNG));
+    if (!ObjC.isNull(png)) {
+      return Foundation.bytes(png);
+    }
+    MemorySegment tiff =
+        ObjC.send(pasteboard, "dataForType:", Foundation.string(PASTEBOARD_TYPE_TIFF));
+    if (ObjC.isNull(tiff)) {
+      return null;
+    }
+    MemorySegment representation =
+        ObjC.send(ObjC.cls("NSBitmapImageRep"), "imageRepWithData:", tiff);
+    if (ObjC.isNull(representation)) {
+      return null;
+    }
+    MemorySegment representations =
+        ObjC.send(ObjC.cls("NSArray"), "arrayWithObject:", representation);
+    return Foundation.bytes(
+        ObjC.send(
+            ObjC.cls("NSBitmapImageRep"),
+            "representationOfImageRepsInArray:usingType:properties:",
+            representations,
+            BITMAP_FILE_TYPE_PNG,
+            ObjC.send(ObjC.cls("NSDictionary"), "dictionary")));
+  }
+
+  /** The text on the general pasteboard, or {@code null} for none. */
+  public String pasteboardText() {
+    MemorySegment pasteboard = ObjC.send(ObjC.cls("NSPasteboard"), "generalPasteboard");
+    return Foundation.string(
+        ObjC.send(pasteboard, "stringForType:", Foundation.string(PASTEBOARD_TYPE_STRING)));
   }
 }

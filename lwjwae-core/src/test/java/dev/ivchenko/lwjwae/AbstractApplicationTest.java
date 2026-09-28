@@ -2,23 +2,33 @@ package dev.ivchenko.lwjwae;
 
 import dev.ivchenko.lwjwae.bridge.BridgeProtocol;
 import dev.ivchenko.lwjwae.event.Event;
+import dev.ivchenko.lwjwae.event.EventSubscription;
+import dev.ivchenko.lwjwae.event.SecondInstanceEvent;
+import dev.ivchenko.lwjwae.exception.ShortcutUnavailableException;
+import dev.ivchenko.lwjwae.instance.InstanceLock;
+import dev.ivchenko.lwjwae.instance.InstanceLocks;
 import dev.ivchenko.lwjwae.notification.Notification;
 import dev.ivchenko.lwjwae.notification.NotificationHandle;
+import dev.ivchenko.lwjwae.shortcut.Shortcut;
 import dev.ivchenko.lwjwae.testing.FakeApplication;
 import dev.ivchenko.lwjwae.testing.FakeWindow;
 import dev.ivchenko.lwjwae.testing.Point;
 import dev.ivchenko.lwjwae.testing.PointCodec;
 import dev.ivchenko.lwjwae.testing.RpcReply;
+import dev.ivchenko.lwjwae.testing.ShortTemporaryDirectories;
 import dev.ivchenko.lwjwae.tray.Tray;
 import dev.ivchenko.lwjwae.tray.TrayIcon;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.api.io.TempDir;
 
 /** Tests the toolkit-independent half of an application through {@link FakeApplication}. */
 @Timeout(10)
@@ -390,14 +400,28 @@ class AbstractApplicationTest {
     try (FakeApplication application = new FakeApplication()) {
       FakeWindow opener = application.openFake();
       String options =
-          String.join(SEP, "child", "320", "240", "10", "20", "1", "", "app/child.html");
+          String.join(
+              SEP,
+              "child",
+              "320",
+              "240",
+              "10",
+              "20",
+              "1",
+              "",
+              "app/child.html",
+              "",
+              "",
+              "",
+              "",
+              "");
       opener.call(7, BridgeProtocol.OPEN_CALL, options);
 
       Assertions.assertEquals("2", opener.awaitReply(7).body());
       FakeWindow child = (FakeWindow) application.window(2).orElseThrow();
       Assertions.assertEquals("child", child.title());
-      Assertions.assertEquals(320, child.width());
-      Assertions.assertEquals(240, child.height());
+      Assertions.assertEquals(320, child.size().width());
+      Assertions.assertEquals(240, child.size().height());
       Assertions.assertTrue(child.isShown(), "a window opened from a page shows itself");
       Assertions.assertEquals(List.of("app://local/app/child.html"), child.navigated);
 
@@ -418,5 +442,182 @@ class AbstractApplicationTest {
       Assertions.assertTrue(window.isClosed());
       Assertions.assertTrue(application.windows().isEmpty());
     }
+  }
+
+  @Test
+  void windowRemembersItsSizePlaceAndMaximizedAcrossRuns(@TempDir Path directory) throws Exception {
+    ApplicationParameters parameters =
+        ApplicationParameters.builder().dataDirectory(directory).build();
+    WindowParameters remembered = WindowParameters.builder().stateKey("main").build();
+    try (FakeApplication application = new FakeApplication(parameters)) {
+      FakeWindow window = (FakeWindow) application.open(remembered);
+      window.awaitUiThread();
+      window.size(800, 600);
+      window.position(10, 20);
+      window.reportChange();
+      window.awaitUiThread();
+      // Maximized later: the size and the place from before are what it comes back to.
+      window.maximize();
+      window.size(1920, 1080);
+      window.reportChange();
+      window.awaitUiThread();
+      Thread.sleep(200);
+    }
+
+    try (FakeApplication application = new FakeApplication(parameters)) {
+      FakeWindow window = (FakeWindow) application.open(remembered);
+      Assertions.assertEquals(800, window.size().width());
+      Assertions.assertEquals(600, window.size().height());
+      Assertions.assertEquals(new WindowPosition(10, 20), window.position());
+      Assertions.assertTrue(window.isMaximized());
+
+      FakeWindow other = application.openFake();
+      Assertions.assertEquals(
+          1024, other.size().width(), "a window without a state key opens as asked");
+    }
+  }
+
+  @Test
+  void windowLeftOnScreenThatIsGoneOpensWhereThePlatformPutsIt(@TempDir Path directory)
+      throws Exception {
+    ApplicationParameters parameters =
+        ApplicationParameters.builder().dataDirectory(directory).build();
+    WindowParameters remembered = WindowParameters.builder().stateKey("main").build();
+    Screen left =
+        new Screen(
+            "Left", new ScreenArea(0, 0, 1920, 1080), new ScreenArea(0, 0, 1920, 1040), 1, true);
+    Screen right = new Screen("Right", new ScreenArea(1920, 0, 1920, 1080), null, 1, false);
+    try (FakeApplication application = new FakeApplication(parameters)) {
+      application.desktop = List.of(left, right);
+      FakeWindow window = (FakeWindow) application.open(remembered);
+      window.awaitUiThread();
+      window.size(800, 600);
+      window.position(2500, 100);
+      window.reportChange();
+      window.awaitUiThread();
+      Assertions.assertEquals(right, window.screen());
+      Thread.sleep(200);
+    }
+
+    try (FakeApplication application = new FakeApplication(parameters)) {
+      application.desktop = List.of(left);
+      FakeWindow window = (FakeWindow) application.open(remembered);
+
+      Assertions.assertEquals(new WindowSize(800, 600), window.size(), "the size still counts");
+      Assertions.assertNotEquals(
+          new WindowPosition(2500, 100), window.position(), "a place off every screen doesn't");
+    }
+
+    try (FakeApplication application = new FakeApplication(parameters)) {
+      application.desktop = List.of(left, right);
+      FakeWindow window = (FakeWindow) application.open(remembered);
+
+      Assertions.assertEquals(new WindowPosition(2500, 100), window.position());
+    }
+  }
+
+  @Test
+  void primaryScreenIsTheOneMarkedSoOrTheFirst() {
+    Screen first = new Screen("First", new ScreenArea(0, 0, 800, 600), null, 1, false);
+    Screen marked = new Screen("Marked", new ScreenArea(800, 0, 800, 600), null, 2, true);
+    try (FakeApplication application = new FakeApplication()) {
+      application.desktop = List.of(first, marked);
+      Assertions.assertEquals(marked, application.primaryScreen());
+
+      application.desktop = List.of(first);
+      Assertions.assertEquals(first, application.primaryScreen());
+    }
+  }
+
+  @Test
+  void secondInstanceBringsTheOldestWindowForwardAndReachesTheListeners(
+      @TempDir(factory = ShortTemporaryDirectories.class) Path directory) throws Exception {
+    try (FakeApplication application = new FakeApplication()) {
+      final FakeWindow oldest = application.openFake();
+      final FakeWindow newer = application.openFake();
+      AbstractApplicationTest.serveInstances(application, directory);
+      BlockingQueue<SecondInstanceEvent> heard = new LinkedBlockingQueue<>();
+      application.onSecondInstance(heard::add);
+
+      SecondInstanceEvent second =
+          new SecondInstanceEvent(List.of("notes.txt"), Path.of("/home/user"));
+      Assertions.assertTrue(InstanceLocks.claim(directory, "app", second).isEmpty());
+
+      Assertions.assertEquals(second, heard.poll(), "heard before the second process ended");
+      Assertions.assertTrue(oldest.isFocused(), "the oldest window comes forward");
+      Assertions.assertFalse(newer.isFocused());
+    }
+  }
+
+  @Test
+  void startBeforeAnyListenerReachesTheFirstOne(
+      @TempDir(factory = ShortTemporaryDirectories.class) Path directory) {
+    try (FakeApplication application = new FakeApplication()) {
+      AbstractApplicationTest.serveInstances(application, directory);
+      SecondInstanceEvent early = new SecondInstanceEvent(List.of("early"), Path.of("/"));
+      Assertions.assertTrue(InstanceLocks.claim(directory, "app", early).isEmpty());
+
+      List<SecondInstanceEvent> heard = new CopyOnWriteArrayList<>();
+      application.onSecondInstance(heard::add);
+
+      Assertions.assertEquals(List.of(early), heard);
+    }
+  }
+
+  @Test
+  void quitGivesTheNameUp(@TempDir(factory = ShortTemporaryDirectories.class) Path directory) {
+    try (FakeApplication application = new FakeApplication()) {
+      AbstractApplicationTest.serveInstances(application, directory);
+      application.quit();
+    }
+
+    try (InstanceLock next =
+        InstanceLocks.claim(directory, "app", AbstractApplicationTest.start()).orElseThrow()) {
+      Assertions.assertNotNull(next);
+    }
+  }
+
+  /** Claims "app" in {@code directory} for {@code application}, as createSingleInstance does. */
+  private static void serveInstances(AbstractApplication application, Path directory) {
+    application.serveInstances(
+        InstanceLocks.claim(directory, "app", AbstractApplicationTest.start()).orElseThrow());
+  }
+
+  @Test
+  void globalShortcutRunsItsHandlerOffTheUiThreadUntilGivenBack() throws Exception {
+    try (FakeApplication application = new FakeApplication()) {
+      BlockingQueue<String> heard = new LinkedBlockingQueue<>();
+      EventSubscription binding =
+          application.globalShortcut(
+              "Ctrl+Shift+K", () -> heard.add(String.valueOf(Thread.currentThread().isVirtual())));
+      Shortcut shortcut = Shortcut.parse("Ctrl+Shift+K");
+
+      application.boundShortcuts.get(shortcut).run();
+      Assertions.assertEquals("true", heard.poll(5, TimeUnit.SECONDS));
+
+      binding.unlisten();
+      binding.unlisten();
+      Assertions.assertTrue(application.boundShortcuts.isEmpty());
+      Assertions.assertDoesNotThrow(() -> application.globalShortcut(shortcut, () -> {}));
+    }
+  }
+
+  @Test
+  void sameShortcutTwiceIsRefusedAndQuitGivesEveryShortcutBack() {
+    FakeApplication application = new FakeApplication();
+    try (application) {
+      application.globalShortcut("Alt+F4", () -> {});
+      application.globalShortcut("Ctrl+Alt+Delete", () -> {});
+      Assertions.assertThrows(
+          ShortcutUnavailableException.class, () -> application.globalShortcut("alt+f4", () -> {}));
+      Assertions.assertEquals(2, application.boundShortcuts.size());
+    }
+    Assertions.assertTrue(application.boundShortcuts.isEmpty(), "quit gives the shortcuts back");
+    Assertions.assertThrows(
+        IllegalStateException.class, () -> application.globalShortcut("Alt+F4", () -> {}));
+  }
+
+  private static SecondInstanceEvent start() {
+    return new SecondInstanceEvent(List.of(), Path.of("/"));
   }
 }

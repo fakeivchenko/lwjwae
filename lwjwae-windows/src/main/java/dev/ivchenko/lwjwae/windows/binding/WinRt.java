@@ -77,14 +77,14 @@ public class WinRt {
       byte[] bytes = buffer.reinterpret(characters * 2L).toArray(ValueLayout.JAVA_BYTE);
       return new String(bytes, StandardCharsets.UTF_16LE);
     } finally {
-      delete(string);
+      WinRt.delete(string);
     }
   }
 
   /** {@code RoGetActivationFactory}: the factory or statics interface {@code iid} of a class. */
   @SneakyThrows
   public MemorySegment activationFactory(String className, MemorySegment iid) {
-    MemorySegment name = create(className);
+    MemorySegment name = WinRt.create(className);
     try (Arena arena = Arena.ofConfined()) {
       MemorySegment out = arena.allocate(Signatures.C_POINTER);
       Com.check(
@@ -92,21 +92,21 @@ public class WinRt {
           (int) RO_GET_ACTIVATION_FACTORY.invokeExact(name, iid, out));
       return Com.pointerAt(out);
     } finally {
-      delete(name);
+      WinRt.delete(name);
     }
   }
 
   /** {@code RoActivateInstance}: a new instance of a class, as {@code IInspectable}. */
   @SneakyThrows
   public MemorySegment activateInstance(String className) {
-    MemorySegment name = create(className);
+    MemorySegment name = WinRt.create(className);
     try (Arena arena = Arena.ofConfined()) {
       MemorySegment out = arena.allocate(Signatures.C_POINTER);
       Com.check(
           "RoActivateInstance " + className, (int) RO_ACTIVATE_INSTANCE.invokeExact(name, out));
       return Com.pointerAt(out);
     } finally {
-      delete(name);
+      WinRt.delete(name);
     }
   }
 

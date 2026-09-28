@@ -154,17 +154,17 @@ public class Toasts {
 
   /** {@code add_Activated}. The toast holds its own reference to {@code handler}. */
   public void onActivated(MemorySegment notification, MemorySegment handler) {
-    subscribe("add_Activated", notification, NOTIFICATION_ADD_ACTIVATED, handler);
+    Toasts.subscribe("add_Activated", notification, NOTIFICATION_ADD_ACTIVATED, handler);
   }
 
   /** {@code add_Dismissed}. */
   public void onDismissed(MemorySegment notification, MemorySegment handler) {
-    subscribe("add_Dismissed", notification, NOTIFICATION_ADD_DISMISSED, handler);
+    Toasts.subscribe("add_Dismissed", notification, NOTIFICATION_ADD_DISMISSED, handler);
   }
 
   /** {@code add_Failed}. */
   public void onFailed(MemorySegment notification, MemorySegment handler) {
-    subscribe("add_Failed", notification, NOTIFICATION_ADD_FAILED, handler);
+    Toasts.subscribe("add_Failed", notification, NOTIFICATION_ADD_FAILED, handler);
   }
 
   /**

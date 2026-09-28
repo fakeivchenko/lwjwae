@@ -3,13 +3,18 @@ package dev.ivchenko.lwjwae.windows;
 import dev.ivchenko.lwjwae.AbstractApplication;
 import dev.ivchenko.lwjwae.AbstractWindow;
 import dev.ivchenko.lwjwae.ApplicationParameters;
+import dev.ivchenko.lwjwae.Screen;
 import dev.ivchenko.lwjwae.WindowParameters;
+import dev.ivchenko.lwjwae.clipboard.Clipboard;
+import dev.ivchenko.lwjwae.event.EventSubscription;
 import dev.ivchenko.lwjwae.notification.Notification;
 import dev.ivchenko.lwjwae.notification.NotificationHandle;
+import dev.ivchenko.lwjwae.shortcut.Shortcut;
 import dev.ivchenko.lwjwae.tray.Tray;
 import dev.ivchenko.lwjwae.tray.TrayIcon;
 import dev.ivchenko.lwjwae.windows.binding.Com;
 import dev.ivchenko.lwjwae.windows.binding.ComCallback;
+import dev.ivchenko.lwjwae.windows.binding.Shell32;
 import dev.ivchenko.lwjwae.windows.binding.WebView2;
 import dev.ivchenko.lwjwae.windows.exception.ComCallFailedException;
 import java.io.IOException;
@@ -18,6 +23,7 @@ import java.lang.foreign.MemorySegment;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
@@ -61,8 +67,9 @@ public class WindowsApplication extends AbstractApplication {
           MemorySegment handler =
               ComCallback.completion(
                   WebView2.IID_ENVIRONMENT_COMPLETED,
-                  (hresult, created) -> completeEnvironment(ready, hresult, created));
-          WebView2.createEnvironment(userDataFolder().toString(), handler);
+                  (hresult, created) ->
+                      WindowsApplication.completeEnvironment(ready, hresult, created));
+          WebView2.createEnvironment(WindowsApplication.userDataFolder().toString(), handler);
           Com.release(handler);
         });
     try {
@@ -100,13 +107,33 @@ public class WindowsApplication extends AbstractApplication {
   }
 
   @Override
+  protected Clipboard createClipboard() {
+    return new WindowsClipboard(WindowsDispatcher.instance());
+  }
+
+  @Override
+  public List<Screen> screens() {
+    return this.dispatcher().call(WindowsScreens::all);
+  }
+
+  @Override
   protected AbstractWindow createWindow(long id, WindowParameters parameters) {
     return new WindowsWindow(this, id, parameters);
   }
 
   @Override
+  protected EventSubscription bindGlobalShortcut(Shortcut shortcut, Runnable pressed) {
+    return WindowsShortcuts.bind(WindowsDispatcher.instance(), shortcut, pressed);
+  }
+
+  @Override
   protected Tray createTray(TrayIcon icon, Consumer<Tray> closed) {
     return new WindowsTray(this.dispatcher(), icon, closed);
+  }
+
+  @Override
+  protected void launchExternal(String url) {
+    this.dispatcher().run(() -> Shell32.open(url));
   }
 
   @Override

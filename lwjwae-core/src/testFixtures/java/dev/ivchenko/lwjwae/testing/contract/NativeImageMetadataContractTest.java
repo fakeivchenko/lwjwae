@@ -55,14 +55,14 @@ public abstract class NativeImageMetadataContractTest {
     this.bindingClasses().forEach(NativeImageMetadataContractTest::initialize);
 
     List<JsonNode> sections = new ArrayList<>();
-    sections.add(readMetadata(metadataPath).path("foreign"));
+    sections.add(NativeImageMetadataContractTest.readMetadata(metadataPath).path("foreign"));
     for (String inherited : this.inheritedMetadataPaths()) {
-      sections.add(readMetadata(inherited).path("foreign"));
+      sections.add(NativeImageMetadataContractTest.readMetadata(inherited).path("foreign"));
     }
 
     Set<String> registeredDowncalls =
         sections.stream()
-            .flatMap(foreign -> stream(foreign.path("downcalls")))
+            .flatMap(foreign -> NativeImageMetadataContractTest.stream(foreign.path("downcalls")))
             .map(NativeImageMetadataContractTest::signature)
             .collect(Collectors.toCollection(LinkedHashSet::new));
     Set<String> boundDowncalls =
@@ -76,14 +76,15 @@ public abstract class NativeImageMetadataContractTest {
 
     Set<String> registeredUpcalls =
         sections.stream()
-            .flatMap(foreign -> stream(foreign.path("directUpcalls")))
+            .flatMap(
+                foreign -> NativeImageMetadataContractTest.stream(foreign.path("directUpcalls")))
             .map(
                 node ->
                     node.path("class").asText()
                         + "#"
                         + node.path("method").asText()
                         + " "
-                        + signature(node))
+                        + NativeImageMetadataContractTest.signature(node))
             .collect(Collectors.toCollection(LinkedHashSet::new));
     Set<String> boundUpcalls =
         NativeLibraries.upcalls().stream()
@@ -93,7 +94,7 @@ public abstract class NativeImageMetadataContractTest {
                         + "#"
                         + target.method()
                         + " "
-                        + signature(target.descriptor()))
+                        + NativeImageMetadataContractTest.signature(target.descriptor()))
             .collect(Collectors.toCollection(LinkedHashSet::new));
     Assertions.assertEquals(
         boundUpcalls,
@@ -121,7 +122,7 @@ public abstract class NativeImageMetadataContractTest {
   private static String signature(JsonNode node) {
     return node.path("returnType").asText()
         + "("
-        + stream(node.path("parameterTypes"))
+        + NativeImageMetadataContractTest.stream(node.path("parameterTypes"))
             .map(JsonNode::asText)
             .collect(Collectors.joining(", "))
         + ")";

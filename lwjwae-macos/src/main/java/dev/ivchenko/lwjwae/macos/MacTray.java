@@ -49,8 +49,8 @@ public class MacTray implements Tray {
           "LwjwaeTrayTarget",
           ObjC.cls("NSObject"),
           Map.of(
-              BUTTON_ACTION, new MethodStub(actionStub("onButtonClicked"), "v@:@"),
-              MENU_ITEM_ACTION, new MethodStub(actionStub("onMenuItemClicked"), "v@:@")));
+              BUTTON_ACTION, new MethodStub(MacTray.actionStub("onButtonClicked"), "v@:@"),
+              MENU_ITEM_ACTION, new MethodStub(MacTray.actionStub("onMenuItemClicked"), "v@:@")));
 
   private final UiDispatcher dispatcher;
   private final Consumer<Tray> closedCallback;

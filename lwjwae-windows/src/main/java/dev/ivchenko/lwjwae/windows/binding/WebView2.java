@@ -33,6 +33,8 @@ public class WebView2 {
   public final MemorySegment IID_CONTENT_LOADING = Com.guid("364471e7-f2be-4910-bdba-d72077d51c4b");
   public final MemorySegment IID_WEB_RESOURCE_REQUESTED =
       Com.guid("ab00b74c-15f1-4646-80e8-e76341d25d71");
+  public final MemorySegment IID_NEW_WINDOW_REQUESTED =
+      Com.guid("d4c185fe-c81c-4989-97af-2d3fa7ab5651");
   public final MemorySegment IID_EXECUTE_SCRIPT_COMPLETED =
       Com.guid("49511172-cc67-4bca-9923-137112f4c4cc");
   public final MemorySegment IID_ADD_SCRIPT_COMPLETED =
@@ -76,6 +78,9 @@ public class WebView2 {
   private final int CONTROLLER_PUT_BOUNDS = 6;
   private final int CONTROLLER_CLOSE = 24;
   private final int CONTROLLER_GET_CORE_WEBVIEW2 = 25;
+  // ICoreWebView2Controller2
+  private final MemorySegment IID_CONTROLLER_2 = Com.guid("c979903e-d4ca-4228-92eb-47ee3fa96eab");
+  private final int CONTROLLER_2_PUT_DEFAULT_BACKGROUND_COLOR = 27;
   // ICoreWebView2
   private final int WEBVIEW_GET_SETTINGS = 3;
   private final int WEBVIEW_GET_SOURCE = 4;
@@ -88,6 +93,7 @@ public class WebView2 {
   private final int WEBVIEW_EXECUTE_SCRIPT = 29;
   private final int WEBVIEW_POST_WEB_MESSAGE_AS_STRING = 33;
   private final int WEBVIEW_ADD_WEB_MESSAGE_RECEIVED = 34;
+  private final int WEBVIEW_ADD_NEW_WINDOW_REQUESTED = 44;
   private final int WEBVIEW_ADD_WEB_RESOURCE_REQUESTED = 55;
   private final int WEBVIEW_ADD_WEB_RESOURCE_REQUESTED_FILTER = 57;
   // ICoreWebView2Settings
@@ -99,6 +105,8 @@ public class WebView2 {
   private final int NAVIGATION_COMPLETED_GET_IS_SUCCESS = 3;
   private final int NAVIGATION_COMPLETED_GET_ERROR_STATUS = 4;
   private final int WEB_MESSAGE_TRY_GET_AS_STRING = 5;
+  private final int NEW_WINDOW_GET_URI = 3;
+  private final int NEW_WINDOW_PUT_HANDLED = 6;
   private final int RESOURCE_REQUESTED_GET_REQUEST = 3;
   private final int RESOURCE_REQUESTED_PUT_RESPONSE = 5;
   private final int RESOURCE_REQUESTED_GET_CONTEXT = 7;
@@ -193,6 +201,22 @@ public class WebView2 {
     Com.check("put_IsVisible", Com.call(controller, CONTROLLER_PUT_IS_VISIBLE, visible ? 1 : 0));
   }
 
+  /**
+   * Calls {@code ICoreWebView2Controller2::put_DefaultBackgroundColor} with a transparent color, so
+   * what the page leaves clear shows what is under the view. The {@code COREWEBVIEW2_COLOR} of four
+   * bytes goes by value, in a register, which is where an {@code int} of zero goes.
+   */
+  public void setTransparentBackground(MemorySegment controller) {
+    MemorySegment controller2 = WinRt.query(controller, IID_CONTROLLER_2);
+    try {
+      Com.check(
+          "put_DefaultBackgroundColor",
+          Com.call(controller2, CONTROLLER_2_PUT_DEFAULT_BACKGROUND_COLOR, 0));
+    } finally {
+      Com.release(controller2);
+    }
+  }
+
   /** Sizes the view to {@code width} by {@code height} at the origin of the parent. */
   public void setBounds(MemorySegment controller, int width, int height) {
     try (Arena arena = Arena.ofConfined()) {
@@ -218,7 +242,7 @@ public class WebView2 {
    * the page are unaffected either way.
    */
   public void setDevToolsEnabled(MemorySegment webView, boolean enabled) {
-    MemorySegment settings = settings(webView);
+    MemorySegment settings = WebView2.settings(webView);
     try {
       Com.check(
           "put_AreDevToolsEnabled",
@@ -233,9 +257,10 @@ public class WebView2 {
 
   /** Reads {@code AreDevToolsEnabled} from the settings of {@code webView}. */
   public boolean isDevToolsEnabled(MemorySegment webView) {
-    MemorySegment settings = settings(webView);
+    MemorySegment settings = WebView2.settings(webView);
     try {
-      return integer(settings, SETTINGS_GET_DEV_TOOLS_ENABLED, "get_AreDevToolsEnabled") != 0;
+      return WebView2.integer(settings, SETTINGS_GET_DEV_TOOLS_ENABLED, "get_AreDevToolsEnabled")
+          != 0;
     } finally {
       Com.release(settings);
     }
@@ -295,27 +320,34 @@ public class WebView2 {
 
   /** Calls {@code ICoreWebView2::add_NavigationStarting}. */
   public void onNavigationStarting(MemorySegment webView, MemorySegment handler) {
-    addEvent(webView, WEBVIEW_ADD_NAVIGATION_STARTING, handler, "add_NavigationStarting");
+    WebView2.addEvent(webView, WEBVIEW_ADD_NAVIGATION_STARTING, handler, "add_NavigationStarting");
   }
 
   /** Calls {@code ICoreWebView2::add_ContentLoading}. */
   public void onContentLoading(MemorySegment webView, MemorySegment handler) {
-    addEvent(webView, WEBVIEW_ADD_CONTENT_LOADING, handler, "add_ContentLoading");
+    WebView2.addEvent(webView, WEBVIEW_ADD_CONTENT_LOADING, handler, "add_ContentLoading");
   }
 
   /** Calls {@code ICoreWebView2::add_NavigationCompleted}. */
   public void onNavigationCompleted(MemorySegment webView, MemorySegment handler) {
-    addEvent(webView, WEBVIEW_ADD_NAVIGATION_COMPLETED, handler, "add_NavigationCompleted");
+    WebView2.addEvent(
+        webView, WEBVIEW_ADD_NAVIGATION_COMPLETED, handler, "add_NavigationCompleted");
   }
 
   /** Calls {@code ICoreWebView2::add_WebMessageReceived}. */
   public void onWebMessageReceived(MemorySegment webView, MemorySegment handler) {
-    addEvent(webView, WEBVIEW_ADD_WEB_MESSAGE_RECEIVED, handler, "add_WebMessageReceived");
+    WebView2.addEvent(webView, WEBVIEW_ADD_WEB_MESSAGE_RECEIVED, handler, "add_WebMessageReceived");
+  }
+
+  /** Calls {@code ICoreWebView2::add_NewWindowRequested}. */
+  public void onNewWindowRequested(MemorySegment webView, MemorySegment handler) {
+    WebView2.addEvent(webView, WEBVIEW_ADD_NEW_WINDOW_REQUESTED, handler, "add_NewWindowRequested");
   }
 
   /** Calls {@code ICoreWebView2::add_WebResourceRequested}. */
   public void onWebResourceRequested(MemorySegment webView, MemorySegment handler) {
-    addEvent(webView, WEBVIEW_ADD_WEB_RESOURCE_REQUESTED, handler, "add_WebResourceRequested");
+    WebView2.addEvent(
+        webView, WEBVIEW_ADD_WEB_RESOURCE_REQUESTED, handler, "add_WebResourceRequested");
   }
 
   /**
@@ -361,17 +393,27 @@ public class WebView2 {
 
   /** Returns the URI of a {@code NavigationStarting} event. */
   public String navigationStartingUri(MemorySegment arguments) {
-    return uri(arguments, NAVIGATION_STARTING_GET_URI);
+    return WebView2.uri(arguments, NAVIGATION_STARTING_GET_URI);
+  }
+
+  /**
+   * Takes over a {@code NewWindowRequested} event: {@code put_Handled(TRUE)} keeps WebView2 from
+   * opening a window of its own, and the URL it was for is returned.
+   */
+  public String takeNewWindowRequest(MemorySegment arguments) {
+    Com.check("put_Handled", Com.call(arguments, NEW_WINDOW_PUT_HANDLED, 1));
+    return WebView2.uri(arguments, NEW_WINDOW_GET_URI);
   }
 
   /** Reads {@code IsSuccess} from a {@code NavigationCompleted} event. */
   public boolean isNavigationSuccessful(MemorySegment arguments) {
-    return integer(arguments, NAVIGATION_COMPLETED_GET_IS_SUCCESS, "get_IsSuccess") != 0;
+    return WebView2.integer(arguments, NAVIGATION_COMPLETED_GET_IS_SUCCESS, "get_IsSuccess") != 0;
   }
 
   /** The {@code COREWEBVIEW2_WEB_ERROR_STATUS} of the failed navigation, as its enum name. */
   public String navigationErrorStatus(MemorySegment arguments) {
-    int status = integer(arguments, NAVIGATION_COMPLETED_GET_ERROR_STATUS, "get_WebErrorStatus");
+    int status =
+        WebView2.integer(arguments, NAVIGATION_COMPLETED_GET_ERROR_STATUS, "get_WebErrorStatus");
     return status >= 0 && status < WEB_ERROR_STATUS.size()
         ? WEB_ERROR_STATUS.get(status)
         : "STATUS_" + status;
@@ -396,7 +438,7 @@ public class WebView2 {
       Com.check("get_Request", Com.call(arguments, RESOURCE_REQUESTED_GET_REQUEST, out));
       MemorySegment request = Com.pointerAt(out);
       try {
-        return uri(request, REQUEST_GET_URI);
+        return WebView2.uri(request, REQUEST_GET_URI);
       } finally {
         Com.release(request);
       }
@@ -405,7 +447,7 @@ public class WebView2 {
 
   /** Checks whether an intercepted request is for the main document, not a subresource. */
   public boolean isDocumentRequest(MemorySegment arguments) {
-    return integer(arguments, RESOURCE_REQUESTED_GET_CONTEXT, "get_ResourceContext")
+    return WebView2.integer(arguments, RESOURCE_REQUESTED_GET_CONTEXT, "get_ResourceContext")
         == RESOURCE_CONTEXT_DOCUMENT;
   }
 

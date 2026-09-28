@@ -7,9 +7,16 @@ import dev.ivchenko.lwjwae.bridge.MessageRpcExchange;
 import dev.ivchenko.lwjwae.bridge.PageEvents;
 import dev.ivchenko.lwjwae.bridge.RpcMessageChannel;
 import dev.ivchenko.lwjwae.bridge.codec.BridgeCodec;
+import dev.ivchenko.lwjwae.clipboard.Clipboard;
+import dev.ivchenko.lwjwae.dialog.DialogCompletion;
+import dev.ivchenko.lwjwae.dialog.MessageDialogParameters;
+import dev.ivchenko.lwjwae.dialog.OpenDialogParameters;
+import dev.ivchenko.lwjwae.dialog.SaveDialogParameters;
 import dev.ivchenko.lwjwae.event.Event;
 import dev.ivchenko.lwjwae.event.EventSubscription;
 import dev.ivchenko.lwjwae.event.LoadEvent;
+import dev.ivchenko.lwjwae.event.WindowEvent;
+import dev.ivchenko.lwjwae.event.WindowEvents;
 import dev.ivchenko.lwjwae.rpc.RpcCall;
 import dev.ivchenko.lwjwae.rpc.RpcException;
 import dev.ivchenko.lwjwae.rpc.RpcExchange;
@@ -21,19 +28,26 @@ import dev.ivchenko.lwjwae.util.ThrowableUtil;
 import java.net.URI;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.security.SecureRandom;
 import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * The toolkit-independent half of a window: listener bookkeeping, the closed state, and the whole
@@ -62,6 +76,9 @@ public abstract class AbstractWindow implements Window {
   private static final Executor HANDLER_EXECUTOR = Executors.newVirtualThreadPerTaskExecutor();
   private static final SecureRandom TOKENS = new SecureRandom();
 
+  /** How long a read of the clipboard for a page may take before the call fails. */
+  private static final long CLIPBOARD_TIMEOUT_SECONDS = 30;
+
   private final AbstractApplication application;
   private final long id;
   private final List<Consumer<LoadEvent>> loadListeners = new CopyOnWriteArrayList<>();
@@ -69,22 +86,31 @@ public abstract class AbstractWindow implements Window {
   private final Map<String, RpcHandler> rpcHandlers = new ConcurrentHashMap<>();
   private final EventListeners listeners = new EventListeners("lwjwae-events");
   private final PageEvents pageEvents = new PageEvents();
-  private final String token = newToken();
+  private final WindowEvents windowEvents = new WindowEvents(this, this::sendToPage);
+  private final String token = AbstractWindow.newToken();
+  private final Set<DialogCompletion<?>> dialogs = ConcurrentHashMap.newKeySet();
+  private final boolean closable;
+  private final boolean maximizable;
 
   private volatile MessageRpcCalls messageCalls;
 
   private volatile boolean closed;
   private volatile CloseAction closeAction = CloseAction.CLOSE;
+  private volatile Consumer<String> externalLinkHandler;
 
   /**
    * Records the owner and the ID. The subclass creates the native window afterwards.
    *
    * @param application The application that opens the window.
    * @param id The ID that {@link AbstractApplication#createWindow} was given.
+   * @param parameters What the window starts with; the core keeps the parts of the frame that it
+   *     acts on itself.
    */
-  protected AbstractWindow(AbstractApplication application, long id) {
+  protected AbstractWindow(AbstractApplication application, long id, WindowParameters parameters) {
     this.application = Objects.requireNonNull(application, "application");
     this.id = id;
+    this.closable = parameters.closable();
+    this.maximizable = parameters.maximizable();
   }
 
   /** The UI thread of the toolkit, the one of the application. */
@@ -105,6 +131,33 @@ public abstract class AbstractWindow implements Window {
   @Override
   public final void onLoad(Consumer<LoadEvent> listener) {
     this.loadListeners.add(Objects.requireNonNull(listener, "listener"));
+  }
+
+  @Override
+  public final EventSubscription onWindowEvent(Consumer<WindowEvent> listener) {
+    return this.windowEvents.listen(Objects.requireNonNull(listener, "listener"));
+  }
+
+  /**
+   * Reports that the window may have changed: its size, its place, its state, or its focus. A
+   * backend calls this from every toolkit callback that may mean one of these, on any thread; the
+   * core reads the window and works out the events, see {@link WindowEvents}.
+   */
+  protected final void windowChanged() {
+    this.windowEvents.changed(this.dispatcher()::post);
+  }
+
+  /** Hands a window event to the page, as {@link BridgeProtocol#WINDOW_EVENT} with JSON. */
+  private void sendToPage(WindowEvent event) {
+    String json =
+        "{\"type\":\"%s\",\"width\":%d,\"height\":%d,\"x\":%d,\"y\":%d}"
+            .formatted(
+                event.type().pageName(),
+                event.size().width(),
+                event.size().height(),
+                event.position().x(),
+                event.position().y());
+    this.pageEvents.send(BridgeProtocol.WINDOW_EVENT, json, false);
   }
 
   @Override
@@ -290,6 +343,9 @@ public abstract class AbstractWindow implements Window {
       case BridgeProtocol.EVENT_CALL -> this::emitFromPage;
       case BridgeProtocol.OPEN_CALL -> this::openFromPage;
       case BridgeProtocol.CLOSE_CALL -> _ -> this.close();
+      case BridgeProtocol.CONTROL_CALL -> this::controlFromPage;
+      case BridgeProtocol.CLIPBOARD_CALL -> this::clipboardFromPage;
+      case BridgeProtocol.DIALOG_CALL -> this::dialogFromPage;
       default -> null;
     };
   }
@@ -300,10 +356,10 @@ public abstract class AbstractWindow implements Window {
 
   /** The origin that serves the resources of the window, and the development server in use. */
   private List<String> trustedOrigins() {
-    String resources = originOf(this.resourceUrl(""));
+    String resources = AbstractWindow.originOf(this.resourceUrl(""));
     ApplicationParameters parameters = this.application.parameters();
     return parameters.isDevelopment()
-        ? List.of(resources, originOf(parameters.devServerUrl()))
+        ? List.of(resources, AbstractWindow.originOf(parameters.devServerUrl()))
         : List.of(resources);
   }
 
@@ -327,6 +383,8 @@ public abstract class AbstractWindow implements Window {
    */
   protected final void installBridge() {
     this.messageCalls = new MessageRpcCalls(this, this.rpcMessageChannel(), this.token);
+    // Once the window is complete: what the first window event compares with.
+    this.dispatcher().post(this.windowEvents::start);
     BridgeCodec codec = this.application.parameters().codec();
     // Without a codec, the page has no encoder: an untyped call with a non-string payload sends
     // String(payload), and a typed call fails on the Java side before it reaches the page.
@@ -337,7 +395,8 @@ public abstract class AbstractWindow implements Window {
             pageCodec,
             this.rpcTransportScript(),
             this.token,
-            this.trustedOrigins()));
+            this.trustedOrigins(),
+            this.pageResizeEdges()));
   }
 
   /**
@@ -379,6 +438,284 @@ public abstract class AbstractWindow implements Window {
   }
 
   /**
+   * {@code window.lwjwae.window}: the body is an action and, for some, an argument after {@link
+   * BridgeProtocol#SEPARATOR}. {@code state} answers with JSON; the others answer with nothing once
+   * the window has taken the request.
+   */
+  private void controlFromPage(RpcCall call) {
+    String[] parts = call.text().split(BridgeProtocol.SEPARATOR, 2);
+    String argument = parts.length > 1 ? parts[1] : "";
+    switch (parts[0]) {
+      case "minimize" -> this.minimize();
+      case "maximize" -> this.maximize();
+      case "restore" -> this.restore();
+      case "toggle-maximize" -> this.toggleMaximize();
+      case "fullscreen" -> this.fullscreen("1".equals(argument));
+      case "close" -> this.requestClose();
+      case "move" -> this.beginMove();
+      case "resize" -> {
+        WindowEdge edge = WindowEdge.ofPageName(argument);
+        if (edge == null) {
+          throw RpcException.badRequest("malformed-edge", "No such edge: " + argument);
+        }
+        this.beginResize(edge);
+      }
+      case "title-bar-double-click" -> this.titleBarDoubleClicked();
+      case "open-external" -> this.leave(argument);
+      case "state" -> call.reply(this.dispatcher().call(this::stateJson));
+      default -> throw RpcException.badRequest("malformed-control", "No such action: " + parts[0]);
+    }
+  }
+
+  /**
+   * {@code window.lwjwae.clipboard}: {@code read-text} answers {@code 1} and the text, or {@code
+   * 0}; {@code write-text} puts the text after the separator on the clipboard.
+   */
+  private void clipboardFromPage(RpcCall call) throws Exception {
+    String[] parts = call.text().split(BridgeProtocol.SEPARATOR, 2);
+    Clipboard clipboard = this.application.clipboard();
+    switch (parts[0]) {
+      case "read-text" ->
+          call.reply(
+              clipboard
+                  .readText()
+                  .get(CLIPBOARD_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                  .map(text -> "1" + text)
+                  .orElse("0"));
+      case "write-text" -> clipboard.writeText(parts.length > 1 ? parts[1] : "");
+      default ->
+          throw RpcException.badRequest("malformed-clipboard", "No such action: " + parts[0]);
+    }
+  }
+
+  @Override
+  public final void externalLinkHandler(Consumer<String> handler) {
+    this.externalLinkHandler = handler;
+  }
+
+  /**
+   * The page asked for a new window, with {@code target="_blank"} or {@code window.open}, and the
+   * engine left the decision to the host. A backend calls this from the callback of that request,
+   * on the UI thread, and opens no window itself: a URL of the application's own origin opens in
+   * this window, since a web view has no tabs, one of the web or {@code mailto:} goes to {@link
+   * #externalLinkHandler}, and anything else, {@code about:blank} of an empty {@code window.open}
+   * included, is dropped.
+   */
+  protected final void newWindowRequested(String url) {
+    if (url == null || url.isEmpty()) {
+      return;
+    }
+    URI uri;
+    try {
+      uri = URI.create(url);
+    } catch (IllegalArgumentException _) {
+      return;
+    }
+    String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase(Locale.ROOT);
+    if (uri.getRawAuthority() != null && this.isTrustedOrigin(AbstractWindow.originOf(url))) {
+      this.dispatcher().post(() -> this.navigate(url));
+    } else if (scheme.equals("http") || scheme.equals("https") || scheme.equals("mailto")) {
+      HANDLER_EXECUTOR.execute(() -> this.leaveReporting(url));
+    }
+  }
+
+  /** Hands a link that leaves the application to the handler of the window, or to the system. */
+  private void leave(String url) {
+    Consumer<String> handler = this.externalLinkHandler;
+    if (handler != null) {
+      handler.accept(url);
+    } else {
+      this.application.openExternal(url);
+    }
+  }
+
+  private void leaveReporting(String url) {
+    try {
+      this.leave(url);
+    } catch (Throwable t) {
+      ThrowableUtil.report(t);
+    }
+  }
+
+  @Override
+  public final CompletableFuture<List<Path>> showOpenDialog(OpenDialogParameters parameters) {
+    Objects.requireNonNull(parameters, "parameters");
+    return this.showDialog(completion -> this.presentOpenDialog(parameters, completion));
+  }
+
+  @Override
+  public final CompletableFuture<Optional<Path>> showSaveDialog(SaveDialogParameters parameters) {
+    Objects.requireNonNull(parameters, "parameters");
+    return this.showDialog(completion -> this.presentSaveDialog(parameters, completion));
+  }
+
+  @Override
+  public final CompletableFuture<Boolean> showMessageDialog(MessageDialogParameters parameters) {
+    Objects.requireNonNull(parameters, "parameters");
+    return this.showDialog(completion -> this.presentMessageDialog(parameters, completion));
+  }
+
+  /**
+   * Shows a dialog on the UI thread. The window keeps the dialogs that are up, and cancels them
+   * when it closes, which closes them: a dialog must not outlive the window that it belongs to.
+   */
+  private <T> CompletableFuture<T> showDialog(Consumer<DialogCompletion<T>> present) {
+    this.checkOpen();
+    DialogCompletion<T> completion = new DialogCompletion<>(this.dispatcher());
+    this.dialogs.add(completion);
+    completion.future().whenComplete((_, _) -> this.dialogs.remove(completion));
+    this.dispatcher()
+        .post(
+            () -> {
+              try {
+                this.checkOpen();
+                present.accept(completion);
+              } catch (Throwable t) {
+                completion.fail(t);
+              }
+            });
+    return completion.future();
+  }
+
+  /**
+   * Shows the dialog of the platform that opens files or folders, parented to this window, on the
+   * UI thread. The backend registers how to close it with {@link DialogCompletion#onCancel} before
+   * it shows it, and completes {@code completion} with the picked paths, none for a cancel.
+   */
+  protected abstract void presentOpenDialog(
+      OpenDialogParameters parameters, DialogCompletion<List<Path>> completion);
+
+  /** The same as {@link #presentOpenDialog} for the dialog that saves a file. */
+  protected abstract void presentSaveDialog(
+      SaveDialogParameters parameters, DialogCompletion<Optional<Path>> completion);
+
+  /**
+   * The same as {@link #presentOpenDialog} for a message: {@code true} for OK or yes, {@code false}
+   * for anything else.
+   */
+  protected abstract void presentMessageDialog(
+      MessageDialogParameters parameters, DialogCompletion<Boolean> completion);
+
+  /**
+   * {@code window.lwjwae.dialog}: the body is {@code open}, {@code save}, or {@code message}, and
+   * the fields of the dialog, see {@link BridgeProtocol#parseOpenDialog} and its siblings. The
+   * answer is the picked paths separated by {@link BridgeProtocol#SEPARATOR}, empty for none, or
+   * {@code 1} and {@code 0} for a message. A page that abandons the call closes the dialog.
+   */
+  private void dialogFromPage(RpcCall call) throws Exception {
+    String[] parts = call.text().split(BridgeProtocol.SEPARATOR, 2);
+    String fields = parts.length > 1 ? parts[1] : "";
+    // The future of the dialog itself, which a cancellation must reach to close it, and the answer.
+    CompletableFuture<?> dialog;
+    CompletableFuture<String> answer;
+    switch (parts[0]) {
+      case "open" -> {
+        OpenDialogParameters parameters = BridgeProtocol.parseOpenDialog(fields);
+        CompletableFuture<List<Path>> open =
+            parameters == null ? null : this.showOpenDialog(parameters);
+        dialog = open;
+        answer = open == null ? null : open.thenApply(AbstractWindow::joinPaths);
+      }
+      case "save" -> {
+        SaveDialogParameters parameters = BridgeProtocol.parseSaveDialog(fields);
+        CompletableFuture<Optional<Path>> save =
+            parameters == null ? null : this.showSaveDialog(parameters);
+        dialog = save;
+        answer = save == null ? null : save.thenApply(path -> path.map(Path::toString).orElse(""));
+      }
+      case "message" -> {
+        MessageDialogParameters parameters = BridgeProtocol.parseMessageDialog(fields);
+        CompletableFuture<Boolean> message =
+            parameters == null ? null : this.showMessageDialog(parameters);
+        dialog = message;
+        answer = message == null ? null : message.thenApply(yes -> yes ? "1" : "0");
+      }
+      default -> {
+        dialog = null;
+        answer = null;
+      }
+    }
+    if (answer == null) {
+      throw RpcException.badRequest("malformed-dialog", "Malformed dialog: " + parts[0]);
+    }
+    // A page that gives the call up interrupts this thread.
+    try {
+      if (call.isCancelled()) {
+        throw new InterruptedException();
+      }
+      call.reply(answer.get());
+    } catch (InterruptedException e) {
+      dialog.cancel(false);
+      throw e;
+    }
+  }
+
+  private static String joinPaths(List<Path> paths) {
+    return paths.stream().map(Path::toString).collect(Collectors.joining(BridgeProtocol.SEPARATOR));
+  }
+
+  private void toggleMaximize() {
+    if (this.isMaximized()) {
+      this.restore();
+    } else {
+      this.maximize();
+    }
+  }
+
+  /** What {@code window.lwjwae.window.state()} resolves to. Call on the UI thread. */
+  private String stateJson() {
+    WindowSize size = this.size();
+    WindowPosition position = this.position();
+    return ("{\"width\":%d,\"height\":%d,\"x\":%d,\"y\":%d,\"minimized\":%b,\"maximized\":%b,"
+            + "\"fullscreen\":%b,\"focused\":%b,\"resizable\":%b}")
+        .formatted(
+            size.width(),
+            size.height(),
+            position.x(),
+            position.y(),
+            this.isMinimized(),
+            this.isMaximized(),
+            this.isFullscreen(),
+            this.isFocused(),
+            this.isResizable());
+  }
+
+  /**
+   * A double click on a drag region of the page, which stands in for the title bar: toggles
+   * maximized, the way a double click on a title bar does, unless the window can't be maximized or
+   * resized. A backend whose desktop lets the user choose another action overrides it.
+   */
+  protected void titleBarDoubleClicked() {
+    if (this.maximizable && this.isResizable()) {
+      this.toggleMaximize();
+    }
+  }
+
+  /**
+   * Hands the pointer to the window manager, which moves the window until the user lets go of the
+   * button, the way a drag on the title bar does. The page calls this while the button is down,
+   * from a drag region; on any thread.
+   */
+  protected abstract void beginMove();
+
+  /**
+   * Hands the pointer to the window manager, which resizes the window from {@code edge} until the
+   * user lets go of the button. The page calls this while the button is down; on any thread. Does
+   * nothing when the window isn't resizable.
+   */
+  protected abstract void beginResize(WindowEdge edge);
+
+  /**
+   * The edges at which the page offers to resize the window, because the window has no native
+   * resize edges there: a strip along each edge takes the pointer and calls {@link #beginResize}.
+   * The default is none; a backend whose windows without a title bar lose some of their edges lists
+   * those.
+   */
+  protected List<WindowEdge> pageResizeEdges() {
+    return List.of();
+  }
+
+  /**
    * Runs a script in every document of this window before the scripts of the document, from the
    * next document on.
    */
@@ -411,6 +748,8 @@ public abstract class AbstractWindow implements Window {
     // Straight after the flag: a thread that sees the window closed must not find it in the list.
     this.application.windowClosed(this);
     this.pageEvents.close();
+    this.windowEvents.shutdown();
+    this.dialogs.forEach(dialog -> dialog.future().cancel(false));
     MessageRpcCalls calls = this.messageCalls;
     if (calls != null) {
       calls.cancelAll();
@@ -449,6 +788,16 @@ public abstract class AbstractWindow implements Window {
    */
   protected final boolean hidesOnCloseRequest() {
     return this.closeAction == CloseAction.HIDE && !this.closed && this.application.hasTrayIcon();
+  }
+
+  /**
+   * Whether a close that the user asked for should be refused, because the window isn't {@link
+   * WindowParameters#closable()}. A backend asks before {@link #hidesOnCloseRequest()}, and cancels
+   * the close when the answer is {@code true}, whatever the desktop let through: a shortcut, a menu
+   * of the taskbar, or a close button that the platform shows anyway.
+   */
+  protected final boolean refusesCloseRequest() {
+    return !this.closable;
   }
 
   private void publish(String name, BiFunction<Window, String, String> handler, boolean typed) {

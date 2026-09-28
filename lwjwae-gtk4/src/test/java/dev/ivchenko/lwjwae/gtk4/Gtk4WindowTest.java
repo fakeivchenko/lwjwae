@@ -2,6 +2,8 @@ package dev.ivchenko.lwjwae.gtk4;
 
 import dev.ivchenko.lwjwae.Application;
 import dev.ivchenko.lwjwae.Window;
+import dev.ivchenko.lwjwae.glib.XtestKeyboard;
+import dev.ivchenko.lwjwae.shortcut.Shortcut;
 import dev.ivchenko.lwjwae.testing.contract.WindowContractTest;
 import dev.ivchenko.lwjwae.util.PlatformUtil;
 
@@ -15,6 +17,59 @@ class Gtk4WindowTest extends WindowContractTest {
   @Override
   protected boolean canPlaceWindows() {
     return false;
+  }
+
+  /** Wayland tells a client nothing about minimizing. */
+  @Override
+  protected boolean canTellMinimized() {
+    return Gtk4WindowTest.isX11();
+  }
+
+  /** Wayland gives the clipboard only to the client with the focus that a person gave it. */
+  @Override
+  protected boolean canUseClipboardUnattended() {
+    return Gtk4WindowTest.isX11();
+  }
+
+  /** Wayland keeps the focus with the compositor. */
+  @Override
+  protected boolean canTakeFocus() {
+    return Gtk4WindowTest.isX11();
+  }
+
+  /** GTK 4 uses the default size only for the first show; after that, the size is the user's. */
+  @Override
+  protected boolean canResizeShownWindows() {
+    return false;
+  }
+
+  private static boolean isX11() {
+    return System.getenv("WAYLAND_DISPLAY") == null || "x11".equals(System.getenv("GDK_BACKEND"));
+  }
+
+  /** GTK 4 has no way to keep a window above the others. */
+  @Override
+  protected boolean canKeepOnTop() {
+    return false;
+  }
+
+  /** GTK 4 has no maximum size. */
+  @Override
+  protected boolean hasMaximumSize() {
+    return false;
+  }
+
+  /** The portal of Wayland asks the user to confirm a shortcut. */
+  @Override
+  protected boolean canBindShortcutsUnattended() {
+    return Gtk4WindowTest.isX11();
+  }
+
+  /** XTest presses keys on X11; Wayland lets no client press keys for the others. */
+  @Override
+  protected boolean pressKeys(Shortcut shortcut) {
+    XtestKeyboard.press(shortcut);
+    return true;
   }
 
   @Override

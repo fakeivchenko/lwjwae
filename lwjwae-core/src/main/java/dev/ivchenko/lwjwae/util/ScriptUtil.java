@@ -59,7 +59,7 @@ public class ScriptUtil {
         catch (error) { return "E" + (error && error.message !== undefined ? error.message : String(error)); }
     })()\
     """
-        .formatted(quote(script));
+        .formatted(ScriptUtil.quote(script));
   }
 
   /**

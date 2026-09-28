@@ -23,7 +23,7 @@ log="$parent\\lwjwae-task.log"
 printf '@echo off\r\ncd /d %s\r\ncall gradlew.bat %s --console=plain > %s 2>&1\r\n' "$remote" "$*" "$log" \
     | ssh "$host" "\$input | Set-Content -Path '$script' -Encoding ascii" 2>/dev/null
 
-ssh "$host" "Remove-Item -Force '$log' -ErrorAction SilentlyContinue; schtasks /Create /F /TN $task /SC ONCE /ST 00:00 /TR '$script' 2>&1 | Out-Null; schtasks /Run /TN $task 2>&1 | Out-Null" 2>/dev/null
+ssh "$host" "Remove-Item -Force '$log' -ErrorAction SilentlyContinue; schtasks /Create /F /TN $task /SC ONCE /ST 00:00 /TR 'conhost.exe --headless $script' 2>&1 | Out-Null; schtasks /Run /TN $task 2>&1 | Out-Null" 2>/dev/null
 
 for _ in $(seq 1 900); do
     sleep 2

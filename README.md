@@ -35,15 +35,31 @@ GraalVM to one executable and captured on Windows 11.
 
 ## A first window
 
+One line opens a window on a page of the application and returns when it closes:
+
+```java
+Application.launch("Docs", "app/index.html");
+```
+
+With a Java function for the page:
+
+```java
+Application.launch(
+    WindowParameters.of("Docs", "app/index.html"),
+    window -> window.bind("reverse", text -> new StringBuilder(text).reverse().toString()));
+```
+
+Every step on its own, for an application with more than one window, a tray icon, or a life
+beyond its first window:
+
 ```java
 try (Application application = Application.create()) {
   Window window = application.open(WindowParameters.builder()
       .title("Docs")
-      .width(1280)
-      .height(800)
+      .size(1280, 800)
       .build());
   window.bind("reverse", text -> new StringBuilder(text).reverse().toString());
-  window.loadResource("app/index.html");
+  window.load("app/index.html");
   window.show();
   application.run();
 }
@@ -115,6 +131,10 @@ dependencies {
 
 ## What you get
 
+- **Short when it can be, detailed when it must.** `Application.launch("Docs", "app/index.html")`
+  is a whole application; `window.alert`, `confirm`, `pickFile`, `application.tray(icon, items)`,
+  and `showNotification(title, body)` state the common choice. Under them is the detailed API
+  with every option.
 - **One API for three engines.** Title, size, resizing, navigation, inline HTML, script evaluation,
   load events, the developer tools. Every method works from any thread; the backend forwards it to
   the UI thread of the toolkit.
@@ -131,6 +151,29 @@ dependencies {
   `Response`: text, bytes, a value through the codec, or a stream that the page reads while Java
   writes it, several hundred MB/s. An `AbortSignal` reaches the handler. Only the pages of the
   application, and the development server, may call.
+- **Windows under control.** Minimize, maximize, full screen, on top, focus, size limits, and events
+  for every change of a window in Java and on the page. With a state key, a window opens the way it
+  last closed.
+- **Clipboard.** `application.clipboard()` reads and writes text and images, as PNG, on the desktop
+  clipboard from Java, and `lwjwae.clipboard` reads and writes text on the page, without the
+  prompts of `navigator.clipboard`.
+- **Global shortcuts.** `application.globalShortcut("CmdOrCtrl+Shift+Space", window::focus)` runs a
+  handler on a shortcut, whichever application has the keyboard: `RegisterHotKey` on Windows, a
+  hot key of Carbon on macOS, a key grab on X11, and the `GlobalShortcuts` portal on Wayland.
+- **Screens.** `application.screens()` and `window.screen()` tell where the screens are, their work
+  areas and scales; a window that remembers its place doesn't open on a monitor that is gone.
+- **Native dialogs.** `showOpenDialog`, `showSaveDialog`, and `showMessageDialog` on a window, and
+  `lwjwae.dialog` on the page: files and folders to open, a file to save, and a message, as the
+  platform draws them, through the portal of the desktop inside a Linux sandbox.
+- **Links go to the browser.** A link to another site, `target="_blank"`, and `window.open` open in
+  the browser of the system rather than in the window, or wherever `externalLinkHandler` says;
+  `Application.openExternal(url)` does the same from Java.
+- **Your own title bar.** `decorated(false)` takes the title bar away and keeps the shadow and the
+  resize edges; `data-lwjwae-drag` on the page's own bar moves the window, and
+  `lwjwae.window.minimize()` and the like work its buttons. `closable`, `minimizable`, and
+  `maximizable` take a button off a native title bar.
+- **Transparent windows.** `transparent(true)` lets the desktop show through wherever the page
+  draws nothing, for a widget of any shape with a page of rounded, half-transparent cards.
 - **A tray icon, and windows that hide.** `Application.tray(TrayIcon)` puts an icon with a menu in
   the notification area on Windows, the menu bar on macOS, or the StatusNotifier or XEmbed tray on
   Linux. With `CloseAction.HIDE`, the close button hides a window instead of closing it while a tray
@@ -140,6 +183,9 @@ dependencies {
   a title, a body, an image, and buttons, and runs a handler on a click: a toast on Windows,
   `UNUserNotificationCenter` on macOS for an `.app` bundle, and the `org.freedesktop.Notifications`
   service on Linux.
+- **One instance.** `Application.createSingleInstance(parameters, args)` lets a second start hand
+  its arguments to the running process, whose window comes to the front, and end, having opened
+  nothing; `onSecondInstance` hears of it.
 - **Pages from the classpath.** `loadResource("app/index.html")` serves the files of the
   application under a custom scheme, so relative links, stylesheets, scripts, and `fetch` resolve
   as on a web server. During development, `LWJWAE_DEV_SERVER_URL` points every window at a Vite
@@ -198,8 +244,10 @@ Two sibling repositories complete the picture:
 ```
 
 The display tests skip when no display is present, so a headless machine gets a passing build. CI
-runs them under Xvfb with `-Dlwjwae.requireDisplay=true`, which turns a missing display into a
-failure. The Windows backend compiles and runs its headless tests anywhere; `scripts/windows` drives
+runs them under Xvfb with openbox as the window manager, through
+`scripts/linux/with-window-manager.sh`, and with `-Dlwjwae.requireDisplay=true`, which turns a
+missing display into a failure. `scripts/linux/test-in-docker.sh` runs the same environment
+locally. The Windows backend compiles and runs its headless tests anywhere; `scripts/windows` drives
 a Windows VM over SSH for the rest.
 
 The code follows Google Java Style with a few additions; [docs/CODE_STYLE.md](docs/CODE_STYLE.md)
