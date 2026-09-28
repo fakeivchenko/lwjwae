@@ -559,6 +559,26 @@ through `ServiceLoader`. Without one, the page has no encoder: an untyped call t
 object sends `String(payload)`, and `bind(name, Class, handler)` and `emit(name, Object)` fail at
 the call site with `IllegalStateException`, not later on the page.
 
+A codec reads and creates the types of a call through reflection, which a native image allows only
+for the types that its metadata lists. Mark the outermost types of your binds and events with
+[`@BridgeType`](src/main/java/dev/ivchenko/lwjwae/bridge/codec/BridgeType.java), and add the
+annotation processor of [`lwjwae-processor`](../lwjwae-processor) to the build; it writes that
+metadata for them and for every type that they hold:
+
+```kotlin
+dependencies {
+    annotationProcessor("dev.ivchenko.lwjwae:lwjwae-processor:VERSION")
+}
+```
+
+```java
+@BridgeType
+public record Outline(String name, List<Point> points) {}
+```
+
+`Point` needs no annotation: the processor follows the components of a record, the fields of a
+class, its superclasses, arrays, and type arguments. On the JVM, the annotation does nothing.
+
 ### Calls with a body: `handle`
 
 `bind` fits small calls: the argument and the answer are strings inside one message. For bytes, big

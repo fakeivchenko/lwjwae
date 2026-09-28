@@ -123,7 +123,9 @@ events need a codec from [lwjwae-codecs](https://github.com/fakeivchenko/lwjwae-
   as on a web server. During development, `LWJWAE_DEV_SERVER_URL` points every window at a Vite
   or webpack server with hot reload instead.
 - **Native image ready.** Every FFM stub is recorded, and each backend ships the reachability
-  metadata that `native-image` needs. A test keeps the metadata in step with the bindings.
+  metadata that `native-image` needs. A test keeps the metadata in step with the bindings. For the
+  types of typed calls, `@BridgeType` and the annotation processor of `lwjwae-processor` write
+  the metadata at compile time.
 
 ## Modules
 
@@ -135,6 +137,7 @@ events need a codec from [lwjwae-codecs](https://github.com/fakeivchenko/lwjwae-
 | [`lwjwae-gtk4`](lwjwae-gtk4)       | The Linux backend on GTK 4 and WebKitGTK 6.0. Serves its tray over D-Bus itself; can't place windows.       |
 | [`lwjwae-windows`](lwjwae-windows) | The Windows backend. Finds the WebView2 runtime without `WebView2Loader.dll` and talks COM through vtables. |
 | [`lwjwae-macos`](lwjwae-macos)     | The macOS backend. Drives Cocoa through the Objective-C runtime.                                            |
+| [`lwjwae-processor`](lwjwae-processor) | An annotation processor that writes the native-image metadata of the types marked `@BridgeType`.      |
 
 Each module has a README that walks through what happens on its platform: the UI thread, window
 creation, callbacks, resources, script evaluation, and closing.
