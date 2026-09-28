@@ -66,6 +66,12 @@ public class WebKit {
       NativeLibraries.downcall(WEBKIT, "webkit_uri_request_get_uri", Signatures.POINTER_POINTER);
   private final MethodHandle WEB_VIEW_GET_SETTINGS =
       NativeLibraries.downcall(WEBKIT, "webkit_web_view_get_settings", Signatures.POINTER_POINTER);
+  private final MethodHandle SETTINGS_GET_USER_AGENT =
+      NativeLibraries.downcall(
+          WEBKIT, "webkit_settings_get_user_agent", Signatures.POINTER_POINTER);
+  private final MethodHandle SETTINGS_SET_USER_AGENT =
+      NativeLibraries.downcall(
+          WEBKIT, "webkit_settings_set_user_agent", Signatures.VOID_POINTER_POINTER);
   private final MethodHandle SETTINGS_SET_ENABLE_DEVELOPER_EXTRAS =
       NativeLibraries.downcall(
           WEBKIT, "webkit_settings_set_enable_developer_extras", Signatures.VOID_POINTER_INT);
@@ -314,6 +320,22 @@ public class WebKit {
   public void setDeveloperExtrasEnabled(MemorySegment webView, boolean enabled) {
     MemorySegment settings = (MemorySegment) WEB_VIEW_GET_SETTINGS.invokeExact(webView);
     SETTINGS_SET_ENABLE_DEVELOPER_EXTRAS.invokeExact(settings, enabled ? 1 : 0);
+  }
+
+  /** The user agent that {@code webView} sends, the one of WebKit until it's set. */
+  @SneakyThrows
+  public String userAgent(MemorySegment webView) {
+    MemorySegment settings = (MemorySegment) WEB_VIEW_GET_SETTINGS.invokeExact(webView);
+    return NativeLibraries.string((MemorySegment) SETTINGS_GET_USER_AGENT.invokeExact(settings));
+  }
+
+  /** Sets the user agent that {@code webView} sends from its next request on. */
+  @SneakyThrows
+  public void setUserAgent(MemorySegment webView, String userAgent) {
+    MemorySegment settings = (MemorySegment) WEB_VIEW_GET_SETTINGS.invokeExact(webView);
+    try (Arena arena = Arena.ofConfined()) {
+      SETTINGS_SET_USER_AGENT.invokeExact(settings, arena.allocateFrom(userAgent));
+    }
   }
 
   /** Reads {@code enable-developer-extras} from the settings of {@code webView}. */

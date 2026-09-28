@@ -665,6 +665,7 @@ public class WindowsWindow extends AbstractWindow {
         WebView2.setTransparentBackground(createdController);
       }
       WebView2.setDevToolsEnabled(this.webView, false);
+      WebView2.changeUserAgent(this.webView, this::userAgent);
 
       this.subscribe(
           WebView2::onNavigationStarting,

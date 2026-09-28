@@ -629,6 +629,21 @@ through the builder, the `lwjwae.devServerUrl` system property, or the `LWJWAE_D
 environment variable, and a Vite or webpack development server with hot reload drives every window
 while the Java side stays as it ships.
 
+### User agent
+
+Every web view sends the user agent of its engine with two tokens after it: the name of the
+application from `ApplicationParameters.name()`, and lwjwae with its version. A server of the
+application tells its own windows from browsers by them, and a site that looks for WebKit, Chrome,
+or Safari still finds them:
+
+```text
+Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/60.5 Safari/605.1.15 Notes lwjwae/0.7.1
+Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36 Edg/153.0.0.0 Notes lwjwae/0.7.1
+```
+
+A space in the name becomes a hyphen, and a name of characters that a token can't hold adds
+nothing, so the user agent then ends with lwjwae alone.
+
 ## Threading
 
 Native UI toolkits are single-threaded. [`ui.UiDispatcher`](src/main/java/dev/ivchenko/lwjwae/ui/UiDispatcher.java) is the abstraction over the one thread
