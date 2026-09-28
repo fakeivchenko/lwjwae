@@ -265,7 +265,7 @@ only when the user answers.
 
 | Platform | Files | Messages |
 |---|---|---|
-| GTK 3, GTK 4 | `GtkFileChooserNative`: the portal of the desktop inside a sandbox, GTK's own outside one | `GtkMessageDialog`, with the button labels of GTK in the language of the user |
+| GTK 3, GTK 4 | `GtkFileChooserNative` through the desktop portal wherever the session has one, such as the dialog of Dolphin on KDE Plasma; GTK's own without a portal | `GtkMessageDialog`, with the button labels of GTK in the language of the user |
 | Windows | `IFileOpenDialog` and `IFileSaveDialog`; the first extension of the chosen kind completes a name without one | `MessageBoxW`; the title of the window as its caption when there's none |
 | macOS | `NSOpenPanel` and `NSSavePanel` as sheets of the window; an open panel has no menu of kinds, so it shows the files of every kind | `NSAlert` as a sheet, which has no title |
 

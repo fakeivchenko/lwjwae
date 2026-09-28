@@ -96,7 +96,7 @@ events need a codec from [lwjwae-codecs](https://github.com/fakeivchenko/lwjwae-
   areas and scales; a window that remembers its place doesn't open on a monitor that is gone.
 - **Native dialogs.** `showOpenDialog`, `showSaveDialog`, and `showMessageDialog` on a window, and
   `lwjwae.dialog` on the page: files and folders to open, a file to save, and a message, as the
-  platform draws them, through the portal of the desktop inside a Linux sandbox.
+  platform draws them; on Linux, through the desktop portal, so KDE Plasma shows its own dialog.
 - **Links go to the browser.** A link to another site, `target="_blank"`, and `window.open` open in
   the browser of the system rather than in the window, or wherever `externalLinkHandler` says;
   `Application.openExternal(url)` does the same from Java.

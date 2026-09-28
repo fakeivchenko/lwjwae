@@ -25,12 +25,13 @@ import lombok.experimental.UtilityClass;
  * The dialogs of a {@link Gtk4Window}, the way {@code GtkDialogs} of GTK 3 shows them: files
  * through {@code GtkFileChooserNative}, and messages through {@code GtkMessageDialog}.
  *
- * <p>A native file chooser is the dialog of the desktop portal inside a sandbox, where the
- * application can't see the files of the user until the user picks them, and GTK's own outside one.
- * Both dialogs answer through {@code response} and never block the GTK thread. A message dialog is
- * built with {@code g_object_new_with_properties} and its properties, since {@code
- * gtk_message_dialog_new} takes a {@code printf} format and variadic arguments. Every function here
- * runs on the GTK thread.
+ * <p>A native file chooser is the dialog of the desktop portal, which {@link
+ * dev.ivchenko.lwjwae.glib.PortalDialogs} asks for wherever the session has one: the dialog of the
+ * desktop, and inside a sandbox the only way to the files of the user. Without a portal, it's the
+ * dialog of GTK. Both dialogs answer through {@code response} and never block the GTK thread. A
+ * message dialog is built with {@code g_object_new_with_properties} and its properties, since
+ * {@code gtk_message_dialog_new} takes a {@code printf} format and variadic arguments. Every
+ * function here runs on the GTK thread.
  */
 @UtilityClass
 class Gtk4Dialogs {

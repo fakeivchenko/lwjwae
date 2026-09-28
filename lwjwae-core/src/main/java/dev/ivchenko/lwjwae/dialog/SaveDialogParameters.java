@@ -15,8 +15,8 @@ import lombok.Builder;
  *   <li>macOS: The title shows above the files, since the dialog is a sheet of the window without a
  *       title bar. The kinds of file merge into one list of extensions, since a panel has no menu
  *       of them.
- *   <li>Linux, GTK 3: Each kind of file is a filter; an extension matches in either case. Inside a
- *       sandbox, the desktop portal shows the dialog.
+ *   <li>Linux, GTK 3: Each kind of file is a filter; an extension matches in either case. The
+ *       desktop portal shows the dialog wherever the session has one.
  *   <li>Linux, GTK 4: As on GTK 3.
  * </ul>
  *

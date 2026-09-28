@@ -769,7 +769,7 @@ public class Gtk {
 
   /**
    * Calls {@code gtk_file_chooser_native_new} with the default labels: a file chooser that the
-   * desktop portal shows inside a sandbox, and GTK outside one. The caller owns it.
+   * desktop portal shows where GTK was told to use it, and GTK otherwise. The caller owns it.
    *
    * @param title The title, or {@code null} for GTK's own.
    */

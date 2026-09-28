@@ -110,6 +110,8 @@ public class Dbus {
           GLIB, "g_variant_new_array", Signatures.POINTER_POINTER_POINTER_LONG);
   private final MethodHandle VARIANT_GET_CHILD_VALUE =
       NativeLibraries.downcall(GLIB, "g_variant_get_child_value", Signatures.POINTER_POINTER_LONG);
+  private final MethodHandle VARIANT_GET_BOOLEAN =
+      NativeLibraries.downcall(GLIB, "g_variant_get_boolean", Signatures.INT_POINTER);
   private final MethodHandle VARIANT_GET_UINT32 =
       NativeLibraries.downcall(GLIB, "g_variant_get_uint32", Signatures.INT_POINTER);
   private final MethodHandle VARIANT_GET_STRING =
@@ -119,6 +121,8 @@ public class Dbus {
           GLIB, "g_variant_lookup_value", Signatures.POINTER_POINTER_POINTER_POINTER);
   private final MethodHandle VARIANT_UNREF =
       NativeLibraries.downcall(GLIB, "g_variant_unref", Signatures.VOID_POINTER);
+
+  private final int BUS_CALL_TIMEOUT_MILLIS = 2000;
 
   // --- the bus ---
 
@@ -220,6 +224,55 @@ public class Dbus {
   @SneakyThrows
   public void unsubscribe(MemorySegment connection, int subscription) {
     SIGNAL_UNSUBSCRIBE.invokeExact(connection, subscription);
+  }
+
+  /**
+   * Whether {@code name} answers on the bus of {@code connection}: it has an owner now, or the bus
+   * starts one on the first call to it, as it does for the desktop portal.
+   */
+  public boolean hasService(MemorySegment connection, String name) {
+    MemorySegment owned =
+        Dbus.call(
+            connection,
+            "org.freedesktop.DBus",
+            "/org/freedesktop/DBus",
+            "org.freedesktop.DBus",
+            "NameHasOwner",
+            Dbus.tuple(List.of(Dbus.string(name))),
+            "(b)",
+            BUS_CALL_TIMEOUT_MILLIS);
+    try {
+      if (Dbus.booleanAt(owned, 0)) {
+        return true;
+      }
+    } finally {
+      Dbus.unref(owned);
+    }
+    MemorySegment activatable =
+        Dbus.call(
+            connection,
+            "org.freedesktop.DBus",
+            "/org/freedesktop/DBus",
+            "org.freedesktop.DBus",
+            "ListActivatableNames",
+            Dbus.tuple(List.of()),
+            "(as)",
+            BUS_CALL_TIMEOUT_MILLIS);
+    try {
+      MemorySegment names = Dbus.child(activatable, 0);
+      try {
+        for (int index = 0; index < Dbus.childCount(names); index++) {
+          if (name.equals(Dbus.stringAt(names, index))) {
+            return true;
+          }
+        }
+        return false;
+      } finally {
+        Dbus.unref(names);
+      }
+    } finally {
+      Dbus.unref(activatable);
+    }
   }
 
   /**
@@ -473,6 +526,17 @@ public class Dbus {
     MemorySegment child = Dbus.child(tuple, index);
     try {
       return (int) VARIANT_GET_UINT32.invokeExact(child);
+    } finally {
+      Dbus.unref(child);
+    }
+  }
+
+  /** The {@code b} at {@code index} of a tuple. */
+  @SneakyThrows
+  public boolean booleanAt(MemorySegment tuple, int index) {
+    MemorySegment child = Dbus.child(tuple, index);
+    try {
+      return (int) VARIANT_GET_BOOLEAN.invokeExact(child) != 0;
     } finally {
       Dbus.unref(child);
     }
