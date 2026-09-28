@@ -51,7 +51,10 @@ The [wiki](https://github.com/fakeivchenko/lwjwae/wiki) walks you through a whol
 1. [Export notes through a native dialog](https://github.com/fakeivchenko/lwjwae/wiki/6.-Export-notes-through-a-native-dialog), and
    [keep the application in the tray](https://github.com/fakeivchenko/lwjwae/wiki/7.-Keep-the-application-in-the-tray).
 1. [Show notifications](https://github.com/fakeivchenko/lwjwae/wiki/8.-Show-notifications).
-1. [Package the application](https://github.com/fakeivchenko/lwjwae/wiki/9.-Package-the-application), as a native executable too.
+1. [Give the application an icon and a name](https://github.com/fakeivchenko/lwjwae/wiki/9.-Give-the-application-an-icon-and-a-name),
+   [build a native executable](https://github.com/fakeivchenko/lwjwae/wiki/10.-Build-a-native-executable), and
+   [package the application](https://github.com/fakeivchenko/lwjwae/wiki/11.-Package-the-application) with the
+   [Gradle plugin](https://github.com/fakeivchenko/lwjwae/wiki/Gradle-plugin).
 
 In short: Java 25 or later, run with `--enable-native-access=ALL-UNNAMED`, and the web engine of
 the platform, which Windows 11 and macOS already have; [`lwjwae-gtk`](lwjwae-gtk#requirements) lists
