@@ -52,4 +52,11 @@ class ShortcutTest {
     Assertions.assertThrows(IllegalArgumentException.class, () -> Shortcut.parse("Ctrl+"));
     Assertions.assertThrows(IllegalArgumentException.class, () -> Shortcut.parse("Ctrl+;"));
   }
+
+  @Test
+  void maskOrsTheBitsOfTheModifiersHeld() {
+    Assertions.assertEquals(1 | 4, Shortcut.parse("Ctrl+Shift+K").mask(1, 2, 4, 8));
+    Assertions.assertEquals(8, Shortcut.parse("Meta+Space").mask(1, 2, 4, 8));
+    Assertions.assertEquals(0, Shortcut.parse("F1").mask(1, 2, 4, 8));
+  }
 }

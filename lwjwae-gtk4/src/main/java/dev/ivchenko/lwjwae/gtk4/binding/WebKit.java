@@ -118,9 +118,6 @@ public class WebKit {
   private final SymbolLookup SOUP = NativeLibraries.load("libsoup-3.0.so.0", "libsoup-3.0.so");
 
   // --- RPC: requests with a method and a body, responses with a status, headers, and a stream ---
-  private final MethodHandle URI_SCHEME_REQUEST_GET_URI =
-      NativeLibraries.downcall(
-          WEBKIT, "webkit_uri_scheme_request_get_uri", Signatures.POINTER_POINTER);
   private final MethodHandle URI_SCHEME_REQUEST_GET_HTTP_METHOD =
       NativeLibraries.downcall(
           WEBKIT, "webkit_uri_scheme_request_get_http_method", Signatures.POINTER_POINTER);
@@ -424,12 +421,6 @@ public class WebKit {
   @SneakyThrows
   public MemorySegment uriSchemeRequestWebView(MemorySegment request) {
     return (MemorySegment) URI_SCHEME_REQUEST_GET_WEB_VIEW.invokeExact(request);
-  }
-
-  /** {@code webkit_uri_scheme_request_get_uri}: the whole URI, query included. */
-  @SneakyThrows
-  public String uriSchemeRequestUri(MemorySegment request) {
-    return NativeLibraries.string((MemorySegment) URI_SCHEME_REQUEST_GET_URI.invokeExact(request));
   }
 
   /** {@code webkit_uri_scheme_request_get_http_method}. */

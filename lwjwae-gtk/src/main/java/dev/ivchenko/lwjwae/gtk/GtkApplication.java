@@ -9,9 +9,7 @@ import dev.ivchenko.lwjwae.clipboard.Clipboard;
 import dev.ivchenko.lwjwae.event.EventSubscription;
 import dev.ivchenko.lwjwae.exception.ResourceNotFoundException;
 import dev.ivchenko.lwjwae.foreign.NativeLibraries;
-import dev.ivchenko.lwjwae.glib.DesktopShortcuts;
-import dev.ivchenko.lwjwae.glib.FreedesktopNotifier;
-import dev.ivchenko.lwjwae.glib.PortalShortcuts;
+import dev.ivchenko.lwjwae.glib.DesktopServices;
 import dev.ivchenko.lwjwae.glib.StatusNotifierTray;
 import dev.ivchenko.lwjwae.glib.X11Shortcuts;
 import dev.ivchenko.lwjwae.glib.binding.Glib;
@@ -68,8 +66,7 @@ public class GtkApplication extends AbstractApplication {
   /** Whether the filter that hands key presses to {@link X11Shortcuts} is in, once a process. */
   private static boolean filtering;
 
-  private FreedesktopNotifier notifier;
-  private DesktopShortcuts shortcuts;
+  private final DesktopServices desktop;
 
   /** Creates an application with {@link ApplicationParameters#createDefault()}. */
   public GtkApplication() {
@@ -83,6 +80,13 @@ public class GtkApplication extends AbstractApplication {
    */
   public GtkApplication(ApplicationParameters parameters) {
     super(GtkDispatcher.instance(), parameters);
+    this.desktop =
+        new DesktopServices(
+            GtkDispatcher.instance(),
+            parameters.name(),
+            Gdk::isX11,
+            GtkApplication::xlibDisplay,
+            Gdk::trapped);
     // Not this.dispatcher(): a call on this from the constructor lets a subclass see it half-built.
     GtkDispatcher.instance()
         .run(
@@ -140,65 +144,29 @@ public class GtkApplication extends AbstractApplication {
   @Override
   protected NotificationHandle createNotification(
       Notification notification, Consumer<NotificationHandle> closed) {
-    return this.notifier().show(notification, closed);
-  }
-
-  /** The notifier, connected to the bus on the first notification rather than at startup. */
-  private synchronized FreedesktopNotifier notifier() {
-    if (this.notifier == null) {
-      this.notifier = new FreedesktopNotifier(this.dispatcher(), this.parameters().name());
-    }
-    return this.notifier;
+    return this.desktop.showNotification(notification, closed);
   }
 
   @Override
   protected EventSubscription bindGlobalShortcut(Shortcut shortcut, Runnable pressed) {
-    return this.shortcuts().bind(shortcut, pressed);
+    return this.desktop.bindShortcut(shortcut, pressed);
   }
 
   /**
-   * The global shortcuts, set up on the first: key grabs on X11, the portal elsewhere, where the
-   * compositor keeps the keys from a client.
+   * The Xlib {@code Display}, with the hook that hands the key presses of X to {@link X11Shortcuts}
+   * in, once a process. Runs on the GTK thread.
    */
-  private synchronized DesktopShortcuts shortcuts() {
-    if (this.shortcuts == null) {
-      if (this.dispatcher().call(Gdk::isX11)) {
-        MemorySegment display =
-            this.dispatcher()
-                .call(
-                    () -> {
-                      if (!GtkApplication.filtering) {
-                        Gdk.addEventFilter(ON_XLIB_EVENT, MemorySegment.NULL);
-                        GtkApplication.filtering = true;
-                      }
-                      return Gdk.xlibDisplay();
-                    });
-        this.shortcuts = new X11Shortcuts(this.dispatcher(), display, Gdk::trapped);
-      } else {
-        String name = this.parameters().name();
-        this.shortcuts =
-            new PortalShortcuts(this.dispatcher(), name == null ? "Application" : name);
-      }
+  private static MemorySegment xlibDisplay() {
+    if (!filtering) {
+      Gdk.addEventFilter(ON_XLIB_EVENT, MemorySegment.NULL);
+      filtering = true;
     }
-    return this.shortcuts;
+    return Gdk.xlibDisplay();
   }
 
   @Override
   protected void onClose() {
-    FreedesktopNotifier current;
-    DesktopShortcuts currentShortcuts;
-    synchronized (this) {
-      current = this.notifier;
-      this.notifier = null;
-      currentShortcuts = this.shortcuts;
-      this.shortcuts = null;
-    }
-    if (current != null) {
-      current.close();
-    }
-    if (currentShortcuts != null) {
-      currentShortcuts.close();
-    }
+    this.desktop.close();
   }
 
   /**
@@ -232,13 +200,19 @@ public class GtkApplication extends AbstractApplication {
   private static void onResourceRequest(MemorySegment request, MemorySegment userData) {
     String path = "";
     try {
-      path = WebKit.uriSchemeRequestPath(request);
-      if (path != null && path.startsWith(RpcExchange.PATH_PREFIX)) {
+      String requested = WebKit.uriSchemeRequestPath(request);
+      if (requested != null && requested.startsWith(RpcExchange.PATH_PREFIX)) {
         GtkWindow window = GtkWindow.ofWebView(WebKit.uriSchemeRequestWebView(request));
         if (window != null) {
-          window.rpc(new GtkRpcExchange(GtkDispatcher.instance(), request, path));
+          window.rpc(new GtkRpcExchange(GtkDispatcher.instance(), request, requested));
           return;
         }
+      }
+      path = ResourceUtil.servedPath(requested == null ? "" : requested);
+      long size = ResourceUtil.servedSize(path);
+      if (size < 0 || size >= ResourceUtil.STREAM_THRESHOLD) {
+        ResourceUtil.stream(new GtkRpcExchange(GtkDispatcher.instance(), request, path), path);
+        return;
       }
       byte[] content = ResourceUtil.read(path);
       MemorySegment stream = Glib.memoryInputStream(Glib.copyToNative(content), content.length);

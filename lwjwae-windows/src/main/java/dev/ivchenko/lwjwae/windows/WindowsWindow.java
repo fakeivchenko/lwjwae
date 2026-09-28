@@ -788,37 +788,96 @@ public class WindowsWindow extends AbstractWindow {
     return posted;
   }
 
-  /** Answers one {@code http://app.localhost/} request out of the classpath. */
+  /**
+   * Answers one {@code http://app.localhost/} request out of the classpath. A large resource is
+   * read on a virtual thread, under a deferral of the request, so the UI thread doesn't wait while
+   * the jar inflates it.
+   */
   private void serveResource(MemorySegment arguments) {
     String uri = WebView2.requestedUri(arguments);
-    String path = uri.startsWith(RESOURCE_ORIGIN) ? uri.substring(RESOURCE_ORIGIN.length()) : uri;
-    int query = path.indexOf('?');
-    if (query >= 0) {
-      path = path.substring(0, query);
-    }
-
-    MemorySegment response;
+    String path =
+        ResourceUtil.servedPath(
+            uri.startsWith(RESOURCE_ORIGIN) ? uri.substring(RESOURCE_ORIGIN.length()) : uri);
     try {
-      byte[] content = ResourceUtil.read(path);
-      MemorySegment stream = Shlwapi.memoryStream(content);
-      try {
-        response =
-            WebView2.createResponse(
-                this.application.environment(),
-                stream,
-                200,
-                "OK",
-                "Content-Type: " + MimeTypeUtil.of(path));
-      } finally {
-        Com.release(stream);
+      long size = ResourceUtil.servedSize(path);
+      if (size < 0 || size >= ResourceUtil.STREAM_THRESHOLD) {
+        this.serveLater(arguments, uri, path);
+        return;
       }
+      this.respond(arguments, path, ResourceUtil.read(path));
     } catch (ResourceNotFoundException e) {
+      this.respondNotFound(arguments, uri, e);
+    }
+  }
+
+  private void serveLater(MemorySegment arguments, String uri, String path) {
+    MemorySegment deferral = WebView2.deferral(arguments);
+    Com.addRef(arguments);
+    Thread.ofVirtual()
+        .name("lwjwae-resource")
+        .start(
+            () -> {
+              byte[] content = null;
+              RuntimeException failure = null;
+              try {
+                content = ResourceUtil.read(path);
+              } catch (RuntimeException e) {
+                failure = e;
+              }
+              byte[] read = content;
+              ResourceNotFoundException missing =
+                  failure == null
+                      ? null
+                      : failure instanceof ResourceNotFoundException notFound
+                          ? notFound
+                          : new ResourceNotFoundException(
+                              "Could not read " + path + ": " + failure.getMessage());
+              this.dispatcher()
+                  .post(
+                      () -> {
+                        try {
+                          if (read != null) {
+                            this.respond(arguments, path, read);
+                          } else {
+                            this.respondNotFound(arguments, uri, missing);
+                          }
+                          WebView2.completeDeferral(deferral);
+                        } finally {
+                          Com.release(deferral);
+                          Com.release(arguments);
+                        }
+                      });
+            });
+  }
+
+  private void respond(MemorySegment arguments, String path, byte[] content) {
+    MemorySegment response;
+    MemorySegment stream = Shlwapi.memoryStream(content);
+    try {
       response =
           WebView2.createResponse(
-              this.application.environment(), MemorySegment.NULL, 404, "Not Found", "");
-      if (WebView2.isDocumentRequest(arguments)) {
-        this.reportLoad(LoadEvent.failed(uri, e.getMessage()));
-      }
+              this.application.environment(),
+              stream,
+              200,
+              "OK",
+              "Content-Type: " + MimeTypeUtil.of(path));
+    } finally {
+      Com.release(stream);
+    }
+    try {
+      WebView2.respond(arguments, response);
+    } finally {
+      Com.release(response);
+    }
+  }
+
+  private void respondNotFound(
+      MemorySegment arguments, String uri, ResourceNotFoundException missing) {
+    MemorySegment response =
+        WebView2.createResponse(
+            this.application.environment(), MemorySegment.NULL, 404, "Not Found", "");
+    if (WebView2.isDocumentRequest(arguments)) {
+      this.reportLoad(LoadEvent.failed(uri, missing.getMessage()));
     }
     try {
       WebView2.respond(arguments, response);

@@ -4,7 +4,6 @@ import dev.ivchenko.lwjwae.event.EventSubscription;
 import dev.ivchenko.lwjwae.exception.ShortcutUnavailableException;
 import dev.ivchenko.lwjwae.shortcut.Shortcut;
 import dev.ivchenko.lwjwae.shortcut.ShortcutKey;
-import dev.ivchenko.lwjwae.shortcut.ShortcutModifier;
 import dev.ivchenko.lwjwae.windows.binding.User32;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -29,7 +28,8 @@ class WindowsShortcuts {
   /** Binds {@code shortcut} on the UI thread; {@code pressed} runs there on every press. */
   EventSubscription bind(WindowsDispatcher dispatcher, Shortcut shortcut, Runnable pressed) {
     int id = IDS.getAndIncrement() % LAST_ID + 1;
-    int modifiers = WindowsShortcuts.modifiers(shortcut);
+    int modifiers =
+        shortcut.mask(User32.MOD_CONTROL, User32.MOD_ALT, User32.MOD_SHIFT, User32.MOD_WIN);
     int virtualKey = WindowsShortcuts.virtualKey(shortcut.key());
     dispatcher.run(
         () -> {
@@ -53,23 +53,6 @@ class WindowsShortcuts {
     if (pressed != null) {
       pressed.run();
     }
-  }
-
-  private int modifiers(Shortcut shortcut) {
-    int modifiers = 0;
-    if (shortcut.has(ShortcutModifier.CONTROL)) {
-      modifiers |= User32.MOD_CONTROL;
-    }
-    if (shortcut.has(ShortcutModifier.ALT)) {
-      modifiers |= User32.MOD_ALT;
-    }
-    if (shortcut.has(ShortcutModifier.SHIFT)) {
-      modifiers |= User32.MOD_SHIFT;
-    }
-    if (shortcut.has(ShortcutModifier.META)) {
-      modifiers |= User32.MOD_WIN;
-    }
-    return modifiers;
   }
 
   /**

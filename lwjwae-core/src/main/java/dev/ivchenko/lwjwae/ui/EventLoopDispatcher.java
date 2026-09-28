@@ -4,6 +4,7 @@ import dev.ivchenko.lwjwae.util.ThrowableUtil;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * A {@link UiDispatcher} that owns its UI thread. It starts the thread, initializes the toolkit on
@@ -16,6 +17,9 @@ public abstract class EventLoopDispatcher extends UiDispatcher {
   private final String threadName;
   private final Queue<Runnable> tasks = new ConcurrentLinkedQueue<>();
   private final CountDownLatch initialized = new CountDownLatch(1);
+
+  /** Whether a drain is on its way: one wake-up serves every task that is queued before it runs. */
+  private final AtomicBoolean scheduled = new AtomicBoolean();
 
   private volatile Thread thread;
   private volatile Throwable initFailure;
@@ -54,7 +58,9 @@ public abstract class EventLoopDispatcher extends UiDispatcher {
   public final void post(Runnable task) {
     this.checkInitialized();
     this.tasks.add(task);
-    this.wakeUp();
+    if (this.scheduled.compareAndSet(false, true)) {
+      this.wakeUp();
+    }
   }
 
   /**
@@ -63,8 +69,15 @@ public abstract class EventLoopDispatcher extends UiDispatcher {
    * unwinds into native code.
    */
   protected final void drainTasks() {
+    // Cleared before the queue is read: a task that comes while it drains schedules the next drain.
+    this.scheduled.set(false);
     Runnable task;
     while ((task = this.tasks.poll()) != null) {
+      // A task may run a loop of its own, a modal dialog: what waits behind it needs a wake-up that
+      // that loop delivers, or it would wait for the dialog to close.
+      if (!this.tasks.isEmpty() && this.scheduled.compareAndSet(false, true)) {
+        this.wakeUp();
+      }
       try {
         task.run();
       } catch (Throwable t) {
@@ -114,6 +127,10 @@ public abstract class EventLoopDispatcher extends UiDispatcher {
       this.initialized.countDown();
     }
     if (this.initFailure == null) {
+      // A wake-up from before the toolkit could take one may be lost, and a lost one would keep
+      // every later post from waking the thread: one wake-up now serves whatever is queued.
+      this.scheduled.set(true);
+      this.wakeUp();
       this.runEventLoop();
     }
   }

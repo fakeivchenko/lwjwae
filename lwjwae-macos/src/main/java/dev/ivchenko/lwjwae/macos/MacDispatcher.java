@@ -13,6 +13,7 @@ import java.lang.invoke.MethodType;
 import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
 
 /**
@@ -47,6 +48,9 @@ public class MacDispatcher extends UiDispatcher {
 
   private final Queue<Runnable> tasks = new ConcurrentLinkedQueue<>();
 
+  /** Whether a drain is on its way: one perform serves every task that is queued before it runs. */
+  private final AtomicBoolean scheduled = new AtomicBoolean();
+
   private volatile boolean started;
   private volatile boolean applicationRunning;
 
@@ -66,7 +70,9 @@ public class MacDispatcher extends UiDispatcher {
   @Override
   public void post(Runnable task) {
     this.tasks.add(task);
-    ObjC.performOnMainThread(TARGET, "drain");
+    if (this.scheduled.compareAndSet(false, true)) {
+      ObjC.performOnMainThread(TARGET, "drain");
+    }
   }
 
   @Override
@@ -117,7 +123,14 @@ public class MacDispatcher extends UiDispatcher {
    */
   @SuppressWarnings("unused")
   private static void drain(MemorySegment self, MemorySegment command) {
+    // Cleared before the queue is read: a task that comes while it drains schedules the next drain.
+    INSTANCE.scheduled.set(false);
     for (Runnable task = INSTANCE.tasks.poll(); task != null; task = INSTANCE.tasks.poll()) {
+      // A task may run a loop of its own, a modal panel: what waits behind it needs a perform that
+      // that loop delivers, or it would wait for the panel to close.
+      if (!INSTANCE.tasks.isEmpty() && INSTANCE.scheduled.compareAndSet(false, true)) {
+        ObjC.performOnMainThread(TARGET, "drain");
+      }
       INSTANCE.runReported(task);
     }
   }

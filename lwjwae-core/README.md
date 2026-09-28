@@ -618,6 +618,12 @@ way, relative links, stylesheets, and `fetch` calls in the page resolve the way 
 web server. [`ResourceUtil.read`](src/main/java/dev/ivchenko/lwjwae/util/ResourceUtil.java) finds the bytes, and [`MimeTypeUtil.of`](src/main/java/dev/ivchenko/lwjwae/util/MimeTypeUtil.java) picks the media type from
 the filename, because a wrong type on the main document makes the engine show markup as text.
 
+A file name may hold spaces and letters of any language: the path of the request is decoded before
+the lookup, the same on every backend. A file of a megabyte or more goes to the page part by part,
+read on a thread of its own, so a video or a large bundle doesn't hold up the UI thread while the
+jar inflates it. The code of the application stays out of reach: a `.class` file and anything
+under `META-INF/` answer as missing.
+
 When [`ApplicationParameters.devServerUrl()`](src/main/java/dev/ivchenko/lwjwae/ApplicationParameters.java) is set, `loadResource` opens that URL instead. Set it
 through the builder, the `lwjwae.devServerUrl` system property, or the `LWJWAE_DEV_SERVER_URL`
 environment variable, and a Vite or webpack development server with hot reload drives every window

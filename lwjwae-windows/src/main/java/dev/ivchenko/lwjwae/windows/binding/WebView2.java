@@ -109,6 +109,8 @@ public class WebView2 {
   private final int NEW_WINDOW_PUT_HANDLED = 6;
   private final int RESOURCE_REQUESTED_GET_REQUEST = 3;
   private final int RESOURCE_REQUESTED_PUT_RESPONSE = 5;
+  private final int RESOURCE_REQUESTED_GET_DEFERRAL = 6;
+  private final int DEFERRAL_COMPLETE = 3;
   private final int RESOURCE_REQUESTED_GET_CONTEXT = 7;
   private final int REQUEST_GET_URI = 3;
   private final MemorySegment IID_WEBVIEW_17 = Com.guid("702e75d4-fd44-434d-9d70-1a68a6b1192a");
@@ -454,6 +456,23 @@ public class WebView2 {
   /** Calls {@code ICoreWebView2WebResourceRequestedEventArgs::put_Response}. */
   public void respond(MemorySegment arguments, MemorySegment response) {
     Com.check("put_Response", Com.call(arguments, RESOURCE_REQUESTED_PUT_RESPONSE, response));
+  }
+
+  /**
+   * Calls {@code ICoreWebView2WebResourceRequestedEventArgs::GetDeferral}: the request waits for
+   * {@link #completeDeferral} instead of for the return of the handler. The caller releases it.
+   */
+  public MemorySegment deferral(MemorySegment arguments) {
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment out = arena.allocate(Signatures.C_POINTER);
+      Com.check("GetDeferral", Com.call(arguments, RESOURCE_REQUESTED_GET_DEFERRAL, out));
+      return Com.pointerAt(out);
+    }
+  }
+
+  /** Calls {@code ICoreWebView2Deferral::Complete}: the response set by now goes to the page. */
+  public void completeDeferral(MemorySegment deferral) {
+    Com.check("Complete", Com.call(deferral, DEFERRAL_COMPLETE));
   }
 
   private void addEvent(MemorySegment webView, int slot, MemorySegment handler, String name) {

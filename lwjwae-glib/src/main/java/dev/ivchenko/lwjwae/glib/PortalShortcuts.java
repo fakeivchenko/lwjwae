@@ -16,12 +16,15 @@ import java.lang.foreign.MemorySegment;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 import java.util.function.IntConsumer;
+import java.util.stream.Collectors;
 
 /**
  * Global shortcuts on Wayland, through the {@code GlobalShortcuts} portal of the desktop, where a
@@ -44,6 +47,14 @@ public final class PortalShortcuts implements DesktopShortcuts {
   private static final String REQUEST = "org.freedesktop.portal.Request";
   private static final String SESSION = "org.freedesktop.portal.Session";
   private static final int CALL_TIMEOUT_MILLIS = 5000;
+
+  /** The names of the modifiers in a trigger of the shortcuts specification of freedesktop. */
+  private static final Map<ShortcutModifier, String> TRIGGER_MODIFIERS =
+      Map.of(
+          ShortcutModifier.CONTROL, "CTRL",
+          ShortcutModifier.ALT, "ALT",
+          ShortcutModifier.SHIFT, "SHIFT",
+          ShortcutModifier.META, "LOGO");
 
   /** How long the token of a press lets a window come to the front: the handler runs by then. */
   private static final long ACTIVATION_NANOS = 10_000_000_000L;
@@ -76,6 +87,12 @@ public final class PortalShortcuts implements DesktopShortcuts {
   private final long callbackId;
   private final AtomicLong tokens = new AtomicLong();
   private final Map<String, Runnable> sessions = new ConcurrentHashMap<>();
+
+  /**
+   * The sessions that the portal made, which a Close reaches; read and written on the GTK thread.
+   */
+  private final Set<String> created = new HashSet<>();
+
   private final Map<String, IntConsumer> requests = new ConcurrentHashMap<>();
   private final Map<String, Integer> requestSubscriptions = new ConcurrentHashMap<>();
 
@@ -145,33 +162,47 @@ public final class PortalShortcuts implements DesktopShortcuts {
     String sessionToken = this.token();
     String session = OBJECT_PATH + "/session/" + this.sender + "/" + sessionToken;
     this.sessions.put(session, pressed);
-    this.dispatcher.run(
-        () ->
-            this.request(
-                "CreateSession",
-                handle ->
-                    Dbus.tuple(
-                        List.of(
-                            Dbus.array(
-                                "{sv}",
-                                List.of(
-                                    Dbus.dictEntry("handle_token", Dbus.string(handle)),
-                                    Dbus.dictEntry(
-                                        "session_handle_token", Dbus.string(sessionToken)))))),
-                response -> {
-                  if (response != 0) {
-                    this.refused(session, shortcut, "the portal made no session, " + response);
-                  } else if (this.sessions.containsKey(session)) {
-                    this.bindShortcut(session, shortcut);
-                  } else {
-                    this.closeSession(session);
-                  }
-                }));
+    try {
+      this.dispatcher.run(
+          () ->
+              this.request(
+                  "CreateSession",
+                  handle ->
+                      Dbus.tuple(
+                          List.of(
+                              Dbus.array(
+                                  "{sv}",
+                                  List.of(
+                                      Dbus.dictEntry("handle_token", Dbus.string(handle)),
+                                      Dbus.dictEntry(
+                                          "session_handle_token", Dbus.string(sessionToken)))))),
+                  response -> this.sessionCreated(session, shortcut, response)));
+    } catch (RuntimeException e) {
+      this.sessions.remove(session);
+      throw e;
+    }
     return () -> {
       if (this.sessions.remove(session) != null) {
         this.dispatcher.run(() -> this.closeSession(session));
       }
     };
+  }
+
+  /**
+   * The answer to {@code CreateSession}, on the GTK thread. A shortcut given back before it came
+   * leaves a session that nobody wants, which closes here rather than before it existed.
+   */
+  private void sessionCreated(String session, Shortcut shortcut, int response) {
+    if (response != 0) {
+      this.refused(session, shortcut, "the portal made no session, " + response);
+      return;
+    }
+    this.created.add(session);
+    if (this.sessions.containsKey(session)) {
+      this.bindShortcut(session, shortcut);
+    } else {
+      this.closeSession(session);
+    }
   }
 
   private void bindShortcut(String session, Shortcut shortcut) {
@@ -241,15 +272,15 @@ public final class PortalShortcuts implements DesktopShortcuts {
   }
 
   private void refused(String session, Shortcut shortcut, String why) {
-    if (this.sessions.remove(session) != null) {
-      this.closeSession(session);
-    }
+    this.sessions.remove(session);
+    this.closeSession(session);
     ThrowableUtil.report(new ShortcutUnavailableException(shortcut + " is not bound: " + why));
   }
 
+  /** Closes {@code session} once the portal has made it; before that, its answer closes it. */
   private void closeSession(String session) {
     MemorySegment bus = this.connection;
-    if (bus == null) {
+    if (bus == null || !this.created.remove(session)) {
       return;
     }
     try {
@@ -264,7 +295,7 @@ public final class PortalShortcuts implements DesktopShortcuts {
               null,
               CALL_TIMEOUT_MILLIS));
     } catch (IllegalStateException e) {
-      // The session never came to be, or the portal closed it already.
+      // The portal closed it already, as it does when the desktop takes a shortcut back.
       ThrowableUtil.report(e);
     }
   }
@@ -284,8 +315,8 @@ public final class PortalShortcuts implements DesktopShortcuts {
     PORTALS.unregister(this.callbackId);
     this.dispatcher.run(
         () -> {
-          for (String session : new ArrayList<>(this.sessions.keySet())) {
-            this.sessions.remove(session);
+          this.sessions.clear();
+          for (String session : new ArrayList<>(this.created)) {
             this.closeSession(session);
           }
           for (String path : new ArrayList<>(this.requests.keySet())) {
@@ -322,11 +353,9 @@ public final class PortalShortcuts implements DesktopShortcuts {
    * @return The token, once, or {@code null}.
    */
   public static String takeActivationToken() {
-    String token = PortalShortcuts.activationToken;
-    PortalShortcuts.activationToken = null;
-    return token != null && System.nanoTime() - PortalShortcuts.activationTime < ACTIVATION_NANOS
-        ? token
-        : null;
+    String token = activationToken;
+    activationToken = null;
+    return token != null && System.nanoTime() - activationTime < ACTIVATION_NANOS ? token : null;
   }
 
   /**
@@ -334,20 +363,11 @@ public final class PortalShortcuts implements DesktopShortcuts {
    * freedesktop: {@code CTRL+ALT+SHIFT+LOGO+} and the keysym name.
    */
   static String trigger(Shortcut shortcut) {
-    StringBuilder trigger = new StringBuilder();
-    if (shortcut.has(ShortcutModifier.CONTROL)) {
-      trigger.append("CTRL+");
-    }
-    if (shortcut.has(ShortcutModifier.ALT)) {
-      trigger.append("ALT+");
-    }
-    if (shortcut.has(ShortcutModifier.SHIFT)) {
-      trigger.append("SHIFT+");
-    }
-    if (shortcut.has(ShortcutModifier.META)) {
-      trigger.append("LOGO+");
-    }
-    return trigger.append(KeysymUtil.name(shortcut.key())).toString();
+    return shortcut.modifiers().stream()
+            .sorted()
+            .map(modifier -> TRIGGER_MODIFIERS.get(modifier) + "+")
+            .collect(Collectors.joining())
+        + KeysymUtil.name(shortcut.key());
   }
 
   // --- the signal callback, bound by name from the upcall stub above ---
@@ -383,8 +403,8 @@ public final class PortalShortcuts implements DesktopShortcuts {
           try {
             String token = Dbus.lookupString(options, "activation_token");
             if (token != null) {
-              PortalShortcuts.activationTime = System.nanoTime();
-              PortalShortcuts.activationToken = token;
+              activationTime = System.nanoTime();
+              activationToken = token;
             }
           } finally {
             Dbus.unref(options);

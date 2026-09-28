@@ -1,9 +1,15 @@
 package dev.ivchenko.lwjwae.util;
 
 import dev.ivchenko.lwjwae.exception.ResourceNotFoundException;
+import dev.ivchenko.lwjwae.rpc.RpcExchange;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
+import java.net.URL;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
+import java.util.Map;
 import java.util.regex.Pattern;
 import lombok.experimental.UtilityClass;
 
@@ -41,6 +47,90 @@ public class ResourceUtil {
   }
 
   /**
+   * The resources of this size or larger go to the page as a stream, from a thread of their own,
+   * see {@link #stream}; smaller ones are read in one step, which costs less than a thread and a
+   * pipe.
+   */
+  public final long STREAM_THRESHOLD = 1024 * 1024;
+
+  private final int CHUNK_SIZE = 64 * 1024;
+
+  /**
+   * The classpath resource that the path of a request to the scheme names: the path without its
+   * query or fragment, percent-decoded, without the leading slash. An engine hands the path the way
+   * the URL spells it, so a file named {@code my page.html} arrives as {@code my%20page.html}.
+   */
+  public String servedPath(String urlPath) {
+    int end = urlPath.length();
+    int query = urlPath.indexOf('?');
+    if (query >= 0) {
+      end = query;
+    }
+    int fragment = urlPath.indexOf('#');
+    if (fragment >= 0 && fragment < end) {
+      end = fragment;
+    }
+    // A plus is a plus in a path; URLDecoder would make it a space.
+    String decoded =
+        URLDecoder.decode(urlPath.substring(0, end).replace("+", "%2B"), StandardCharsets.UTF_8);
+    return ResourceUtil.normalize(decoded);
+  }
+
+  /**
+   * The size of the resource at {@code path} that a page asked for, or -1 when the classpath
+   * doesn't say. The code of the application, its {@code .class} files, and {@code META-INF} are no
+   * page's business, so they count as missing.
+   *
+   * @throws ResourceNotFoundException If no such resource exists, or it isn't for a page.
+   */
+  public long servedSize(String path) {
+    String normalized = ResourceUtil.normalize(path);
+    URL resource =
+        normalized.endsWith(".class") || normalized.startsWith("META-INF/")
+            ? null
+            : ResourceUtil.loader().getResource(normalized);
+    if (resource == null) {
+      throw new ResourceNotFoundException("No classpath resource: " + normalized);
+    }
+    try {
+      return resource.openConnection().getContentLengthLong();
+    } catch (IOException _) {
+      return -1;
+    }
+  }
+
+  /**
+   * Answers {@code exchange} with the resource at {@code path}, part by part, from a virtual thread
+   * of its own: the thread of the engine hands the request over and goes on, however large the file
+   * is and however long the jar takes to inflate it.
+   */
+  public void stream(RpcExchange exchange, String path) {
+    String normalized = ResourceUtil.normalize(path);
+    Thread.ofVirtual()
+        .name("lwjwae-resource")
+        .start(
+            () -> {
+              try (InputStream stream = ResourceUtil.loader().getResourceAsStream(normalized)) {
+                if (stream == null) {
+                  exchange.reply(404, Map.of(), new byte[0]);
+                  return;
+                }
+                exchange.respond(200, Map.of("Content-Type", MimeTypeUtil.of(normalized)));
+                byte[] chunk = new byte[CHUNK_SIZE];
+                int read;
+                while ((read = stream.read(chunk)) > 0) {
+                  if (!exchange.write(Arrays.copyOf(chunk, read))) {
+                    break;
+                  }
+                }
+                exchange.end();
+              } catch (Throwable t) {
+                ThrowableUtil.report(t);
+              }
+            });
+  }
+
+  /**
    * Loads {@code path} (for example {@code "app/index.html"}) from the classpath.
    *
    * @throws ResourceNotFoundException If no such resource exists.
@@ -48,12 +138,7 @@ public class ResourceUtil {
    */
   public byte[] read(String path) {
     String normalized = ResourceUtil.normalize(path);
-    ClassLoader loader = Thread.currentThread().getContextClassLoader();
-    if (loader == null) {
-      loader = ResourceUtil.class.getClassLoader();
-    }
-
-    try (InputStream stream = loader.getResourceAsStream(normalized)) {
+    try (InputStream stream = ResourceUtil.loader().getResourceAsStream(normalized)) {
       if (stream == null) {
         throw new ResourceNotFoundException("No classpath resource: " + normalized);
       }
@@ -61,6 +146,11 @@ public class ResourceUtil {
     } catch (IOException e) {
       throw new UncheckedIOException("Could not read classpath resource: " + normalized, e);
     }
+  }
+
+  private ClassLoader loader() {
+    ClassLoader loader = Thread.currentThread().getContextClassLoader();
+    return loader == null ? ResourceUtil.class.getClassLoader() : loader;
   }
 
   private String normalize(String path) {

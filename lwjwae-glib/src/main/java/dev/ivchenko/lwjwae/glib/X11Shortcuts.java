@@ -5,7 +5,6 @@ import dev.ivchenko.lwjwae.exception.ShortcutUnavailableException;
 import dev.ivchenko.lwjwae.glib.binding.X11;
 import dev.ivchenko.lwjwae.glib.util.KeysymUtil;
 import dev.ivchenko.lwjwae.shortcut.Shortcut;
-import dev.ivchenko.lwjwae.shortcut.ShortcutModifier;
 import dev.ivchenko.lwjwae.ui.UiDispatcher;
 import java.lang.foreign.MemorySegment;
 import java.util.List;
@@ -65,7 +64,8 @@ public final class X11Shortcuts implements DesktopShortcuts {
                 throw new ShortcutUnavailableException(
                     "No key of this keyboard types " + shortcut.key().label());
               }
-              int modifiers = X11Shortcuts.modifiers(shortcut);
+              int modifiers =
+                  shortcut.mask(X11.CONTROL_MASK, X11.MOD1_MASK, X11.SHIFT_MASK, X11.MOD4_MASK);
               long root = X11.rootWindow(this.display);
               int error =
                   this.trapped.applyAsInt(
@@ -137,23 +137,6 @@ public final class X11Shortcuts implements DesktopShortcuts {
                 X11.ungrabKey(this.display, keycode, modifiers | lock, root);
               }
             });
-  }
-
-  private static int modifiers(Shortcut shortcut) {
-    int modifiers = 0;
-    if (shortcut.has(ShortcutModifier.CONTROL)) {
-      modifiers |= X11.CONTROL_MASK;
-    }
-    if (shortcut.has(ShortcutModifier.ALT)) {
-      modifiers |= X11.MOD1_MASK;
-    }
-    if (shortcut.has(ShortcutModifier.SHIFT)) {
-      modifiers |= X11.SHIFT_MASK;
-    }
-    if (shortcut.has(ShortcutModifier.META)) {
-      modifiers |= X11.MOD4_MASK;
-    }
-    return modifiers;
   }
 
   private static long key(int keycode, int modifiers) {

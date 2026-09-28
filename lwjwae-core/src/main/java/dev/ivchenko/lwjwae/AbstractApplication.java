@@ -23,7 +23,6 @@ import dev.ivchenko.lwjwae.util.ThrowableUtil;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -34,6 +33,11 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Condition;
@@ -67,6 +71,12 @@ public abstract class AbstractApplication implements Application {
 
   private static final int GRAB_HEIGHT = 40;
 
+  /** How long {@link #quit()} waits for the states of the windows to reach the disk. */
+  private static final long STATE_SAVE_TIMEOUT_SECONDS = 5;
+
+  /** What a shortcut maps to while its backend binds it: nothing to give back yet. */
+  private static final EventSubscription BINDING = () -> {};
+
   private final UiDispatcher dispatcher;
   private final ApplicationParameters parameters;
   private final Map<Long, AbstractWindow> windows = new ConcurrentHashMap<>();
@@ -77,6 +87,16 @@ public abstract class AbstractApplication implements Application {
   private final Map<String, String> bindingScripts = new ConcurrentHashMap<>();
   private final EventListeners listeners = new EventListeners("lwjwae-application-events");
   private final Map<Long, WindowStateTracker> stateTrackers = new ConcurrentHashMap<>();
+
+  /**
+   * Reads and writes the states of the windows, one at a time and in order, off the UI thread,
+   * where a window closes: a state saved on close is on the disk before the next open reads it.
+   */
+  private final ExecutorService stateSaver =
+      Executors.newSingleThreadExecutor(Thread.ofVirtual().name("lwjwae-window-state").factory());
+
+  /** Where the windows keep their states, or {@code null} without a data directory. */
+  private final WindowStateStore stateStore;
 
   private final ReentrantLock lifecycle = new ReentrantLock();
   private final Condition idle = this.lifecycle.newCondition();
@@ -100,6 +120,10 @@ public abstract class AbstractApplication implements Application {
   protected AbstractApplication(UiDispatcher dispatcher, ApplicationParameters parameters) {
     this.dispatcher = Objects.requireNonNull(dispatcher, "dispatcher");
     this.parameters = Objects.requireNonNull(parameters, "parameters");
+    this.stateStore =
+        parameters.dataDirectory() == null
+            ? null
+            : new WindowStateStore(parameters.dataDirectory());
   }
 
   /** The UI thread of the toolkit, shared by every window. */
@@ -153,12 +177,20 @@ public abstract class AbstractApplication implements Application {
    * to save it when it closes. Without a data directory, a state key does nothing.
    */
   private void restoreState(Window window, WindowParameters parameters) {
-    Path directory = this.parameters.dataDirectory();
     String key = parameters.stateKey();
-    if (key == null || directory == null) {
+    if (key == null || this.stateStore == null) {
       return;
     }
-    SavedWindowState saved = new WindowStateStore(directory).load(key).orElse(null);
+    SavedWindowState saved;
+    try {
+      saved = this.stateSaver.submit(() -> this.stateStore.load(key)).get().orElse(null);
+    } catch (ExecutionException | RejectedExecutionException e) {
+      ThrowableUtil.report(e);
+      saved = null;
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      saved = null;
+    }
     if (saved != null) {
       window.size(saved.width(), saved.height());
       if (saved.hasPosition() && AbstractApplication.isReachable(saved, this.screens())) {
@@ -369,18 +401,30 @@ public abstract class AbstractApplication implements Application {
     Objects.requireNonNull(shortcut, "shortcut");
     Objects.requireNonNull(handler, "handler");
     this.checkOpen();
-    EventSubscription binding;
+    // The shortcut is taken under the lock and bound outside it: a backend binds on the UI thread,
+    // and a quit() there would otherwise wait on this lock while this thread waits on it.
     synchronized (this.globalShortcuts) {
-      if (this.globalShortcuts.containsKey(shortcut)) {
+      if (this.globalShortcuts.putIfAbsent(shortcut, BINDING) != null) {
         throw new ShortcutUnavailableException(
             shortcut + " is a shortcut of this application already");
       }
-      binding = this.bindGlobalShortcut(shortcut, () -> HandlerUtil.runOffTheUiThread(handler));
-      this.globalShortcuts.put(shortcut, binding);
     }
-    // Bound while quit() gave the others back: this one missed it.
-    if (this.closed.get()) {
-      this.releaseGlobalShortcut(shortcut, binding);
+    EventSubscription binding;
+    try {
+      binding = this.bindGlobalShortcut(shortcut, () -> HandlerUtil.runOffTheUiThread(handler));
+    } catch (RuntimeException | Error e) {
+      synchronized (this.globalShortcuts) {
+        this.globalShortcuts.remove(shortcut, BINDING);
+      }
+      throw e;
+    }
+    boolean kept;
+    synchronized (this.globalShortcuts) {
+      kept = this.globalShortcuts.replace(shortcut, BINDING, binding);
+    }
+    // quit() gave the shortcuts back while this one was being bound: it missed it.
+    if (!kept) {
+      binding.unlisten();
       throw new IllegalStateException("The application is closed");
     }
     return () -> this.releaseGlobalShortcut(shortcut, binding);
@@ -569,7 +613,13 @@ public abstract class AbstractApplication implements Application {
     this.windows.remove(window.id(), window);
     WindowStateTracker tracker = this.stateTrackers.remove(window.id());
     if (tracker != null) {
-      new WindowStateStore(this.parameters.dataDirectory()).save(tracker.key(), tracker.state());
+      SavedWindowState state = tracker.state();
+      try {
+        this.stateSaver.execute(() -> this.stateStore.save(tracker.key(), state));
+      } catch (RejectedExecutionException _) {
+        // After quit(), which waited for the saves in line: this one is written in place.
+        this.stateStore.save(tracker.key(), state);
+      }
     }
     if (!this.isRunnable()) {
       this.signalIdle();
@@ -645,6 +695,14 @@ public abstract class AbstractApplication implements Application {
       lock.close();
     }
     this.listeners.shutdown();
+    this.stateSaver.shutdown();
+    try {
+      if (!this.stateSaver.awaitTermination(STATE_SAVE_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+        ThrowableUtil.report(new IllegalStateException("The window states were not saved in time"));
+      }
+    } catch (InterruptedException _) {
+      Thread.currentThread().interrupt();
+    }
     this.signalIdle();
     this.onClose();
   }

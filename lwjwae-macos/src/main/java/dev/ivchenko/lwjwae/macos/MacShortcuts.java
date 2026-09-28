@@ -7,7 +7,6 @@ import dev.ivchenko.lwjwae.macos.binding.Carbon;
 import dev.ivchenko.lwjwae.macos.binding.Signatures;
 import dev.ivchenko.lwjwae.shortcut.Shortcut;
 import dev.ivchenko.lwjwae.shortcut.ShortcutKey;
-import dev.ivchenko.lwjwae.shortcut.ShortcutModifier;
 import dev.ivchenko.lwjwae.ui.UiDispatcher;
 import dev.ivchenko.lwjwae.util.ThrowableUtil;
 import java.lang.foreign.MemorySegment;
@@ -49,14 +48,15 @@ class MacShortcuts {
     if (keyCode < 0) {
       throw new ShortcutUnavailableException("A Mac keyboard has no " + shortcut.key().label());
     }
-    int modifiers = MacShortcuts.modifiers(shortcut);
+    int modifiers =
+        shortcut.mask(Carbon.CONTROL_KEY, Carbon.OPTION_KEY, Carbon.SHIFT_KEY, Carbon.COMMAND_KEY);
     int id = IDS.incrementAndGet();
     MemorySegment reference =
         dispatcher.call(
             () -> {
-              if (!MacShortcuts.handling) {
+              if (!handling) {
                 Carbon.installHotKeyHandler(ON_HOT_KEY);
-                MacShortcuts.handling = true;
+                handling = true;
               }
               MemorySegment registered = Carbon.registerHotKey(keyCode, modifiers, id);
               if (registered.equals(MemorySegment.NULL)) {
@@ -71,23 +71,6 @@ class MacShortcuts {
         dispatcher.run(() -> Carbon.unregisterHotKey(reference));
       }
     };
-  }
-
-  private int modifiers(Shortcut shortcut) {
-    int modifiers = 0;
-    if (shortcut.has(ShortcutModifier.CONTROL)) {
-      modifiers |= Carbon.CONTROL_KEY;
-    }
-    if (shortcut.has(ShortcutModifier.ALT)) {
-      modifiers |= Carbon.OPTION_KEY;
-    }
-    if (shortcut.has(ShortcutModifier.SHIFT)) {
-      modifiers |= Carbon.SHIFT_KEY;
-    }
-    if (shortcut.has(ShortcutModifier.META)) {
-      modifiers |= Carbon.COMMAND_KEY;
-    }
-    return modifiers;
   }
 
   /** The {@code kVK_} code of {@code key}, or -1 for a key that a Mac keyboard doesn't have. */

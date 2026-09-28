@@ -6,6 +6,7 @@ import java.io.Reader;
 import java.io.UncheckedIOException;
 import java.io.Writer;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -24,6 +25,12 @@ import java.util.Properties;
 public final class WindowStateStore {
   private static final String FILE_NAME = "window-state.properties";
 
+  /**
+   * One lock for every store of the process: two applications on one data directory each read the
+   * file, change their own keys, and write it back, which must not interleave.
+   */
+  private static final Object LOCK = new Object();
+
   private final Path file;
 
   /**
@@ -36,8 +43,11 @@ public final class WindowStateStore {
   }
 
   /** The state saved under {@code key}, if there's a whole one. */
-  public synchronized Optional<SavedWindowState> load(String key) {
-    Properties properties = this.read();
+  public Optional<SavedWindowState> load(String key) {
+    Properties properties;
+    synchronized (LOCK) {
+      properties = this.read();
+    }
     try {
       String width = properties.getProperty(key + ".width");
       String height = properties.getProperty(key + ".height");
@@ -59,31 +69,56 @@ public final class WindowStateStore {
   }
 
   /** Saves {@code state} under {@code key}, next to the states of the other windows. */
-  public synchronized void save(String key, SavedWindowState state) {
-    Properties properties = this.read();
-    properties.setProperty(key + ".width", Integer.toString(state.width()));
-    properties.setProperty(key + ".height", Integer.toString(state.height()));
-    if (state.hasPosition()) {
-      properties.setProperty(key + ".x", Integer.toString(state.x()));
-      properties.setProperty(key + ".y", Integer.toString(state.y()));
-    } else {
-      properties.remove(key + ".x");
-      properties.remove(key + ".y");
+  public void save(String key, SavedWindowState state) {
+    synchronized (LOCK) {
+      Properties properties = this.read();
+      properties.setProperty(key + ".width", Integer.toString(state.width()));
+      properties.setProperty(key + ".height", Integer.toString(state.height()));
+      if (state.hasPosition()) {
+        properties.setProperty(key + ".x", Integer.toString(state.x()));
+        properties.setProperty(key + ".y", Integer.toString(state.y()));
+      } else {
+        properties.remove(key + ".x");
+        properties.remove(key + ".y");
+      }
+      properties.setProperty(key + ".maximized", Boolean.toString(state.maximized()));
+      this.write(properties);
     }
-    properties.setProperty(key + ".maximized", Boolean.toString(state.maximized()));
+  }
+
+  /** Writes a temporary file and moves it over the old one, which a crash leaves as it was. */
+  private void write(Properties properties) {
+    Path temporary = null;
     try {
       Files.createDirectories(this.file.getParent());
-      Path temporary = Files.createTempFile(this.file.getParent(), FILE_NAME, ".tmp");
+      temporary = Files.createTempFile(this.file.getParent(), FILE_NAME, ".tmp");
       try (Writer writer = Files.newBufferedWriter(temporary, StandardCharsets.UTF_8)) {
         properties.store(writer, "The size and place of the windows of the application");
       }
-      Files.move(
-          temporary,
-          this.file,
-          StandardCopyOption.REPLACE_EXISTING,
-          StandardCopyOption.ATOMIC_MOVE);
+      try {
+        Files.move(
+            temporary,
+            this.file,
+            StandardCopyOption.REPLACE_EXISTING,
+            StandardCopyOption.ATOMIC_MOVE);
+      } catch (AtomicMoveNotSupportedException _) {
+        Files.move(temporary, this.file, StandardCopyOption.REPLACE_EXISTING);
+      }
     } catch (IOException e) {
       ThrowableUtil.report(new UncheckedIOException("Could not save " + this.file, e));
+    } finally {
+      WindowStateStore.deleteQuietly(temporary);
+    }
+  }
+
+  private static void deleteQuietly(Path temporary) {
+    if (temporary == null) {
+      return;
+    }
+    try {
+      Files.deleteIfExists(temporary);
+    } catch (IOException e) {
+      ThrowableUtil.report(e);
     }
   }
 

@@ -82,6 +82,17 @@ public record Shortcut(Set<ShortcutModifier> modifiers, ShortcutKey key) {
     };
   }
 
+  /**
+   * The modifiers as the bits of a platform: the bit of each modifier that the shortcut holds, or
+   * together.
+   */
+  public int mask(int control, int alt, int shift, int meta) {
+    return (this.has(ShortcutModifier.CONTROL) ? control : 0)
+        | (this.has(ShortcutModifier.ALT) ? alt : 0)
+        | (this.has(ShortcutModifier.SHIFT) ? shift : 0)
+        | (this.has(ShortcutModifier.META) ? meta : 0);
+  }
+
   /** Whether the shortcut holds {@code modifier} down. */
   public boolean has(ShortcutModifier modifier) {
     return this.modifiers.contains(modifier);
