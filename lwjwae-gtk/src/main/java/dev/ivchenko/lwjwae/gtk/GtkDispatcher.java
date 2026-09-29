@@ -1,6 +1,7 @@
 package dev.ivchenko.lwjwae.gtk;
 
 import dev.ivchenko.lwjwae.glib.GlibDispatcher;
+import dev.ivchenko.lwjwae.glib.PortalDialogs;
 import dev.ivchenko.lwjwae.gtk.binding.Gtk;
 
 /**
@@ -29,6 +30,7 @@ public class GtkDispatcher extends GlibDispatcher {
 
   @Override
   protected void initialize() {
+    PortalDialogs.preferForGtk3();
     if (!Gtk.initialize()) {
       throw new IllegalStateException(
           "gtk_init_check() failed: no display available (check DISPLAY / WAYLAND_DISPLAY)");

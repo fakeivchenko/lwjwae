@@ -46,6 +46,10 @@ public class Glib {
       NativeLibraries.downcall(GLIB, "g_main_loop_run", Signatures.VOID_POINTER);
   private final MethodHandle IDLE_ADD =
       NativeLibraries.downcall(GLIB, "g_idle_add", Signatures.INT_POINTER_POINTER);
+  private final MethodHandle GETENV =
+      NativeLibraries.downcall(GLIB, "g_getenv", Signatures.POINTER_POINTER);
+  private final MethodHandle SETENV =
+      NativeLibraries.downcall(GLIB, "g_setenv", Signatures.INT_POINTER_POINTER_INT);
   private final MethodHandle FREE =
       NativeLibraries.downcall(GLIB, "g_free", Signatures.VOID_POINTER);
   private final MethodHandle ERROR_FREE =
@@ -143,6 +147,28 @@ public class Glib {
           (long)
               SIGNAL_CONNECT_DATA.invokeExact(
                   instance, arena.allocateFrom(signal), callback, userData, MemorySegment.NULL, 0);
+    }
+  }
+
+  /**
+   * Calls {@code g_getenv}: the variable of the environment of the process as native code sees it,
+   * which {@link #setEnvironment} changes and {@link System#getenv} doesn't know of.
+   */
+  @SneakyThrows
+  public String environment(String name) {
+    try (Arena arena = Arena.ofConfined()) {
+      return NativeLibraries.string((MemorySegment) GETENV.invokeExact(arena.allocateFrom(name)));
+    }
+  }
+
+  /**
+   * Calls {@code g_setenv}, overwriting. Call before other threads read the environment, such as
+   * before GTK starts: {@code setenv} isn't safe against a concurrent {@code getenv}.
+   */
+  @SneakyThrows
+  public void setEnvironment(String name, String value) {
+    try (Arena arena = Arena.ofConfined()) {
+      int _ = (int) SETENV.invokeExact(arena.allocateFrom(name), arena.allocateFrom(value), 1);
     }
   }
 

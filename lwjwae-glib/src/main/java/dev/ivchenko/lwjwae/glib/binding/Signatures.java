@@ -134,6 +134,10 @@ public class Signatures {
   /** {@code gsize f(T*)}: {@code g_variant_n_children}. */
   public final FunctionDescriptor LONG_POINTER = FunctionDescriptor.of(C_LONG, C_POINTER);
 
+  /** {@code gboolean f(T*, U*, gboolean)}: {@code g_setenv}. */
+  public final FunctionDescriptor INT_POINTER_POINTER_INT =
+      FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_INT);
+
   /** {@code unsigned char f(T*, unsigned long)}: {@code XKeysymToKeycode}. */
   public final FunctionDescriptor BYTE_POINTER_LONG =
       FunctionDescriptor.of(ValueLayout.JAVA_BYTE, C_POINTER, C_LONG);

@@ -191,6 +191,7 @@ public class MacWindow extends AbstractWindow {
     DELEGATES.put(newDelegate.address(), this);
 
     MemorySegment configuration = WebKit.configuration();
+    WebKit.setApplicationNameForUserAgent(configuration, this.userAgentSuffix());
     WebKit.setUrlSchemeHandler(configuration, newDelegate, ResourceUtil.SCHEME);
     MemorySegment controller = Foundation.retain(WebKit.userContentController(configuration));
     WebKit.addScriptMessageHandler(controller, newDelegate, BridgeProtocol.CHANNEL);

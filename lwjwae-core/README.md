@@ -265,7 +265,7 @@ only when the user answers.
 
 | Platform | Files | Messages |
 |---|---|---|
-| GTK 3, GTK 4 | `GtkFileChooserNative`: the portal of the desktop inside a sandbox, GTK's own outside one | `GtkMessageDialog`, with the button labels of GTK in the language of the user |
+| GTK 3, GTK 4 | `GtkFileChooserNative` through the desktop portal wherever the session has one, such as the dialog of Dolphin on KDE Plasma; GTK's own without a portal | `GtkMessageDialog`, with the button labels of GTK in the language of the user |
 | Windows | `IFileOpenDialog` and `IFileSaveDialog`; the first extension of the chosen kind completes a name without one | `MessageBoxW`; the title of the window as its caption when there's none |
 | macOS | `NSOpenPanel` and `NSSavePanel` as sheets of the window; an open panel has no menu of kinds, so it shows the files of every kind | `NSAlert` as a sheet, which has no title |
 
@@ -559,6 +559,26 @@ through `ServiceLoader`. Without one, the page has no encoder: an untyped call t
 object sends `String(payload)`, and `bind(name, Class, handler)` and `emit(name, Object)` fail at
 the call site with `IllegalStateException`, not later on the page.
 
+A codec reads and creates the types of a call through reflection, which a native image allows only
+for the types that its metadata lists. Mark the outermost types of your binds and events with
+[`@BridgeType`](src/main/java/dev/ivchenko/lwjwae/bridge/codec/BridgeType.java), and add the
+annotation processor of [`lwjwae-processor`](../lwjwae-processor) to the build; it writes that
+metadata for them and for every type that they hold:
+
+```kotlin
+dependencies {
+    annotationProcessor("dev.ivchenko.lwjwae:lwjwae-processor:VERSION")
+}
+```
+
+```java
+@BridgeType
+public record Outline(String name, List<Point> points) {}
+```
+
+`Point` needs no annotation: the processor follows the components of a record, the fields of a
+class, its superclasses, arrays, and type arguments. On the JVM, the annotation does nothing.
+
 ### Calls with a body: `handle`
 
 `bind` fits small calls: the argument and the answer are strings inside one message. For bytes, big
@@ -628,6 +648,21 @@ When [`ApplicationParameters.devServerUrl()`](src/main/java/dev/ivchenko/lwjwae/
 through the builder, the `lwjwae.devServerUrl` system property, or the `LWJWAE_DEV_SERVER_URL`
 environment variable, and a Vite or webpack development server with hot reload drives every window
 while the Java side stays as it ships.
+
+### User agent
+
+Every web view sends the user agent of its engine with two tokens after it: the name of the
+application from `ApplicationParameters.name()`, and lwjwae with its version. A server of the
+application tells its own windows from browsers by them, and a site that looks for WebKit, Chrome,
+or Safari still finds them:
+
+```text
+Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/60.5 Safari/605.1.15 Notes lwjwae/0.7.1
+Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36 Edg/153.0.0.0 Notes lwjwae/0.7.1
+```
+
+A space in the name becomes a hyphen, and a name of characters that a token can't hold adds
+nothing, so the user agent then ends with lwjwae alone.
 
 ## Threading
 

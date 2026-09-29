@@ -29,6 +29,7 @@ import dev.ivchenko.lwjwae.testing.Screenshots;
 import dev.ivchenko.lwjwae.testing.Tags;
 import dev.ivchenko.lwjwae.tray.Tray;
 import dev.ivchenko.lwjwae.tray.TrayIcon;
+import dev.ivchenko.lwjwae.util.UserAgentUtil;
 import java.awt.Color;
 import java.nio.ByteBuffer;
 import java.nio.file.Path;
@@ -482,6 +483,22 @@ public abstract class WindowContractTest extends DisplayContractTest {
       Assertions.assertEquals("done", Loads.awaitValue(window, "window.__moved"));
       Assertions.assertFalse(window.isClosed());
       Assertions.assertFalse(window.isMaximized());
+    }
+  }
+
+  @Test
+  void userAgentNamesTheApplicationAndLwjwae() throws Exception {
+    ApplicationParameters parameters =
+        ApplicationParameters.builder().name("lwjwae contract").build();
+    try (Application application = Application.create(parameters)) {
+      Window window = application.open(WindowParameters.of("lwjwae :: user agent", 400, 300));
+      final var loaded = Loads.expectFinished(window);
+      window.loadResource("test-app/index.html");
+      loaded.get(30, TimeUnit.SECONDS);
+      String userAgent = Loads.awaitValue(window, "navigator.userAgent");
+      Assertions.assertTrue(userAgent.startsWith("Mozilla/5.0 "), userAgent);
+      Assertions.assertTrue(
+          userAgent.endsWith(" lwjwae-contract lwjwae/" + UserAgentUtil.version()), userAgent);
     }
   }
 

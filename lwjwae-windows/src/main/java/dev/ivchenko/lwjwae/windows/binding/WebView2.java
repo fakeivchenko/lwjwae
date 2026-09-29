@@ -7,6 +7,7 @@ import java.lang.foreign.MemorySegment;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.VarHandle;
 import java.util.List;
+import java.util.function.UnaryOperator;
 import lombok.SneakyThrows;
 import lombok.experimental.UtilityClass;
 
@@ -100,6 +101,10 @@ public class WebView2 {
   private final int SETTINGS_GET_DEV_TOOLS_ENABLED = 11;
   private final int SETTINGS_PUT_DEV_TOOLS_ENABLED = 12;
   private final int SETTINGS_PUT_DEFAULT_CONTEXT_MENUS_ENABLED = 14;
+  // ICoreWebView2Settings2
+  private final MemorySegment IID_SETTINGS_2 = Com.guid("ee9a0f68-f46c-4e32-ac23-ef8cac224d2a");
+  private final int SETTINGS_2_GET_USER_AGENT = 21;
+  private final int SETTINGS_2_PUT_USER_AGENT = 22;
   // event args
   private final int NAVIGATION_STARTING_GET_URI = 3;
   private final int NAVIGATION_COMPLETED_GET_IS_SUCCESS = 3;
@@ -264,6 +269,27 @@ public class WebView2 {
       return WebView2.integer(settings, SETTINGS_GET_DEV_TOOLS_ENABLED, "get_AreDevToolsEnabled")
           != 0;
     } finally {
+      Com.release(settings);
+    }
+  }
+
+  /**
+   * Sets the user agent of {@code webView} to what {@code change} makes of the current one, through
+   * {@code ICoreWebView2Settings2}, which every runtime since 86 has.
+   */
+  public void changeUserAgent(MemorySegment webView, UnaryOperator<String> change) {
+    MemorySegment settings = WebView2.settings(webView);
+    MemorySegment settings2 = null;
+    try (Arena arena = Arena.ofConfined()) {
+      settings2 = WinRt.query(settings, IID_SETTINGS_2);
+      MemorySegment out = arena.allocate(Signatures.C_POINTER);
+      Com.check("get_UserAgent", Com.call(settings2, SETTINGS_2_GET_USER_AGENT, out));
+      String userAgent = change.apply(Wide.take(Com.pointerAt(out)));
+      Com.check(
+          "put_UserAgent",
+          Com.call(settings2, SETTINGS_2_PUT_USER_AGENT, Wide.allocate(arena, userAgent)));
+    } finally {
+      Com.release(settings2);
       Com.release(settings);
     }
   }

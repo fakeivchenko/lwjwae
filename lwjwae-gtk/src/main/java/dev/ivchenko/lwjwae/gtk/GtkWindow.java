@@ -215,6 +215,7 @@ public class GtkWindow extends AbstractWindow {
     if (parameters.transparent()) {
       WebKit.setTransparentBackground(newWebView);
     }
+    WebKit.setUserAgent(newWebView, this.userAgent(WebKit.userAgent(newWebView)));
     Gtk.containerAdd(newWindow, newWebView);
 
     Glib.signalConnect(newWindow, "delete-event", ON_DELETE_EVENT, userData);

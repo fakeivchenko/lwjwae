@@ -522,10 +522,11 @@ public interface Window extends AutoCloseable {
    *   <li>macOS: A sheet of the window. The title shows above the files, since a sheet has no title
    *       bar, and the kinds of file merge into one list of extensions, since a panel has no menu
    *       of them.
-   *   <li>Linux, GTK 3: {@code GtkFileChooserNative}: the dialog of the desktop portal inside a
-   *       sandbox such as Flatpak, which lets the application see the files that the user picks,
-   *       and GTK's own outside one.
-   *   <li>Linux, GTK 4: As on GTK 3.
+   *   <li>Linux, GTK 3: {@code GtkFileChooserNative} through the desktop portal wherever the
+   *       session has one, so the dialog is the one of the desktop, such as Dolphin's on KDE
+   *       Plasma, and the dialog of GTK without a portal. {@code GTK_USE_PORTAL=0} keeps the one of
+   *       GTK.
+   *   <li>Linux, GTK 4: As on GTK 3; {@code GDK_DEBUG=no-portals} keeps the one of GTK.
    * </ul>
    *
    * @return The files or folders that the user picked, or none if they canceled. Canceling the
@@ -542,8 +543,7 @@ public interface Window extends AutoCloseable {
    * <ul>
    *   <li>Windows: The common item dialog, modal to the window.
    *   <li>macOS: A sheet of the window, with the title above the name, as for opening.
-   *   <li>Linux, GTK 3: {@code GtkFileChooserNative}, the portal's inside a sandbox, as for
-   *       opening.
+   *   <li>Linux, GTK 3: {@code GtkFileChooserNative}, through the desktop portal, as for opening.
    *   <li>Linux, GTK 4: As on GTK 3.
    * </ul>
    *

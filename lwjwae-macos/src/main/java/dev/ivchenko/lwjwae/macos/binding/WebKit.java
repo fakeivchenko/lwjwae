@@ -56,6 +56,14 @@ public class WebKit {
     return ObjC.send(ObjC.send(webView, "configuration"), "preferences");
   }
 
+  /**
+   * Sets {@code applicationNameForUserAgent} of {@code configuration}: what the views built from it
+   * add to the user agent of WebKit.
+   */
+  public void setApplicationNameForUserAgent(MemorySegment configuration, String name) {
+    ObjC.sendVoid(configuration, "setApplicationNameForUserAgent:", Foundation.string(name));
+  }
+
   /** Returns the {@code WKUserContentController} of {@code configuration}. Borrowed. */
   public MemorySegment userContentController(MemorySegment configuration) {
     return ObjC.send(configuration, "userContentController");

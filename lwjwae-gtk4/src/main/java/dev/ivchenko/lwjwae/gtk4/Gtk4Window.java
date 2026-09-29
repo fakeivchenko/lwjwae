@@ -206,6 +206,7 @@ public class Gtk4Window extends AbstractWindow {
     if (parameters.transparent()) {
       WebKit.setTransparentBackground(newWebView);
     }
+    WebKit.setUserAgent(newWebView, this.userAgent(WebKit.userAgent(newWebView)));
     // Connect before registering, otherwise early messages race the signal handler.
     MemorySegment manager = WebKit.userContentManager(newWebView);
     Glib.signalConnect(

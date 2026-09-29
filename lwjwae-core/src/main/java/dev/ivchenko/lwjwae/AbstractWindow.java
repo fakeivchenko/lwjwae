@@ -25,6 +25,7 @@ import dev.ivchenko.lwjwae.ui.UiDispatcher;
 import dev.ivchenko.lwjwae.util.ResourceUtil;
 import dev.ivchenko.lwjwae.util.ScriptUtil;
 import dev.ivchenko.lwjwae.util.ThrowableUtil;
+import dev.ivchenko.lwjwae.util.UserAgentUtil;
 import java.net.URI;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
@@ -168,6 +169,23 @@ public abstract class AbstractWindow implements Window {
       return;
     }
     this.navigate(this.resourceUrl(path));
+  }
+
+  /**
+   * The user agent that the web view of this window sends: {@code engine}, the one of the engine,
+   * followed by the name of the application and lwjwae with its version, see {@link UserAgentUtil}.
+   * A backend sets it before the first page loads.
+   */
+  protected final String userAgent(String engine) {
+    return UserAgentUtil.of(engine, this.application.parameters().name());
+  }
+
+  /**
+   * What {@link #userAgent} adds to the user agent of the engine, for an engine that appends it
+   * itself.
+   */
+  protected final String userAgentSuffix() {
+    return UserAgentUtil.suffix(this.application.parameters().name());
   }
 
   /**

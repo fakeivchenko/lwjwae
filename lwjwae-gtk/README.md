@@ -202,8 +202,12 @@ same under GTK 3 and GTK 4.
 
 ## Dialogs
 
-Files go through `GtkFileChooserNative`, which is the dialog of the desktop portal inside a sandbox,
-where an application sees no file of the user until the user picks it, and GTK's own outside one.
+Files go through `GtkFileChooserNative`, which asks the desktop portal wherever the session bus has
+one, so the dialog is the one of the desktop, such as Dolphin's on KDE Plasma; without a portal,
+it's GTK's own. GTK asks the portal only inside a sandbox unless the environment says otherwise
+before it starts, so the backend sets `GTK_USE_PORTAL=1` on GTK 3, or adds `portals` to
+`GDK_DEBUG` on GTK 4, where the portal is there and the user hasn't set them;
+`GTK_USE_PORTAL=0` or `GDK_DEBUG=no-portals` keeps the dialog of GTK.
 It answers through `response`, and never blocks the GTK thread; a cancellation hides it with
 `gtk_native_dialog_hide`, which answers nothing. A kind of file is a `GtkFileFilter` with a glob
 pattern per extension, every letter in brackets of both cases, since GTK matches with case.

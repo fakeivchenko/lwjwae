@@ -4,6 +4,9 @@
       "glob": "dev/ivchenko/lwjwae/bridge/bootstrap.js"
     },
     {
+      "glob": "dev/ivchenko/lwjwae/version.properties"
+    },
+    {
       "glob": "META-INF/services/dev.ivchenko.lwjwae.BackendProvider"
     },
     {

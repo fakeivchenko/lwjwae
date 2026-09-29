@@ -1,6 +1,7 @@
 package dev.ivchenko.lwjwae.gtk4;
 
 import dev.ivchenko.lwjwae.glib.GlibDispatcher;
+import dev.ivchenko.lwjwae.glib.PortalDialogs;
 import dev.ivchenko.lwjwae.glib.binding.Glib;
 import dev.ivchenko.lwjwae.gtk4.binding.Gtk;
 
@@ -35,6 +36,7 @@ public class Gtk4Dispatcher extends GlibDispatcher {
 
   @Override
   protected void initialize() {
+    PortalDialogs.preferForGtk4();
     if (!Gtk.initialize()) {
       throw new IllegalStateException(
           "gtk_init_check() failed: no display available (check DISPLAY / WAYLAND_DISPLAY)");
