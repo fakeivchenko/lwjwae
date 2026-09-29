@@ -43,6 +43,9 @@ public class Com {
       NativeLibraries.downcall(Signatures.INT_POINTER_LONG_POINTER);
   private final MethodHandle CALL_P_P_I_P =
       NativeLibraries.downcall(Signatures.INT_POINTER_POINTER_INT_POINTER);
+  private final MethodHandle CALL_P_P_P_P = NativeLibraries.downcall(Signatures.INT_POINTER_X4);
+  private final MethodHandle CALL_P_P_L_L =
+      NativeLibraries.downcall(Signatures.INT_POINTER_POINTER_LONG_LONG);
   private final MethodHandle CALL_P_RECT = NativeLibraries.downcall(Signatures.INT_POINTER_RECT);
   private final MethodHandle CALL_P_P_I_P_P_P =
       NativeLibraries.downcall(Signatures.INT_POINTER_POINTER_INT_POINTER_X3);
@@ -84,6 +87,23 @@ public class Com {
   @SneakyThrows
   public int call(MemorySegment object, int index, MemorySegment first, MemorySegment second) {
     return (int) CALL_P_P_P.invokeExact(Com.slot(object, index), object, first, second);
+  }
+
+  /** Calls method {@code index} of {@code object} with three pointer arguments. */
+  @SneakyThrows
+  public int call(
+      MemorySegment object,
+      int index,
+      MemorySegment first,
+      MemorySegment second,
+      MemorySegment third) {
+    return (int) CALL_P_P_P_P.invokeExact(Com.slot(object, index), object, first, second, third);
+  }
+
+  /** Calls method {@code index} of {@code object} with a pointer and two 64-bit integers. */
+  @SneakyThrows
+  public int call(MemorySegment object, int index, MemorySegment first, long second, long third) {
+    return (int) CALL_P_P_L_L.invokeExact(Com.slot(object, index), object, first, second, third);
   }
 
   /** Calls method {@code index} of {@code object} with a pointer and an integer. */

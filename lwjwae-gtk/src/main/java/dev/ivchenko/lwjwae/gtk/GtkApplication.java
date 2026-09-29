@@ -22,6 +22,7 @@ import dev.ivchenko.lwjwae.notification.Notification;
 import dev.ivchenko.lwjwae.notification.NotificationHandle;
 import dev.ivchenko.lwjwae.rpc.RpcExchange;
 import dev.ivchenko.lwjwae.shortcut.Shortcut;
+import dev.ivchenko.lwjwae.taskbar.TaskbarProgress;
 import dev.ivchenko.lwjwae.tray.Tray;
 import dev.ivchenko.lwjwae.tray.TrayIcon;
 import dev.ivchenko.lwjwae.util.MimeTypeUtil;
@@ -151,6 +152,16 @@ public class GtkApplication extends AbstractApplication {
   @Override
   protected EventSubscription bindGlobalShortcut(Shortcut shortcut, Runnable pressed) {
     return this.desktop.bindShortcut(shortcut, pressed);
+  }
+
+  @Override
+  protected void showProgress(TaskbarProgress progress) {
+    this.desktop.showProgress(progress);
+  }
+
+  @Override
+  protected void showBadgeCount(int count) {
+    this.desktop.showBadgeCount(count);
   }
 
   /**

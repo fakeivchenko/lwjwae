@@ -656,6 +656,14 @@
           "struct(jdouble,jdouble)",
           "void*"
         ]
+      },
+      {
+        "returnType": "void*",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "struct(jdouble,jdouble,jdouble,jdouble)"
+        ]
       }
     ],
     "directUpcalls": [

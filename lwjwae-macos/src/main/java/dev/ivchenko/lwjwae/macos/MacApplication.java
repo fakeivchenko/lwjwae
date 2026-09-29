@@ -12,6 +12,7 @@ import dev.ivchenko.lwjwae.macos.binding.WebKit;
 import dev.ivchenko.lwjwae.notification.Notification;
 import dev.ivchenko.lwjwae.notification.NotificationHandle;
 import dev.ivchenko.lwjwae.shortcut.Shortcut;
+import dev.ivchenko.lwjwae.taskbar.TaskbarProgress;
 import dev.ivchenko.lwjwae.tray.Tray;
 import dev.ivchenko.lwjwae.tray.TrayIcon;
 import java.util.List;
@@ -93,6 +94,16 @@ public class MacApplication extends AbstractApplication {
       this.notifier = new MacNotifier(this.dispatcher());
     }
     return this.notifier;
+  }
+
+  @Override
+  protected void showProgress(TaskbarProgress progress) {
+    MacDock.progress(progress);
+  }
+
+  @Override
+  protected void showBadgeCount(int count) {
+    MacDock.badge(count);
   }
 
   @Override

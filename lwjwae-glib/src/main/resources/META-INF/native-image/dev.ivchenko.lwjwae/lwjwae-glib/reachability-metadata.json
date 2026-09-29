@@ -379,6 +379,12 @@
       {
         "returnType": "void*",
         "parameterTypes": []
+      },
+      {
+        "returnType": "void*",
+        "parameterTypes": [
+          "jdouble"
+        ]
       }
     ],
     "directUpcalls": [

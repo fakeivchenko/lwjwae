@@ -29,6 +29,8 @@ import dev.ivchenko.lwjwae.rpc.RpcCall;
 import dev.ivchenko.lwjwae.rpc.RpcException;
 import dev.ivchenko.lwjwae.rpc.RpcExchange;
 import dev.ivchenko.lwjwae.rpc.RpcHandler;
+import dev.ivchenko.lwjwae.taskbar.ProgressState;
+import dev.ivchenko.lwjwae.taskbar.TaskbarProgress;
 import dev.ivchenko.lwjwae.ui.UiDispatcher;
 import dev.ivchenko.lwjwae.util.HandlerUtil;
 import dev.ivchenko.lwjwae.util.ResourceUtil;
@@ -497,8 +499,37 @@ public abstract class AbstractWindow implements Window {
       case "title-bar-double-click" -> this.titleBarDoubleClicked();
       case "open-external" -> this.leave(argument);
       case "state" -> call.reply(this.dispatcher().call(this::stateJson));
+      case "progress" -> this.application.progress(AbstractWindow.parseProgress(argument));
+      case "badge" -> this.application.badgeCount(AbstractWindow.parseCount(argument));
       default -> throw RpcException.badRequest("malformed-control", "No such action: " + parts[0]);
     }
+  }
+
+  /** The progress of {@code lwjwae.taskbar.progress}: the name of the state and the value. */
+  private static TaskbarProgress parseProgress(String argument) {
+    String[] fields = argument.split(BridgeProtocol.SEPARATOR, -1);
+    ProgressState state = ProgressState.ofPageName(fields[0]);
+    try {
+      if (state == null || fields.length != 2) {
+        throw new NumberFormatException(argument);
+      }
+      return new TaskbarProgress(state, Double.parseDouble(fields[1]));
+    } catch (NumberFormatException _) {
+      throw RpcException.badRequest("malformed-progress", "Malformed progress: " + argument);
+    }
+  }
+
+  /** The count of {@code lwjwae.taskbar.badge}: a whole number from 0. */
+  private static int parseCount(String argument) {
+    try {
+      int count = Integer.parseInt(argument);
+      if (count >= 0) {
+        return count;
+      }
+    } catch (NumberFormatException _) {
+      // Answered below, as a negative count is.
+    }
+    throw RpcException.badRequest("malformed-badge", "Malformed count: " + argument);
   }
 
   /**

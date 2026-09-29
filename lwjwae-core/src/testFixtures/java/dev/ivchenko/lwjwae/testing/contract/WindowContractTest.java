@@ -24,6 +24,7 @@ import dev.ivchenko.lwjwae.exception.ShortcutUnavailableException;
 import dev.ivchenko.lwjwae.menu.MenuItem;
 import dev.ivchenko.lwjwae.menu.MenuRole;
 import dev.ivchenko.lwjwae.shortcut.Shortcut;
+import dev.ivchenko.lwjwae.taskbar.TaskbarProgress;
 import dev.ivchenko.lwjwae.testing.Icons;
 import dev.ivchenko.lwjwae.testing.Loads;
 import dev.ivchenko.lwjwae.testing.LocalPages;
@@ -847,6 +848,42 @@ public abstract class WindowContractTest extends DisplayContractTest {
       } else {
         window.close();
       }
+    }
+  }
+
+  @Test
+  void iconShowsTheProgressAndTheBadge() throws Exception {
+    try (Application application = Application.create()) {
+      Window window =
+          application.open(
+              WindowParameters.builder().title("lwjwae :: taskbar").size(400, 300).build());
+      window.show();
+      WindowContractTest.awaitTrue(window::isVisible, "the window must show");
+      application.progress(0.4);
+      application.badgeCount(3);
+      Assertions.assertEquals(TaskbarProgress.of(0.4), application.progress());
+      Assertions.assertEquals(3, application.badgeCount());
+      Thread.sleep(500);
+      Screenshots.capture("taskbar-progress");
+      for (TaskbarProgress progress :
+          List.of(
+              TaskbarProgress.indeterminate(),
+              TaskbarProgress.paused(0.6),
+              TaskbarProgress.error(0.8),
+              TaskbarProgress.none())) {
+        application.progress(progress);
+      }
+      application.badgeCount(12);
+      Thread.sleep(500);
+      Screenshots.capture("taskbar-badge");
+      application.badgeCount(0);
+
+      // A window opened later shows what the application shows.
+      application.progress(0.7);
+      Window later = application.open(WindowParameters.builder().title("lwjwae :: later").build());
+      later.show();
+      WindowContractTest.awaitTrue(later::isVisible, "the window must show");
+      Assertions.assertEquals(TaskbarProgress.of(0.7), application.progress());
     }
   }
 

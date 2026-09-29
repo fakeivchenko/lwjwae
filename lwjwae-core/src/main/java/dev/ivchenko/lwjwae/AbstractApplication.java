@@ -16,6 +16,7 @@ import dev.ivchenko.lwjwae.shortcut.Shortcut;
 import dev.ivchenko.lwjwae.state.SavedWindowState;
 import dev.ivchenko.lwjwae.state.WindowStateStore;
 import dev.ivchenko.lwjwae.state.WindowStateTracker;
+import dev.ivchenko.lwjwae.taskbar.TaskbarProgress;
 import dev.ivchenko.lwjwae.tray.Tray;
 import dev.ivchenko.lwjwae.tray.TrayIcon;
 import dev.ivchenko.lwjwae.ui.UiDispatcher;
@@ -106,6 +107,8 @@ public abstract class AbstractApplication implements Application {
 
   private volatile Clipboard clipboard;
   private volatile List<MenuItem> menu = List.of();
+  private volatile TaskbarProgress progress = TaskbarProgress.none();
+  private volatile int badgeCount;
   private final Map<Shortcut, EventSubscription> globalShortcuts = new HashMap<>();
 
   // --- single instance, under the lock of the listener list ---
@@ -418,6 +421,54 @@ public abstract class AbstractApplication implements Application {
    * heard of it. For a platform whose menu bar belongs to the process; nothing by default.
    */
   protected void menuChanged(List<MenuItem> items) {}
+
+  @Override
+  public final void progress(TaskbarProgress progress) {
+    Objects.requireNonNull(progress, "progress");
+    this.checkOpen();
+    this.progress = progress;
+    this.dispatcher().run(() -> this.showProgress(progress));
+  }
+
+  @Override
+  public final TaskbarProgress progress() {
+    return this.progress;
+  }
+
+  @Override
+  public final void badgeCount(int count) {
+    if (count < 0) {
+      throw new IllegalArgumentException("A badge counts from 0: " + count);
+    }
+    this.checkOpen();
+    this.badgeCount = count;
+    this.dispatcher().run(() -> this.showBadgeCount(count));
+  }
+
+  @Override
+  public final int badgeCount() {
+    return this.badgeCount;
+  }
+
+  /**
+   * Shows {@code progress} on the icon of the application, on the UI thread. A backend whose
+   * platform shows it per window reads {@link #progress()} for a window that opens later.
+   *
+   * @throws UnsupportedOperationException If this backend has no progress yet, the default.
+   */
+  protected void showProgress(TaskbarProgress progress) {
+    throw new UnsupportedOperationException("No progress on the icon on this backend yet");
+  }
+
+  /**
+   * Shows {@code count} on the icon of the application, on the UI thread, 0 for none, as {@link
+   * #showProgress} does.
+   *
+   * @throws UnsupportedOperationException If this backend has no badge yet, the default.
+   */
+  protected void showBadgeCount(int count) {
+    throw new UnsupportedOperationException("No badge on the icon on this backend yet");
+  }
 
   @Override
   public final EventSubscription globalShortcut(Shortcut shortcut, Runnable handler) {

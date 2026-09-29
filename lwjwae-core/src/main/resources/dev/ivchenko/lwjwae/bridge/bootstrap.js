@@ -491,5 +491,17 @@
         });
     }
 
-    window.${pageApi} = { listen, once, emit, open, close, openExternal, call: callRpc, invoke: rpcInvoke, RpcError, window: windowApi, dialog, clipboard, menu };
+    // The icon of the application in the taskbar or the Dock. progress(value) takes a value from 0
+    // to 1, progress({ state, value }) a state of none, normal, indeterminate, paused, or error,
+    // and progress(null) takes the bar away; badge(count) shows a count, 0 for none.
+    const taskbar = {
+        progress: (progress) => {
+            const { state, value } = progress === null || progress === undefined ? { state: "none", value: 0 }
+                : typeof progress === "number" ? { state: "normal", value: progress } : progress;
+            return control("progress", String(state || "normal") + separator + String(value ?? 0)).then(done);
+        },
+        badge: (count) => control("badge", String(Math.round(count || 0))).then(done)
+    };
+
+    window.${pageApi} = { listen, once, emit, open, close, openExternal, call: callRpc, invoke: rpcInvoke, RpcError, window: windowApi, dialog, clipboard, menu, taskbar };
 })();

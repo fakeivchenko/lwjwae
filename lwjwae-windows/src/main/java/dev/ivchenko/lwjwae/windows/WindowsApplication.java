@@ -10,11 +10,14 @@ import dev.ivchenko.lwjwae.event.EventSubscription;
 import dev.ivchenko.lwjwae.notification.Notification;
 import dev.ivchenko.lwjwae.notification.NotificationHandle;
 import dev.ivchenko.lwjwae.shortcut.Shortcut;
+import dev.ivchenko.lwjwae.taskbar.TaskbarProgress;
 import dev.ivchenko.lwjwae.tray.Tray;
 import dev.ivchenko.lwjwae.tray.TrayIcon;
 import dev.ivchenko.lwjwae.windows.binding.Com;
 import dev.ivchenko.lwjwae.windows.binding.ComCallback;
 import dev.ivchenko.lwjwae.windows.binding.Shell32;
+import dev.ivchenko.lwjwae.windows.binding.TaskbarList;
+import dev.ivchenko.lwjwae.windows.binding.User32;
 import dev.ivchenko.lwjwae.windows.binding.WebView2;
 import dev.ivchenko.lwjwae.windows.exception.ComCallFailedException;
 import java.io.IOException;
@@ -24,6 +27,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
@@ -45,6 +49,12 @@ public class WindowsApplication extends AbstractApplication {
   private final AtomicReference<MemorySegment> environment = new AtomicReference<>();
 
   private WindowsNotifier notifier;
+
+  /** The {@code ITaskbarList3} of the application, once it shows something. UI thread only. */
+  private MemorySegment taskbarList;
+
+  /** The overlay icon of the badge, or {@code null} for none. UI thread only. */
+  private MemorySegment badgeIcon;
 
   /** Creates an application with {@link ApplicationParameters#createDefault()}. */
   public WindowsApplication() {
@@ -151,6 +161,61 @@ public class WindowsApplication extends AbstractApplication {
   }
 
   @Override
+  protected void showProgress(TaskbarProgress progress) {
+    this.windowHandles().forEach(this::decorateTaskbarButton);
+  }
+
+  @Override
+  protected void showBadgeCount(int count) {
+    MemorySegment previous = this.badgeIcon;
+    this.badgeIcon = count == 0 ? null : User32.iconFromPng(BadgeImage.png(count));
+    this.windowHandles().forEach(this::decorateTaskbarButton);
+    if (previous != null) {
+      User32.destroyIcon(previous);
+    }
+  }
+
+  /**
+   * Shows the progress and the badge of the application on the button of {@code hwnd}, as the
+   * taskbar tells a window once its button exists, and as they change. Runs on the UI thread.
+   */
+  void decorateTaskbarButton(MemorySegment hwnd) {
+    TaskbarProgress progress = this.progress();
+    int count = this.badgeCount();
+    if (this.taskbarList == null) {
+      if (!progress.isShown() && count == 0) {
+        return;
+      }
+      this.taskbarList = TaskbarList.create();
+    }
+    TaskbarList.setProgress(
+        this.taskbarList, hwnd, WindowsApplication.progressState(progress), progress.value());
+    TaskbarList.setOverlayIcon(
+        this.taskbarList,
+        hwnd,
+        this.badgeIcon == null ? MemorySegment.NULL : this.badgeIcon,
+        count == 0 ? null : Integer.toString(count));
+  }
+
+  private List<MemorySegment> windowHandles() {
+    return this.windows().stream()
+        .map(WindowsWindow.class::cast)
+        .map(WindowsWindow::handle)
+        .filter(Objects::nonNull)
+        .toList();
+  }
+
+  private static int progressState(TaskbarProgress progress) {
+    return switch (progress.state()) {
+      case NONE -> TaskbarList.PROGRESS_NONE;
+      case NORMAL -> TaskbarList.PROGRESS_NORMAL;
+      case INDETERMINATE -> TaskbarList.PROGRESS_INDETERMINATE;
+      case PAUSED -> TaskbarList.PROGRESS_PAUSED;
+      case ERROR -> TaskbarList.PROGRESS_ERROR;
+    };
+  }
+
+  @Override
   protected void onClose() {
     WindowsNotifier currentNotifier;
     synchronized (this) {
@@ -164,6 +229,18 @@ public class WindowsApplication extends AbstractApplication {
     if (closing != null) {
       this.dispatcher().run(() -> Com.release(closing));
     }
+    this.dispatcher()
+        .run(
+            () -> {
+              if (this.taskbarList != null) {
+                Com.release(this.taskbarList);
+                this.taskbarList = null;
+              }
+              if (this.badgeIcon != null) {
+                User32.destroyIcon(this.badgeIcon);
+                this.badgeIcon = null;
+              }
+            });
   }
 
   private static Path userDataFolder() {

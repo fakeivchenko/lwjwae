@@ -254,6 +254,10 @@ public class Signatures {
   public final FunctionDescriptor MSG_ID_RECT_ID =
       FunctionDescriptor.of(C_POINTER, C_POINTER, C_POINTER, NSRECT, C_POINTER);
 
+  /** {@code id -[receiver selector:NSRect]}. */
+  public final FunctionDescriptor MSG_ID_RECT =
+      FunctionDescriptor.of(C_POINTER, C_POINTER, C_POINTER, NSRECT);
+
   /** {@code void -[receiver selector:NSSize]}. */
   public final FunctionDescriptor MSG_VOID_SIZE =
       FunctionDescriptor.ofVoid(C_POINTER, C_POINTER, NSSIZE);

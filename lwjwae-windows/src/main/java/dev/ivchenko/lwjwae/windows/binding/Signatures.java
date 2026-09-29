@@ -181,6 +181,10 @@ public class Signatures {
   public final FunctionDescriptor INT_POINTER_INT_LONG_LONG =
       FunctionDescriptor.of(C_INT, C_POINTER, C_INT, C_LONG_PTR, C_LONG_PTR);
 
+  /** {@code HRESULT f(T*, HWND, ULONGLONG, ULONGLONG)}: {@code ITaskbarList3::SetProgressValue}. */
+  public final FunctionDescriptor INT_POINTER_POINTER_LONG_LONG =
+      FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_LONG_PTR, C_LONG_PTR);
+
   /** {@code int f(T*, int, int, int, int, U*, V*)}: {@code TrackPopupMenu}. */
   public final FunctionDescriptor INT_POINTER_INT_X4_POINTER_POINTER =
       FunctionDescriptor.of(C_INT, C_POINTER, C_INT, C_INT, C_INT, C_INT, C_POINTER, C_POINTER);

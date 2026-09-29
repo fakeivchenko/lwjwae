@@ -113,6 +113,8 @@ public class ObjC {
       NativeLibraries.downcall(OBJC, "objc_msgSend", Signatures.MSG_ID_ID_ID_LONG_ID);
   private final MethodHandle MSG_ID_RECT_LONG_LONG_BOOL =
       NativeLibraries.downcall(OBJC, "objc_msgSend", Signatures.MSG_ID_RECT_LONG_LONG_BOOL);
+  private final MethodHandle MSG_ID_RECT =
+      NativeLibraries.downcall(OBJC, "objc_msgSend", Signatures.MSG_ID_RECT);
   private final MethodHandle MSG_ID_RECT_ID =
       NativeLibraries.downcall(OBJC, "objc_msgSend", Signatures.MSG_ID_RECT_ID);
   private final MethodHandle MSG_VOID_SIZE =
@@ -423,6 +425,12 @@ public class ObjC {
     return (MemorySegment)
         MSG_ID_RECT_LONG_LONG_BOOL.invokeExact(
             receiver, ObjC.sel(selector), rect, styleMask, backing, defer);
+  }
+
+  /** Sends {@code selector} to {@code receiver}: {@code id -[receiver selector:NSRect]}. */
+  @SneakyThrows
+  public MemorySegment sendWithRect(MemorySegment receiver, String selector, MemorySegment rect) {
+    return (MemorySegment) MSG_ID_RECT.invokeExact(receiver, ObjC.sel(selector), rect);
   }
 
   /** Sends {@code selector} to {@code receiver}: {@code id -[receiver selector:id:id]}. */

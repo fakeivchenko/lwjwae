@@ -98,6 +98,10 @@ public class Dbus {
       NativeLibraries.downcall(GLIB, "g_variant_new_uint32", Signatures.POINTER_INT);
   private final MethodHandle VARIANT_NEW_INT32 =
       NativeLibraries.downcall(GLIB, "g_variant_new_int32", Signatures.POINTER_INT);
+  private final MethodHandle VARIANT_NEW_INT64 =
+      NativeLibraries.downcall(GLIB, "g_variant_new_int64", Signatures.POINTER_LONG);
+  private final MethodHandle VARIANT_NEW_DOUBLE =
+      NativeLibraries.downcall(GLIB, "g_variant_new_double", Signatures.POINTER_DOUBLE);
   private final MethodHandle VARIANT_NEW_VARIANT =
       NativeLibraries.downcall(GLIB, "g_variant_new_variant", Signatures.POINTER_POINTER);
   private final MethodHandle VARIANT_NEW_DICT_ENTRY =
@@ -453,6 +457,18 @@ public class Dbus {
   @SneakyThrows
   public MemorySegment int32(int value) {
     return (MemorySegment) VARIANT_NEW_INT32.invokeExact(value);
+  }
+
+  /** A floating {@code x}. */
+  @SneakyThrows
+  public MemorySegment int64(long value) {
+    return (MemorySegment) VARIANT_NEW_INT64.invokeExact(value);
+  }
+
+  /** A floating {@code d}. */
+  @SneakyThrows
+  public MemorySegment float64(double value) {
+    return (MemorySegment) VARIANT_NEW_DOUBLE.invokeExact(value);
   }
 
   /**

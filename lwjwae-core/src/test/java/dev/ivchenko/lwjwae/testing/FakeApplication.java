@@ -11,6 +11,7 @@ import dev.ivchenko.lwjwae.event.EventSubscription;
 import dev.ivchenko.lwjwae.notification.Notification;
 import dev.ivchenko.lwjwae.notification.NotificationHandle;
 import dev.ivchenko.lwjwae.shortcut.Shortcut;
+import dev.ivchenko.lwjwae.taskbar.TaskbarProgress;
 import dev.ivchenko.lwjwae.tray.Tray;
 import dev.ivchenko.lwjwae.tray.TrayIcon;
 import java.util.List;
@@ -24,6 +25,12 @@ import java.util.function.Consumer;
  * that records what the base classes ask of it.
  */
 public class FakeApplication extends AbstractApplication {
+  /** Every progress that the icon was asked to show. */
+  public final List<TaskbarProgress> shownProgress = new CopyOnWriteArrayList<>();
+
+  /** Every count that the icon was asked to show. */
+  public final List<Integer> shownBadgeCounts = new CopyOnWriteArrayList<>();
+
   public FakeApplication() {
     this(ApplicationParameters.createDefault());
   }
@@ -88,6 +95,16 @@ public class FakeApplication extends AbstractApplication {
 
   /** Every URL that went to the system, in order. */
   public final List<String> launched = new CopyOnWriteArrayList<>();
+
+  @Override
+  protected void showProgress(TaskbarProgress progress) {
+    this.shownProgress.add(progress);
+  }
+
+  @Override
+  protected void showBadgeCount(int count) {
+    this.shownBadgeCounts.add(count);
+  }
 
   @Override
   protected void launchExternal(String url) {

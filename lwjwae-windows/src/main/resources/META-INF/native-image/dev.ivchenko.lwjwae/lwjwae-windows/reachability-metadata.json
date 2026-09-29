@@ -624,6 +624,15 @@
           "void*",
           "jint"
         ]
+      },
+      {
+        "returnType": "jint",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "jlong",
+          "jlong"
+        ]
       }
     ]
   }

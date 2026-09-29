@@ -96,6 +96,9 @@ public class WindowsWindow extends AbstractWindow {
 
   private static volatile boolean windowClassRegistered;
 
+  /** {@code TaskbarButtonCreated}: the taskbar has a button for the window, or has it again. */
+  private static volatile int taskbarButtonCreated;
+
   private final WindowsApplication application;
   private final long callbackId;
   private final CompletableFuture<Void> ready = new CompletableFuture<>();
@@ -1016,6 +1019,11 @@ public class WindowsWindow extends AbstractWindow {
     return this.alive(this.hwnd);
   }
 
+  /** The native window, or {@code null} once it's gone. */
+  MemorySegment handle() {
+    return this.hwnd;
+  }
+
   private MemorySegment view() {
     return this.alive(this.webView);
   }
@@ -1060,6 +1068,7 @@ public class WindowsWindow extends AbstractWindow {
       return;
     }
     User32.registerClass(WINDOW_CLASS, WINDOW_PROC);
+    taskbarButtonCreated = User32.registerMessage("TaskbarButtonCreated");
     windowClassRegistered = true;
   }
 
@@ -1092,6 +1101,9 @@ public class WindowsWindow extends AbstractWindow {
             && window.frame != WindowFrame.FULL
             && !window.fullscreen) {
           return User32.removeFrame(hwnd, wordParameter, longParameter, window.frame);
+        } else if (message == taskbarButtonCreated && taskbarButtonCreated != 0) {
+          window.application.decorateTaskbarButton(hwnd);
+          return 0;
         } else if (message == User32.WM_COMMAND
             && (wordParameter >>> 16) == 0
             && longParameter == 0) {

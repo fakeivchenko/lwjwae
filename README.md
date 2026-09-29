@@ -106,6 +106,10 @@ events need a codec from [lwjwae-codecs](https://github.com/fakeivchenko/lwjwae-
   the page, and roles such as Copy or Quit do what the platform does. `window.contextMenu(...)`
   replaces the menu of a right click on the page; `window.showContextMenu(...)` and
   `lwjwae.menu.popup([...])` open one at the pointer, and the page gets the ID of the entry picked.
+- **Progress and a badge on the icon.** `application.progress(0.4)` shows a bar on the icon of the
+  application, also indeterminate, paused, or failed, and `application.badgeCount(3)` a count, and
+  `lwjwae.taskbar` does both from the page: `ITaskbarList3` on Windows, the Dock on macOS, and the
+  `LauncherEntry` signal of KDE Plasma and the Ubuntu dock on Linux.
 - **Links go to the browser.** A link to another site, `target="_blank"`, and `window.open` open in
   the browser of the system rather than in the window, or wherever `externalLinkHandler` says;
   `Application.openExternal(url)` does the same from Java.

@@ -4,6 +4,7 @@ import dev.ivchenko.lwjwae.event.EventSubscription;
 import dev.ivchenko.lwjwae.notification.Notification;
 import dev.ivchenko.lwjwae.notification.NotificationHandle;
 import dev.ivchenko.lwjwae.shortcut.Shortcut;
+import dev.ivchenko.lwjwae.taskbar.TaskbarProgress;
 import dev.ivchenko.lwjwae.ui.UiDispatcher;
 import java.lang.foreign.MemorySegment;
 import java.util.function.BooleanSupplier;
@@ -13,8 +14,9 @@ import java.util.function.ToIntFunction;
 
 /**
  * What a GTK application has of the desktop beyond its windows, the same on GTK 3 and GTK 4: the
- * notifications, through the notification server, and the global shortcuts, through key grabs on
- * X11 and the portal elsewhere. Each connects on its first use rather than at startup.
+ * notifications, through the notification server, the global shortcuts, through key grabs on X11
+ * and the portal elsewhere, and the progress and the count on its icon, through {@link
+ * LauncherEntry}. Each connects on its first use rather than at startup.
  *
  * <p>Connecting waits for the GTK thread, so it happens outside the lock of this object: an
  * application that quits on the GTK thread takes that lock to close them, and would otherwise wait
@@ -27,6 +29,8 @@ public final class DesktopServices {
   private final BooleanSupplier x11;
   private final Supplier<MemorySegment> xlibDisplay;
   private final ToIntFunction<Runnable> trapped;
+
+  private final LauncherEntry launcherEntry = LauncherEntry.ofThisProcess();
 
   private FreedesktopNotifier notifier;
   private DesktopShortcuts shortcuts;
@@ -113,6 +117,16 @@ public final class DesktopServices {
     }
     return new PortalShortcuts(
         this.dispatcher, this.applicationName == null ? "Application" : this.applicationName);
+  }
+
+  /** Shows {@code progress} on the icon of the application, see {@link LauncherEntry}. */
+  public void showProgress(TaskbarProgress progress) {
+    this.launcherEntry.progress(progress);
+  }
+
+  /** Shows {@code count} on the icon of the application, see {@link LauncherEntry}. */
+  public void showBadgeCount(int count) {
+    this.launcherEntry.count(count);
   }
 
   /** Disconnects both, for good. */
