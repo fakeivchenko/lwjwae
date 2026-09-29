@@ -4,6 +4,7 @@ import dev.ivchenko.lwjwae.foreign.NativeLibraries;
 import java.lang.foreign.Arena;
 import java.lang.foreign.MemoryLayout;
 import java.lang.foreign.MemorySegment;
+import java.lang.foreign.SegmentAllocator;
 import java.lang.foreign.SymbolLookup;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.VarHandle;
@@ -116,6 +117,10 @@ public class ObjC {
       NativeLibraries.downcall(OBJC, "objc_msgSend", Signatures.MSG_ID_RECT_ID);
   private final MethodHandle MSG_VOID_SIZE =
       NativeLibraries.downcall(OBJC, "objc_msgSend", Signatures.MSG_VOID_SIZE);
+  private final MethodHandle MSG_POINT =
+      NativeLibraries.downcall(OBJC, "objc_msgSend", Signatures.MSG_POINT);
+  private final MethodHandle MSG_BOOL_ID_POINT_ID =
+      NativeLibraries.downcall(OBJC, "objc_msgSend", Signatures.MSG_BOOL_ID_POINT_ID);
   private final MethodHandle MSG_OTHER_EVENT =
       NativeLibraries.downcall(OBJC, "objc_msgSend", Signatures.MSG_OTHER_EVENT);
 
@@ -483,6 +488,36 @@ public class ObjC {
   @SneakyThrows
   public void sendVoidSize(MemorySegment receiver, String selector, MemorySegment size) {
     MSG_VOID_SIZE.invokeExact(receiver, ObjC.sel(selector), size);
+  }
+
+  /** Sends {@code selector} to {@code receiver}: {@code NSPoint -[receiver selector]}. */
+  @SneakyThrows
+  public double[] sendPoint(MemorySegment receiver, String selector) {
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment point =
+          (MemorySegment)
+              MSG_POINT.invokeExact((SegmentAllocator) arena, receiver, ObjC.sel(selector));
+      return new double[] {point.get(Signatures.C_DOUBLE, 0), point.get(Signatures.C_DOUBLE, 8)};
+    }
+  }
+
+  /**
+   * Sends {@code selector} to {@code receiver}: {@code BOOL -[receiver selector:id
+   * atLocation:NSPoint inView:id]}.
+   */
+  @SneakyThrows
+  public boolean sendWithPoint(
+      MemorySegment receiver,
+      String selector,
+      MemorySegment first,
+      double x,
+      double y,
+      MemorySegment third) {
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment point = Foundation.size(arena, x, y);
+      return (boolean)
+          MSG_BOOL_ID_POINT_ID.invokeExact(receiver, ObjC.sel(selector), first, point, third);
+    }
   }
 
   /**

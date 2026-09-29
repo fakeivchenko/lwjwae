@@ -133,6 +133,18 @@
           ]
         }
       ]
+    },
+    {
+      "type": "dev.ivchenko.lwjwae.gtk.GtkMenuBuilder",
+      "methods": [
+        {
+          "name": "onActivate",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
+        }
+      ]
     }
   ],
   "resources": [
@@ -288,6 +300,48 @@
           "void*",
           "jint"
         ]
+      },
+      {
+        "returnType": "void*",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "void*",
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "void*",
+          "jint",
+          "jint",
+          "void*"
+        ]
+      },
+      {
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "void*",
+          "jint",
+          "jint",
+          "jint"
+        ]
+      },
+      {
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "jint",
+          "jint",
+          "jint"
+        ]
       }
     ],
     "directUpcalls": [
@@ -438,6 +492,15 @@
         "returnType": "jint",
         "parameterTypes": [
           "void*",
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.gtk.GtkMenuBuilder",
+        "method": "onActivate",
+        "returnType": "void",
+        "parameterTypes": [
           "void*",
           "void*"
         ]

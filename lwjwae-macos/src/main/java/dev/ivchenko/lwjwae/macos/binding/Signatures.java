@@ -258,6 +258,13 @@ public class Signatures {
   public final FunctionDescriptor MSG_VOID_SIZE =
       FunctionDescriptor.ofVoid(C_POINTER, C_POINTER, NSSIZE);
 
+  /** {@code NSPoint -[receiver selector]}: an {@code NSPoint} has the layout of an NSSize. */
+  public final FunctionDescriptor MSG_POINT = FunctionDescriptor.of(NSSIZE, C_POINTER, C_POINTER);
+
+  /** {@code BOOL -[receiver selector:id atLocation:NSPoint inView:id]}. */
+  public final FunctionDescriptor MSG_BOOL_ID_POINT_ID =
+      FunctionDescriptor.of(C_BOOL, C_POINTER, C_POINTER, C_POINTER, NSSIZE, C_POINTER);
+
   /**
    * {@code +[NSEvent
    * otherEventWithType:location:modifierFlags:timestamp:windowNumber:context:subtype:data1:

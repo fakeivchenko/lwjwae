@@ -100,6 +100,12 @@ events need a codec from [lwjwae-codecs](https://github.com/fakeivchenko/lwjwae-
 - **Native dialogs.** `showOpenDialog`, `showSaveDialog`, and `showMessageDialog` on a window, and
   `lwjwae.dialog` on the page: files and folders to open, a file to save, and a message, as the
   platform draws them; on Linux, through the desktop portal, so KDE Plasma shows its own dialog.
+- **Menus.** `application.menu(...)` sets the menu bar: the one at the top of the screen on macOS,
+  after the application menu, and a bar in every window on Windows and Linux, or one of a window's
+  own. Entries have submenus, check marks, and accelerators such as `CmdOrCtrl+S` that come before
+  the page, and roles such as Copy or Quit do what the platform does. `window.contextMenu(...)`
+  replaces the menu of a right click on the page; `window.showContextMenu(...)` and
+  `lwjwae.menu.popup([...])` open one at the pointer, and the page gets the ID of the entry picked.
 - **Links go to the browser.** A link to another site, `target="_blank"`, and `window.open` open in
   the browser of the system rather than in the window, or wherever `externalLinkHandler` says;
   `Application.openExternal(url)` does the same from Java.

@@ -290,7 +290,8 @@
         ].join(separator)).then(({ text }) => Number(text));
     const close = () => callText("${closeCall}", "").then(() => undefined);
 
-    window.${channel} = { receive, bound };
+    // contextMenu: whether the window has a context menu of its own, which Java sets.
+    window.${channel} = { receive, bound, contextMenu: false };
     // The changes of the window: handler({ type, width, height, x, y }), where type is resized,
     // moved, focused, blurred, minimized, unminimized, maximized, unmaximized, fullscreenEntered,
     // or fullscreenExited.
@@ -456,5 +457,39 @@
         writeText: (text) => callText("${clipboardCall}", "write-text" + separator + String(text)).then(done)
     };
 
-    window.${pageApi} = { listen, once, emit, open, close, openExternal, call: callRpc, invoke: rpcInvoke, RpcError, window: windowApi, dialog, clipboard };
+    // Menus over the window. popup(items, { x, y, signal }) opens items at the place in the page,
+    // or at the pointer without one, and resolves to the id of the entry picked, or null; a mouse
+    // event serves as the options. An item is { id, label, enabled, accelerator } with checked for
+    // a check mark, submenu for a list of items, role for a role such as "copy", or
+    // separator: true.
+    const menuRecords = (items, depth, records) => {
+        for (const item of items || []) {
+            const kind = item.separator || item.type === "separator" ? "separator"
+                : Array.isArray(item.submenu) ? "submenu"
+                : item.role ? "role"
+                : typeof item.checked === "boolean" ? "checkbox" : "action";
+            records.push([String(depth), kind, field(item.id ?? item.label), field(item.label),
+                item.enabled === false ? "0" : "1", item.checked ? "1" : "0", field(item.accelerator),
+                field(item.role)].join("\u001d"));
+            if (kind === "submenu") menuRecords(item.submenu, depth + 1, records);
+        }
+        return records;
+    };
+    const place = (options) => [number(options.x ?? options.clientX), number(options.y ?? options.clientY)];
+    const menu = {
+        popup: (items, options = {}) => callMessage("${menuCall}",
+            ["popup", ...place(options), menuRecords(items, 0, []).join("\u001e")].join(separator),
+            { signal: options.signal }, true).then(({ text }) => text === "" ? null : text)
+    };
+    // A right click opens the context menu of the window, where it has one and the page left the
+    // click alone.
+    if (token !== null && window.top === window) {
+        window.addEventListener("contextmenu", (event) => {
+            if (event.defaultPrevented || !window.${channel}.contextMenu) return;
+            event.preventDefault();
+            callText("${menuCall}", ["context", ...place(event)].join(separator)).catch(reportFailure);
+        });
+    }
+
+    window.${pageApi} = { listen, once, emit, open, close, openExternal, call: callRpc, invoke: rpcInvoke, RpcError, window: windowApi, dialog, clipboard, menu };
 })();

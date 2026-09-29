@@ -14,6 +14,8 @@ import dev.ivchenko.lwjwae.dialog.MessageDialogParameters;
 import dev.ivchenko.lwjwae.dialog.OpenDialogParameters;
 import dev.ivchenko.lwjwae.dialog.SaveDialogParameters;
 import dev.ivchenko.lwjwae.event.LoadEvent;
+import dev.ivchenko.lwjwae.menu.MenuCommands;
+import dev.ivchenko.lwjwae.menu.MenuRole;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
@@ -53,6 +55,15 @@ public class FakeWindow extends AbstractWindow {
 
   /** Every drag that the page handed to the window manager: {@code move}, or the resize edge. */
   public final List<String> drags = new CopyOnWriteArrayList<>();
+
+  /** Every menu bar the window was asked to show, the latest last. */
+  public final List<MenuCommands> menuBars = new CopyOnWriteArrayList<>();
+
+  /** Where each context menu opened, in the order of {@link #dialogs}; empty for the pointer. */
+  public final List<Optional<WindowPosition>> menuPlaces = new CopyOnWriteArrayList<>();
+
+  /** Every editing command the window ran on its page. */
+  public final List<MenuRole> edits = new CopyOnWriteArrayList<>();
 
   private String title;
   private int left;
@@ -419,6 +430,28 @@ public class FakeWindow extends AbstractWindow {
   @Override
   public boolean isVisible() {
     return this.shown;
+  }
+
+  @Override
+  protected void presentMenuBar(MenuCommands commands) {
+    this.menuBars.add(commands);
+  }
+
+  @Override
+  protected void presentContextMenu(
+      MenuCommands commands, WindowPosition place, DialogCompletion<Integer> picked) {
+    this.menuPlaces.add(Optional.ofNullable(place));
+    this.present(commands, picked);
+  }
+
+  @Override
+  protected void performEditing(MenuRole role) {
+    this.edits.add(role);
+  }
+
+  /** Picks the entry {@code id} of the menu bar, as a click or an accelerator does. */
+  public void pickFromMenuBar(int id) {
+    this.dispatcher().run(() -> this.menuItemPicked(this.menuBar(), id));
   }
 
   @Override

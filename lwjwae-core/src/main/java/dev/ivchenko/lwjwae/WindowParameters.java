@@ -1,6 +1,8 @@
 package dev.ivchenko.lwjwae;
 
+import dev.ivchenko.lwjwae.menu.MenuItem;
 import dev.ivchenko.lwjwae.util.ResourceUtil;
+import java.util.List;
 import lombok.Builder;
 
 /**
@@ -77,6 +79,8 @@ import lombok.Builder;
  *     frame too, the shadow and the border that would outline the rectangle around that shape, and
  *     the page takes the pointer along every edge of the window, not of the shape, to resize it. A
  *     decorated window keeps its title bar and its frame. Default: {@code false}.
+ * @param menu The menu bar of the window, see {@link Window#menu(List)}, or {@code null} for the
+ *     one of the application. Default: {@code null}.
  */
 @Builder(toBuilder = true)
 public record WindowParameters(
@@ -95,7 +99,8 @@ public record WindowParameters(
     Boolean closable,
     Boolean minimizable,
     Boolean maximizable,
-    boolean transparent) {
+    boolean transparent,
+    List<MenuItem> menu) {
   private static final String DEFAULT_TITLE = "Application";
   private static final WindowSize DEFAULT_SIZE = new WindowSize(1024, 768);
 
@@ -141,6 +146,9 @@ public record WindowParameters(
     }
     if (maximizable == null) {
       maximizable = true;
+    }
+    if (menu != null) {
+      menu = List.copyOf(menu);
     }
   }
 
@@ -219,6 +227,17 @@ public record WindowParameters(
     /** The same as {@link #maximumSize(WindowSize)}. */
     public WindowParametersBuilder maximumSize(int width, int height) {
       return this.maximumSize(new WindowSize(width, height));
+    }
+
+    /** The menu bar of the window, see {@link WindowParameters#menu()}. */
+    public WindowParametersBuilder menu(List<MenuItem> menu) {
+      this.menu = menu;
+      return this;
+    }
+
+    /** The same as {@link #menu(List)}. */
+    public WindowParametersBuilder menu(MenuItem... menu) {
+      return this.menu(List.of(menu));
     }
   }
 }

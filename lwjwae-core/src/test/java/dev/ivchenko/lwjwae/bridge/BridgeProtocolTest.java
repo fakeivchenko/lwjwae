@@ -32,13 +32,14 @@ class BridgeProtocolTest {
     Assertions.assertTrue(
         script.contains("const trustedOrigins = [\"app://local\",\"http://localhost:5173\"];"));
     Assertions.assertTrue(
-        script.contains("window." + BridgeProtocol.CHANNEL + " = { receive, bound };"));
+        script.contains(
+            "window." + BridgeProtocol.CHANNEL + " = { receive, bound, contextMenu: false };"));
     Assertions.assertTrue(
         script.contains(
             "window."
                 + BridgeProtocol.PAGE_API
                 + " = { listen, once, emit, open, close, openExternal, call: callRpc, invoke:"
-                + " rpcInvoke, RpcError, window: windowApi, dialog, clipboard };"));
+                + " rpcInvoke, RpcError, window: windowApi, dialog, clipboard, menu };"));
     for (String reserved :
         List.of(
             BridgeProtocol.EVENT_CALL,
@@ -46,6 +47,7 @@ class BridgeProtocolTest {
             BridgeProtocol.OPEN_CALL,
             BridgeProtocol.CLOSE_CALL,
             BridgeProtocol.CONTROL_CALL,
+            BridgeProtocol.MENU_CALL,
             BridgeProtocol.CLIPBOARD_CALL,
             BridgeProtocol.DIALOG_CALL,
             BridgeProtocol.WINDOW_EVENT)) {

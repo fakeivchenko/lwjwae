@@ -49,27 +49,42 @@ public class XtestKeyboard {
               ValueLayout.JAVA_LONG));
 
   /** Presses the modifiers of {@code shortcut}, its key, and lets them go in reverse. */
-  @SneakyThrows
   public void press(Shortcut shortcut) {
+    List<String> keys = new ArrayList<>();
+    if (shortcut.has(ShortcutModifier.CONTROL)) {
+      keys.add("Control_L");
+    }
+    if (shortcut.has(ShortcutModifier.ALT)) {
+      keys.add("Alt_L");
+    }
+    if (shortcut.has(ShortcutModifier.SHIFT)) {
+      keys.add("Shift_L");
+    }
+    if (shortcut.has(ShortcutModifier.META)) {
+      keys.add("Super_L");
+    }
+    keys.add(KeysymUtil.name(shortcut.key()));
+    XtestKeyboard.chord(keys);
+  }
+
+  /**
+   * Presses and lets go of each of {@code keysyms} in turn, such as {@code Down} and {@code
+   * Return}.
+   */
+  public void tap(String... keysyms) {
+    for (String keysym : keysyms) {
+      XtestKeyboard.chord(List.of(keysym));
+    }
+  }
+
+  /** Presses {@code keys} in order, and lets them go in reverse. */
+  @SneakyThrows
+  private void chord(List<String> keys) {
     MemorySegment display = (MemorySegment) OPEN_DISPLAY.invokeExact(MemorySegment.NULL);
     if (display.equals(MemorySegment.NULL)) {
       throw new IllegalStateException("No X display to press keys on");
     }
     try {
-      List<String> keys = new ArrayList<>();
-      if (shortcut.has(ShortcutModifier.CONTROL)) {
-        keys.add("Control_L");
-      }
-      if (shortcut.has(ShortcutModifier.ALT)) {
-        keys.add("Alt_L");
-      }
-      if (shortcut.has(ShortcutModifier.SHIFT)) {
-        keys.add("Shift_L");
-      }
-      if (shortcut.has(ShortcutModifier.META)) {
-        keys.add("Super_L");
-      }
-      keys.add(KeysymUtil.name(shortcut.key()));
       for (String key : keys) {
         int _ = (int) FAKE_KEY_EVENT.invokeExact(display, X11.keycode(display, key), 1, 0L);
       }

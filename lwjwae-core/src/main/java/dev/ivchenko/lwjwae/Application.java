@@ -8,6 +8,7 @@ import dev.ivchenko.lwjwae.event.SecondInstanceEvent;
 import dev.ivchenko.lwjwae.exception.BackendNotAvailableException;
 import dev.ivchenko.lwjwae.exception.ShortcutUnavailableException;
 import dev.ivchenko.lwjwae.instance.InstanceLock;
+import dev.ivchenko.lwjwae.menu.MenuItem;
 import dev.ivchenko.lwjwae.notification.Notification;
 import dev.ivchenko.lwjwae.notification.NotificationHandle;
 import dev.ivchenko.lwjwae.rpc.RpcHandler;
@@ -458,6 +459,51 @@ public interface Application extends AutoCloseable {
   default Tray tray(String icon, TrayMenuItem... menu) {
     return this.tray(TrayIcon.builder().icon(icon).menu(menu).build());
   }
+
+  /**
+   * Sets the menu bar of the application: a {@link dev.ivchenko.lwjwae.menu.SubmenuItem} for each
+   * menu of the bar, in order. Every window shows it, the ones already open and the ones opened
+   * later, unless it has a menu of its own, see {@link Window#menu(List)}. An empty list takes the
+   * bar away.
+   *
+   * <pre>{@code
+   * application.menu(
+   *     MenuItem.submenu("File", MenuItem.of("Open", "CmdOrCtrl+O", this::open)),
+   *     MenuItem.editMenu());
+   * }</pre>
+   *
+   * <p>The accelerators of the entries work while a window of the application has the keyboard, and
+   * they come before the page: a page that listens to {@code Ctrl+S} itself doesn't hear the {@code
+   * Ctrl+S} of an entry. The keys of an editing {@link dev.ivchenko.lwjwae.menu.MenuRole} stay with
+   * the page.
+   *
+   * <p>Platforms:
+   *
+   * <ul>
+   *   <li>Windows: A menu bar under the title bar of every window, which a window without a title
+   *       bar doesn't show.
+   *   <li>macOS: The menu bar at the top of the screen, which shows the menu of the window in
+   *       front. The application menu, with About, Hide, and Quit, stays first; the menus here
+   *       follow it. Without an Edit menu, such as {@link MenuItem#editMenu()}, a text field of a
+   *       page takes no Command-C, V, X, A, or Z. Before the first call, the bar holds the
+   *       application menu, File, Edit, and Window.
+   *   <li>Linux, GTK 3: A menu bar above the page of every window, which a window without a title
+   *       bar shows too.
+   *   <li>Linux, GTK 4: As on GTK 3.
+   * </ul>
+   *
+   * @throws IllegalArgumentException If an entry of the top level isn't a submenu.
+   * @throws IllegalStateException If the application is closed.
+   */
+  void menu(List<MenuItem> items);
+
+  /** The same as {@link #menu(List)}. */
+  default void menu(MenuItem... items) {
+    this.menu(List.of(items));
+  }
+
+  /** The menu bar of the application, empty for none. */
+  List<MenuItem> menu();
 
   /**
    * Runs {@code handler} whenever the user presses {@code shortcut}, whichever application has the

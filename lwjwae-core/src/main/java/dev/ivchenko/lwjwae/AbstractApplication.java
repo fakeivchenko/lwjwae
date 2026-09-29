@@ -8,6 +8,7 @@ import dev.ivchenko.lwjwae.event.EventSubscription;
 import dev.ivchenko.lwjwae.event.SecondInstanceEvent;
 import dev.ivchenko.lwjwae.exception.ShortcutUnavailableException;
 import dev.ivchenko.lwjwae.instance.InstanceLock;
+import dev.ivchenko.lwjwae.menu.MenuItem;
 import dev.ivchenko.lwjwae.notification.Notification;
 import dev.ivchenko.lwjwae.notification.NotificationHandle;
 import dev.ivchenko.lwjwae.rpc.RpcHandler;
@@ -104,6 +105,7 @@ public abstract class AbstractApplication implements Application {
   private final AtomicBoolean closed = new AtomicBoolean();
 
   private volatile Clipboard clipboard;
+  private volatile List<MenuItem> menu = List.of();
   private final Map<Shortcut, EventSubscription> globalShortcuts = new HashMap<>();
 
   // --- single instance, under the lock of the listener list ---
@@ -154,6 +156,7 @@ public abstract class AbstractApplication implements Application {
     long id = this.windowIds.incrementAndGet();
     AbstractWindow window = this.createWindow(id, parameters);
     window.closeAction(parameters.closeAction());
+    window.initializeMenu(parameters.menu());
     AbstractApplication.applyLimits(window, parameters);
     this.restoreState(window, parameters);
     this.windows.put(id, window);
@@ -395,6 +398,26 @@ public abstract class AbstractApplication implements Application {
     }
     return tray;
   }
+
+  @Override
+  public final void menu(List<MenuItem> items) {
+    List<MenuItem> bar = AbstractWindow.requireMenuBar(items);
+    this.checkOpen();
+    this.menu = bar;
+    this.forEachWindow(AbstractWindow::applicationMenuChanged);
+    this.menuChanged(bar);
+  }
+
+  @Override
+  public final List<MenuItem> menu() {
+    return this.menu;
+  }
+
+  /**
+   * Tells the backend that the menu of the application is now {@code items}, after every window
+   * heard of it. For a platform whose menu bar belongs to the process; nothing by default.
+   */
+  protected void menuChanged(List<MenuItem> items) {}
 
   @Override
   public final EventSubscription globalShortcut(Shortcut shortcut, Runnable handler) {

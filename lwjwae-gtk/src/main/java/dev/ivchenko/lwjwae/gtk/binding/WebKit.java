@@ -44,6 +44,9 @@ public class WebKit {
   private final MethodHandle WEB_VIEW_SET_BACKGROUND_COLOR =
       NativeLibraries.downcall(
           WEBKIT, "webkit_web_view_set_background_color", Signatures.VOID_POINTER_POINTER);
+  private final MethodHandle WEB_VIEW_EXECUTE_EDITING_COMMAND =
+      NativeLibraries.downcall(
+          WEBKIT, "webkit_web_view_execute_editing_command", Signatures.VOID_POINTER_POINTER);
   private final MethodHandle WEB_VIEW_LOAD_URI =
       NativeLibraries.downcall(WEBKIT, "webkit_web_view_load_uri", Signatures.VOID_POINTER_POINTER);
   private final MethodHandle WEB_VIEW_LOAD_HTML =
@@ -314,6 +317,17 @@ public class WebKit {
   public String userAgent(MemorySegment webView) {
     MemorySegment settings = (MemorySegment) WEB_VIEW_GET_SETTINGS.invokeExact(webView);
     return NativeLibraries.string((MemorySegment) SETTINGS_GET_USER_AGENT.invokeExact(settings));
+  }
+
+  /**
+   * Runs an editing command on the page, such as {@code Copy}, {@code Paste}, or {@code SelectAll},
+   * the names of the {@code WEBKIT_EDITING_COMMAND_*} constants.
+   */
+  @SneakyThrows
+  public void executeEditingCommand(MemorySegment webView, String command) {
+    try (Arena arena = Arena.ofConfined()) {
+      WEB_VIEW_EXECUTE_EDITING_COMMAND.invokeExact(webView, arena.allocateFrom(command));
+    }
   }
 
   /** Sets the user agent that {@code webView} sends from its next request on. */

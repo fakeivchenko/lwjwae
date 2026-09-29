@@ -52,4 +52,13 @@ class Keyboard {
       KEYBD_EVENT.invokeExact((byte) key, (byte) 0, KEYEVENTF_KEYUP, 0L);
     }
   }
+
+  /** Presses and lets go of each of {@code virtualKeys} in turn. */
+  @SneakyThrows
+  void tap(int... virtualKeys) {
+    for (int key : virtualKeys) {
+      KEYBD_EVENT.invokeExact((byte) key, (byte) 0, 0, 0L);
+      KEYBD_EVENT.invokeExact((byte) key, (byte) 0, KEYEVENTF_KEYUP, 0L);
+    }
+  }
 }

@@ -214,6 +214,54 @@ public class Gtk {
   private final MethodHandle MENU_POPUP_AT_POINTER =
       NativeLibraries.downcall(GTK, "gtk_menu_popup_at_pointer", Signatures.VOID_POINTER_POINTER);
 
+  // --- menus of a window ---
+  private final MethodHandle MENU_BAR_NEW =
+      NativeLibraries.downcall(GTK, "gtk_menu_bar_new", Signatures.POINTER_VOID);
+  private final MethodHandle CHECK_MENU_ITEM_NEW_WITH_LABEL =
+      NativeLibraries.downcall(
+          GTK, "gtk_check_menu_item_new_with_label", Signatures.POINTER_POINTER);
+  private final MethodHandle CHECK_MENU_ITEM_SET_ACTIVE =
+      NativeLibraries.downcall(GTK, "gtk_check_menu_item_set_active", Signatures.VOID_POINTER_INT);
+  private final MethodHandle MENU_ITEM_SET_SUBMENU =
+      NativeLibraries.downcall(GTK, "gtk_menu_item_set_submenu", Signatures.VOID_POINTER_POINTER);
+  private final MethodHandle MENU_POPUP_AT_RECT =
+      NativeLibraries.downcall(GTK, "gtk_menu_popup_at_rect", Signatures.GTK_MENU_POPUP_AT_RECT);
+  private final MethodHandle MENU_POPDOWN =
+      NativeLibraries.downcall(GTK, "gtk_menu_popdown", Signatures.VOID_POINTER);
+  private final MethodHandle MENU_ATTACH_TO_WIDGET =
+      NativeLibraries.downcall(
+          GTK, "gtk_menu_attach_to_widget", Signatures.VOID_POINTER_POINTER_POINTER);
+  private final MethodHandle ACCEL_GROUP_NEW =
+      NativeLibraries.downcall(GTK, "gtk_accel_group_new", Signatures.POINTER_VOID);
+  private final MethodHandle WINDOW_ADD_ACCEL_GROUP =
+      NativeLibraries.downcall(GTK, "gtk_window_add_accel_group", Signatures.VOID_POINTER_POINTER);
+  private final MethodHandle WINDOW_REMOVE_ACCEL_GROUP =
+      NativeLibraries.downcall(
+          GTK, "gtk_window_remove_accel_group", Signatures.VOID_POINTER_POINTER);
+  private final MethodHandle WIDGET_ADD_ACCELERATOR =
+      NativeLibraries.downcall(
+          GTK, "gtk_widget_add_accelerator", Signatures.GTK_WIDGET_ADD_ACCELERATOR);
+  private final MethodHandle ACCELERATOR_PARSE =
+      NativeLibraries.downcall(
+          GTK, "gtk_accelerator_parse", Signatures.VOID_POINTER_POINTER_POINTER);
+  private final MethodHandle ACCEL_LABEL_SET_ACCEL =
+      NativeLibraries.downcall(GTK, "gtk_accel_label_set_accel", Signatures.VOID_POINTER_INT_INT);
+  private final MethodHandle BIN_GET_CHILD =
+      NativeLibraries.downcall(GTK, "gtk_bin_get_child", Signatures.POINTER_POINTER);
+  private final MethodHandle BOX_PACK_START =
+      NativeLibraries.downcall(
+          GTK, "gtk_box_pack_start", Signatures.VOID_POINTER_POINTER_INT_INT_INT);
+  private final MethodHandle BOX_REORDER_CHILD =
+      NativeLibraries.downcall(GTK, "gtk_box_reorder_child", Signatures.VOID_POINTER_POINTER_INT);
+
+  /** {@code GDK_GRAVITY_NORTH_WEST}: the top left corner. */
+  private final int GRAVITY_NORTH_WEST = 1;
+
+  /** {@code GdkRectangle}: x, y, width, height, each a {@code gint}. */
+  private final MemoryLayout RECTANGLE =
+      MemoryLayout.structLayout(
+          Signatures.C_INT, Signatures.C_INT, Signatures.C_INT, Signatures.C_INT);
+
   // --- GtkStatusIcon: the tray without a StatusNotifier host ---
   private final MethodHandle STATUS_ICON_NEW_FROM_FILE =
       NativeLibraries.downcall(GTK, "gtk_status_icon_new_from_file", Signatures.POINTER_POINTER);
@@ -490,6 +538,9 @@ public class Gtk {
 
   /** {@code GTK_ORIENTATION_HORIZONTAL}. */
   public final int ORIENTATION_HORIZONTAL = 0;
+
+  /** {@code GTK_ORIENTATION_VERTICAL}. */
+  public final int ORIENTATION_VERTICAL = 1;
 
   /**
    * Calls {@code gtk_window_set_titlebar}: the widget takes the place of the title bar, and the
@@ -862,5 +913,127 @@ public class Gtk {
   public MemorySegment clipboardWaitForImage() {
     MemorySegment clipboard = (MemorySegment) CLIPBOARD_GET.invokeExact(SELECTION_CLIPBOARD);
     return (MemorySegment) CLIPBOARD_WAIT_FOR_IMAGE.invokeExact(clipboard);
+  }
+
+  /** Calls {@code gtk_menu_bar_new}. The bar is floating until a container takes it. */
+  @SneakyThrows
+  public MemorySegment menuBarNew() {
+    return (MemorySegment) MENU_BAR_NEW.invokeExact();
+  }
+
+  /** Calls {@code gtk_check_menu_item_new_with_label}. */
+  @SneakyThrows
+  public MemorySegment checkMenuItemNewWithLabel(String label) {
+    try (Arena arena = Arena.ofConfined()) {
+      return (MemorySegment) CHECK_MENU_ITEM_NEW_WITH_LABEL.invokeExact(arena.allocateFrom(label));
+    }
+  }
+
+  /** Calls {@code gtk_check_menu_item_set_active}, which activates the item on a change. */
+  @SneakyThrows
+  public void checkMenuItemSetActive(MemorySegment item, boolean active) {
+    CHECK_MENU_ITEM_SET_ACTIVE.invokeExact(item, active ? 1 : 0);
+  }
+
+  /** Calls {@code gtk_menu_item_set_submenu}: the item takes the floating menu. */
+  @SneakyThrows
+  public void menuItemSetSubmenu(MemorySegment item, MemorySegment submenu) {
+    MENU_ITEM_SET_SUBMENU.invokeExact(item, submenu);
+  }
+
+  /**
+   * Calls {@code gtk_menu_popup_at_rect} with the top left corner of the menu at {@code x}, {@code
+   * y} in {@code gdkWindow}, and no trigger event.
+   */
+  @SneakyThrows
+  public void menuPopupAt(MemorySegment menu, MemorySegment gdkWindow, int x, int y) {
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment rectangle = arena.allocate(RECTANGLE);
+      rectangle.set(Signatures.C_INT, 0, x);
+      rectangle.set(Signatures.C_INT, 4, y);
+      rectangle.set(Signatures.C_INT, 8, 1);
+      rectangle.set(Signatures.C_INT, 12, 1);
+      MENU_POPUP_AT_RECT.invokeExact(
+          menu, gdkWindow, rectangle, GRAVITY_NORTH_WEST, GRAVITY_NORTH_WEST, MemorySegment.NULL);
+    }
+  }
+
+  /** Calls {@code gtk_menu_popdown}. */
+  @SneakyThrows
+  public void menuPopdown(MemorySegment menu) {
+    MENU_POPDOWN.invokeExact(menu);
+  }
+
+  /**
+   * Calls {@code gtk_menu_attach_to_widget}: the menu belongs to the window of {@code widget}, and
+   * goes when the widget does.
+   */
+  @SneakyThrows
+  public void menuAttachToWidget(MemorySegment menu, MemorySegment widget) {
+    MENU_ATTACH_TO_WIDGET.invokeExact(menu, widget, MemorySegment.NULL);
+  }
+
+  /** Calls {@code gtk_accel_group_new}. The caller owns the group. */
+  @SneakyThrows
+  public MemorySegment accelGroupNew() {
+    return (MemorySegment) ACCEL_GROUP_NEW.invokeExact();
+  }
+
+  /** Calls {@code gtk_window_add_accel_group}, which takes a reference of its own. */
+  @SneakyThrows
+  public void windowAddAccelGroup(MemorySegment window, MemorySegment group) {
+    WINDOW_ADD_ACCEL_GROUP.invokeExact(window, group);
+  }
+
+  /** Calls {@code gtk_window_remove_accel_group}. */
+  @SneakyThrows
+  public void windowRemoveAccelGroup(MemorySegment window, MemorySegment group) {
+    WINDOW_REMOVE_ACCEL_GROUP.invokeExact(window, group);
+  }
+
+  /**
+   * Calls {@code gtk_widget_add_accelerator} for {@code activate}, without showing it: the label of
+   * the item shows the keys already.
+   */
+  @SneakyThrows
+  public void widgetAddActivateAccelerator(
+      MemorySegment widget, MemorySegment group, int key, int modifiers) {
+    try (Arena arena = Arena.ofConfined()) {
+      WIDGET_ADD_ACCELERATOR.invokeExact(
+          widget, arena.allocateFrom("activate"), group, key, modifiers, 0);
+    }
+  }
+
+  /**
+   * Calls {@code gtk_accelerator_parse}: {@code {key, modifiers}} of an accelerator such as {@code
+   * <Control>s}, {@code {0, 0}} for one that GTK can't read.
+   */
+  @SneakyThrows
+  public int[] acceleratorParse(String accelerator) {
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment key = arena.allocate(Signatures.C_INT);
+      MemorySegment modifiers = arena.allocate(Signatures.C_INT);
+      ACCELERATOR_PARSE.invokeExact(arena.allocateFrom(accelerator), key, modifiers);
+      return new int[] {key.get(Signatures.C_INT, 0), modifiers.get(Signatures.C_INT, 0)};
+    }
+  }
+
+  /** Shows {@code key} and {@code modifiers} on the label of the menu item {@code item}. */
+  @SneakyThrows
+  public void menuItemShowAccelerator(MemorySegment item, int key, int modifiers) {
+    MemorySegment label = (MemorySegment) BIN_GET_CHILD.invokeExact(item);
+    ACCEL_LABEL_SET_ACCEL.invokeExact(label, key, modifiers);
+  }
+
+  /** Calls {@code gtk_box_pack_start}. */
+  @SneakyThrows
+  public void boxPackStart(MemorySegment box, MemorySegment child, boolean expand) {
+    BOX_PACK_START.invokeExact(box, child, expand ? 1 : 0, expand ? 1 : 0, 0);
+  }
+
+  /** Calls {@code gtk_box_reorder_child}. */
+  @SneakyThrows
+  public void boxReorderChild(MemorySegment box, MemorySegment child, int position) {
+    BOX_REORDER_CHILD.invokeExact(box, child, position);
   }
 }

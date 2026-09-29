@@ -67,7 +67,7 @@ public class User32 {
   public final int WM_CLOSE = 0x0010;
   public final int WM_GETMINMAXINFO = 0x0024;
   public final int WM_NCCALCSIZE = 0x0083;
-  private final int WM_COMMAND = 0x0111;
+  public final int WM_COMMAND = 0x0111;
   private final int WM_NCLBUTTONDOWN = 0x00A1;
 
   // --- hit-test codes of WM_NCHITTEST, what a press on the frame means ---
@@ -95,6 +95,27 @@ public class User32 {
 
   public final int MF_GRAYED = 0x0001;
   public final int MF_SEPARATOR = 0x0800;
+  private final int MF_CHECKED = 0x0008;
+  private final int MF_POPUP = 0x0010;
+
+  /** {@code WM_KEYDOWN}, {@code WM_SYSKEYDOWN}: a key pressed, alone or with Alt. */
+  public final int WM_KEYDOWN = 0x0100;
+
+  /** The virtual keys of the modifiers, and of the keys of the editing commands. */
+  public final int VK_CONTROL = 0x11;
+
+  public final int VK_MENU = 0x12;
+  public final int VK_SHIFT = 0x10;
+  public final int VK_LWIN = 0x5B;
+  public final int VK_RWIN = 0x5C;
+
+  public final int WM_SYSKEYDOWN = 0x0104;
+
+  /** {@code INPUT_KEYBOARD}, {@code KEYEVENTF_KEYUP}, and the size of an {@code INPUT} on x64. */
+  private final int INPUT_KEYBOARD = 1;
+
+  private final int KEYEVENTF_KEYUP = 0x0002;
+  private final int INPUT_SIZE = 40;
 
   /**
    * {@code TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_NONOTIFY}: the menu answers with the entry picked.
@@ -198,6 +219,24 @@ public class User32 {
       NativeLibraries.downcall(USER32, "DestroyMenu", Signatures.INT_POINTER);
   private final MethodHandle GET_CURSOR_POS =
       NativeLibraries.downcall(USER32, "GetCursorPos", Signatures.INT_POINTER);
+  private final MethodHandle CREATE_MENU =
+      NativeLibraries.downcall(USER32, "CreateMenu", Signatures.POINTER_VOID);
+  private final MethodHandle SET_MENU =
+      NativeLibraries.downcall(USER32, "SetMenu", Signatures.INT_POINTER_POINTER);
+  private final MethodHandle GET_MENU =
+      NativeLibraries.downcall(USER32, "GetMenu", Signatures.POINTER_POINTER);
+  private final MethodHandle CHECK_MENU_ITEM =
+      NativeLibraries.downcall(USER32, "CheckMenuItem", Signatures.INT_POINTER_INT_INT);
+  private final MethodHandle END_MENU =
+      NativeLibraries.downcall(USER32, "EndMenu", Signatures.INT_VOID);
+  private final MethodHandle CLIENT_TO_SCREEN =
+      NativeLibraries.downcall(USER32, "ClientToScreen", Signatures.INT_POINTER_POINTER);
+  private final MethodHandle GET_DPI_FOR_WINDOW =
+      NativeLibraries.downcall(USER32, "GetDpiForWindow", Signatures.INT_POINTER);
+  private final MethodHandle GET_KEY_STATE =
+      NativeLibraries.downcall(USER32, "GetKeyState", Signatures.SHORT_INT);
+  private final MethodHandle SEND_INPUT =
+      NativeLibraries.downcall(USER32, "SendInput", Signatures.INT_INT_POINTER_INT);
   private final MethodHandle GET_ASYNC_KEY_STATE =
       NativeLibraries.downcall(USER32, "GetAsyncKeyState", Signatures.SHORT_INT);
   private final MethodHandle RELEASE_CAPTURE =
@@ -543,6 +582,19 @@ public class User32 {
     }
   }
 
+  /**
+   * Calls {@code AppendMenuW} with a text entry that answers with {@code id}, grayed out unless
+   * {@code enabled}, and with a check mark when {@code checked}.
+   */
+  @SneakyThrows
+  public void appendMenuItem(
+      MemorySegment menu, int id, String label, boolean enabled, boolean checked) {
+    try (Arena arena = Arena.ofConfined()) {
+      int flags = MF_STRING | (enabled ? 0 : MF_GRAYED) | (checked ? MF_CHECKED : 0);
+      int _ = (int) APPEND_MENU.invokeExact(menu, flags, (long) id, Wide.allocate(arena, label));
+    }
+  }
+
   /** Calls {@code AppendMenuW} with a separator. */
   @SneakyThrows
   public void appendMenuSeparator(MemorySegment menu) {
@@ -569,6 +621,114 @@ public class User32 {
               owner,
               MemorySegment.NULL);
     }
+  }
+
+  /** Calls {@code CreateMenu}: an empty menu bar, which {@link #destroyMenu} frees. */
+  @SneakyThrows
+  public MemorySegment createMenu() {
+    return (MemorySegment) CREATE_MENU.invokeExact();
+  }
+
+  /** Calls {@code AppendMenuW} with an entry that opens {@code submenu}, which it then owns. */
+  @SneakyThrows
+  public void appendSubmenu(
+      MemorySegment menu, MemorySegment submenu, String label, boolean enabled) {
+    try (Arena arena = Arena.ofConfined()) {
+      int flags = MF_POPUP | (enabled ? 0 : MF_GRAYED);
+      int _ =
+          (int)
+              APPEND_MENU.invokeExact(menu, flags, submenu.address(), Wide.allocate(arena, label));
+    }
+  }
+
+  /** Puts a check mark on the entry {@code id} of {@code menu} or its submenus, or takes it off. */
+  @SneakyThrows
+  public void checkMenuItem(MemorySegment menu, int id, boolean checked) {
+    int _ = (int) CHECK_MENU_ITEM.invokeExact(menu, id, checked ? MF_CHECKED : 0);
+  }
+
+  /**
+   * Calls {@code SetMenu}: {@code menu} becomes the menu bar of the window, {@code NULL} takes it
+   * away. The menu before stays, for the caller to destroy.
+   */
+  @SneakyThrows
+  public void setMenu(MemorySegment hwnd, MemorySegment menu) {
+    int _ = (int) SET_MENU.invokeExact(hwnd, menu);
+  }
+
+  /** Whether the window has a menu bar. */
+  @SneakyThrows
+  public boolean hasMenu(MemorySegment hwnd) {
+    return !MemorySegment.NULL.equals((MemorySegment) GET_MENU.invokeExact(hwnd));
+  }
+
+  /** Calls {@code EndMenu}: closes the menu that is open on this thread. */
+  @SneakyThrows
+  public void endMenu() {
+    int _ = (int) END_MENU.invokeExact();
+  }
+
+  /**
+   * Shows {@code menu} with its top left corner at {@code x}, {@code y} in the client area of
+   * {@code owner}, in physical pixels, and waits for the user.
+   *
+   * @return The ID of the entry picked, or 0 when the menu was dismissed.
+   */
+  @SneakyThrows
+  public int trackPopupMenuAt(MemorySegment menu, MemorySegment owner, int x, int y) {
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment point = arena.allocate(Signatures.POINT);
+      point.set(Signatures.C_INT, 0, x);
+      point.set(Signatures.C_INT, 4, y);
+      int _ = (int) CLIENT_TO_SCREEN.invokeExact(owner, point);
+      return (int)
+          TRACK_POPUP_MENU.invokeExact(
+              menu,
+              TPM_RETURNCMD_RIGHTBUTTON,
+              point.get(Signatures.C_INT, 0),
+              point.get(Signatures.C_INT, 4),
+              0,
+              owner,
+              MemorySegment.NULL);
+    }
+  }
+
+  /** The scale of the window: its DPI over 96. */
+  @SneakyThrows
+  public double scale(MemorySegment hwnd) {
+    int dpi = (int) GET_DPI_FOR_WINDOW.invokeExact(hwnd);
+    return dpi == 0 ? 1 : dpi / 96.0;
+  }
+
+  /** Whether the key {@code virtualKey} is down, as the message being handled saw it. */
+  @SneakyThrows
+  public boolean isKeyDown(int virtualKey) {
+    return ((short) GET_KEY_STATE.invokeExact(virtualKey) & 0x8000) != 0;
+  }
+
+  /**
+   * Presses {@code virtualKeys} in order and lets them go in reverse, with {@code SendInput}, as
+   * the keyboard would: into the window with the focus.
+   */
+  @SneakyThrows
+  public void sendKeys(int... virtualKeys) {
+    try (Arena arena = Arena.ofConfined()) {
+      int count = virtualKeys.length * 2;
+      MemorySegment inputs = arena.allocate((long) INPUT_SIZE * count, 8);
+      for (int index = 0; index < virtualKeys.length; index++) {
+        User32.keyInput(inputs, index, virtualKeys[index], false);
+        User32.keyInput(inputs, count - 1 - index, virtualKeys[index], true);
+      }
+      int _ = (int) SEND_INPUT.invokeExact(count, inputs, INPUT_SIZE);
+    }
+  }
+
+  /** Writes a {@code KEYBDINPUT} at {@code index}: {@code wVk} at 8, {@code dwFlags} at 12. */
+  private void keyInput(MemorySegment inputs, int index, int virtualKey, boolean up) {
+    long offset = (long) INPUT_SIZE * index;
+    inputs.set(Signatures.C_INT, offset, INPUT_KEYBOARD);
+    inputs.set(ValueLayout.JAVA_SHORT, offset + 8, (short) virtualKey);
+    inputs.set(Signatures.C_INT, offset + 12, up ? KEYEVENTF_KEYUP : 0);
   }
 
   /** Calls {@code DestroyMenu}. */
@@ -967,7 +1127,8 @@ public class User32 {
       MemorySegment rect = arena.allocate(Signatures.RECT);
       RECT_RIGHT.set(rect, 0L, width);
       RECT_BOTTOM.set(rect, 0L, height);
-      int _ = (int) ADJUST_WINDOW_RECT_EX.invokeExact(rect, (int) User32.style(hwnd), 0, 0);
+      int menu = frame == WindowFrame.FULL && User32.hasMenu(hwnd) ? 1 : 0;
+      int _ = (int) ADJUST_WINDOW_RECT_EX.invokeExact(rect, (int) User32.style(hwnd), menu, 0);
       return new int[] {
         (int) RECT_RIGHT.get(rect, 0L) - (int) RECT_LEFT.get(rect, 0L),
         (int) RECT_BOTTOM.get(rect, 0L)

@@ -5,6 +5,7 @@ import dev.ivchenko.lwjwae.bridge.ExchangeRpcCall;
 import dev.ivchenko.lwjwae.bridge.MessageRpcCalls;
 import dev.ivchenko.lwjwae.bridge.MessageRpcExchange;
 import dev.ivchenko.lwjwae.bridge.PageEvents;
+import dev.ivchenko.lwjwae.bridge.PageMenu;
 import dev.ivchenko.lwjwae.bridge.RpcMessageChannel;
 import dev.ivchenko.lwjwae.bridge.codec.BridgeCodec;
 import dev.ivchenko.lwjwae.clipboard.Clipboard;
@@ -17,11 +18,19 @@ import dev.ivchenko.lwjwae.event.EventSubscription;
 import dev.ivchenko.lwjwae.event.LoadEvent;
 import dev.ivchenko.lwjwae.event.WindowEvent;
 import dev.ivchenko.lwjwae.event.WindowEvents;
+import dev.ivchenko.lwjwae.menu.ActionMenuItem;
+import dev.ivchenko.lwjwae.menu.CheckMenuItem;
+import dev.ivchenko.lwjwae.menu.MenuCommands;
+import dev.ivchenko.lwjwae.menu.MenuItem;
+import dev.ivchenko.lwjwae.menu.MenuRole;
+import dev.ivchenko.lwjwae.menu.RoleMenuItem;
+import dev.ivchenko.lwjwae.menu.SubmenuItem;
 import dev.ivchenko.lwjwae.rpc.RpcCall;
 import dev.ivchenko.lwjwae.rpc.RpcException;
 import dev.ivchenko.lwjwae.rpc.RpcExchange;
 import dev.ivchenko.lwjwae.rpc.RpcHandler;
 import dev.ivchenko.lwjwae.ui.UiDispatcher;
+import dev.ivchenko.lwjwae.util.HandlerUtil;
 import dev.ivchenko.lwjwae.util.ResourceUtil;
 import dev.ivchenko.lwjwae.util.ScriptUtil;
 import dev.ivchenko.lwjwae.util.ThrowableUtil;
@@ -94,6 +103,12 @@ public abstract class AbstractWindow implements Window {
   private final boolean maximizable;
 
   private volatile MessageRpcCalls messageCalls;
+
+  /** The menu bar of this window alone, or {@code null} for the one of the application. */
+  private volatile List<MenuItem> ownMenu;
+
+  private volatile MenuCommands menuBar = MenuCommands.empty();
+  private volatile MenuCommands contextMenu;
 
   private volatile boolean closed;
   private volatile CloseAction closeAction = CloseAction.CLOSE;
@@ -364,6 +379,7 @@ public abstract class AbstractWindow implements Window {
       case BridgeProtocol.CONTROL_CALL -> this::controlFromPage;
       case BridgeProtocol.CLIPBOARD_CALL -> this::clipboardFromPage;
       case BridgeProtocol.DIALOG_CALL -> this::dialogFromPage;
+      case BridgeProtocol.MENU_CALL -> this::menuFromPage;
       default -> null;
     };
   }
@@ -664,6 +680,252 @@ public abstract class AbstractWindow implements Window {
       call.reply(answer.get());
     } catch (InterruptedException e) {
       dialog.cancel(false);
+      throw e;
+    }
+  }
+
+  @Override
+  public final List<MenuItem> menu() {
+    List<MenuItem> own = this.ownMenu;
+    return own != null ? own : this.application.menu();
+  }
+
+  @Override
+  public final void menu(List<MenuItem> items) {
+    List<MenuItem> bar = AbstractWindow.requireMenuBar(items);
+    this.checkOpen();
+    this.ownMenu = bar;
+    this.refreshMenuBar();
+  }
+
+  @Override
+  public final void useApplicationMenu() {
+    this.checkOpen();
+    this.ownMenu = null;
+    this.refreshMenuBar();
+  }
+
+  /**
+   * Starts with the menu bar of {@code parameters}, or the one of the application. The application
+   * calls this once, as it opens the window.
+   */
+  final void initializeMenu(List<MenuItem> items) {
+    this.ownMenu = items == null ? null : AbstractWindow.requireMenuBar(items);
+    if (!this.menu().isEmpty()) {
+      this.refreshMenuBar();
+    }
+  }
+
+  /** The menu of the application changed: this window shows it, unless it has one of its own. */
+  final void applicationMenuChanged() {
+    if (this.ownMenu == null) {
+      this.refreshMenuBar();
+    }
+  }
+
+  /**
+   * The menu bar that the window shows. A backend asks, on the UI thread, when it needs the bar
+   * again, as macOS does when the window comes to the front.
+   */
+  protected final MenuCommands menuBar() {
+    return this.menuBar;
+  }
+
+  /** Builds the bar from the menu of this moment, on the UI thread, so the last change wins. */
+  private void refreshMenuBar() {
+    this.dispatcher()
+        .run(
+            () -> {
+              if (this.closed) {
+                return;
+              }
+              MenuCommands commands = new MenuCommands(this.menu());
+              this.menuBar = commands;
+              this.presentMenuBar(commands);
+            });
+  }
+
+  /**
+   * A copy of {@code items} as a menu bar.
+   *
+   * @throws IllegalArgumentException If an entry isn't a submenu.
+   */
+  static List<MenuItem> requireMenuBar(List<MenuItem> items) {
+    Objects.requireNonNull(items, "items");
+    for (MenuItem item : items) {
+      if (!(item instanceof SubmenuItem)) {
+        throw new IllegalArgumentException("A menu bar holds submenus only, not " + item);
+      }
+    }
+    return List.copyOf(items);
+  }
+
+  @Override
+  public final void contextMenu(List<MenuItem> items) {
+    Objects.requireNonNull(items, "items");
+    this.checkOpen();
+    this.contextMenu = items.isEmpty() ? null : new MenuCommands(items);
+    // Once for documents loaded from now on, once for the document already on screen.
+    String flag =
+        "if (window.%s) window.%s.contextMenu = %b;"
+            .formatted(BridgeProtocol.CHANNEL, BridgeProtocol.CHANNEL, !items.isEmpty());
+    this.injectOnDocumentStart(flag);
+    this.eval(flag);
+  }
+
+  @Override
+  public final CompletableFuture<Void> showContextMenu(List<MenuItem> items) {
+    return AbstractWindow.following(this.popUp(new MenuCommands(items), null), _ -> null);
+  }
+
+  /**
+   * Opens {@code commands} at {@code place} in the page, or at the pointer for {@code null}, and
+   * completes with the number of the entry picked, 0 for none, once that entry has started.
+   */
+  private CompletableFuture<Integer> popUp(MenuCommands commands, WindowPosition place) {
+    CompletableFuture<Integer> shown =
+        this.showDialog(completion -> this.presentContextMenu(commands, place, completion));
+    return AbstractWindow.following(
+        shown,
+        id -> {
+          this.menuItemPicked(commands, id);
+          return id;
+        });
+  }
+
+  /**
+   * {@code source} with its result turned by {@code then}, where canceling the result cancels
+   * {@code source} too, which closes the menu, as canceling {@code source} itself does.
+   */
+  private static <T, R> CompletableFuture<R> following(
+      CompletableFuture<T> source, Function<T, R> then) {
+    CompletableFuture<R> result = source.thenApply(then);
+    result.whenComplete(
+        (_, _) -> {
+          if (result.isCancelled()) {
+            source.cancel(false);
+          }
+        });
+    return result;
+  }
+
+  /**
+   * Does what the entry {@code id} of {@code commands} does: runs its action off the UI thread,
+   * flips its check mark, or plays its role. A backend calls this for a pick of the menu bar and
+   * for its accelerators; 0 and a number of no entry do nothing.
+   */
+  protected final void menuItemPicked(MenuCommands commands, int id) {
+    switch (commands.item(id)) {
+      case ActionMenuItem action -> HandlerUtil.runOffTheUiThread(action.action());
+      case CheckMenuItem check -> {
+        boolean state = commands.toggle(id);
+        if (check.onToggle() != null) {
+          HandlerUtil.runOffTheUiThread(() -> check.onToggle().accept(state));
+        }
+      }
+      case RoleMenuItem role -> this.play(role.role());
+      case null, default -> {}
+    }
+  }
+
+  /**
+   * Plays {@code role} on this window. An editing role waits for the menu to close, which gives the
+   * keyboard back to the page, on the UI thread; the rest run off it, like an action.
+   */
+  private void play(MenuRole role) {
+    if (role.isEditing()) {
+      this.dispatcher()
+          .post(
+              () -> {
+                if (!this.closed) {
+                  this.performEditing(role);
+                }
+              });
+      return;
+    }
+    HandlerUtil.runOffTheUiThread(
+        switch (role) {
+          case CLOSE_WINDOW -> this::requestClose;
+          case MINIMIZE -> this::minimize;
+          case FULLSCREEN -> () -> this.fullscreen(!this.isFullscreen());
+          case QUIT -> this.application::quit;
+          case UNDO, REDO, CUT, COPY, PASTE, SELECT_ALL ->
+              throw new IllegalStateException("An editing role: " + role);
+        });
+  }
+
+  /**
+   * Shows {@code commands} as the menu bar of the window, on the UI thread, in place of the one
+   * before; an empty menu takes the bar away. The backend reports a pick and an accelerator to
+   * {@link #menuItemPicked}.
+   */
+  protected abstract void presentMenuBar(MenuCommands commands);
+
+  /**
+   * Opens {@code commands} as a menu over the window, on the UI thread: at {@code place}, in the
+   * pixels of the page from its top left corner, or at the pointer for {@code null}. The backend
+   * registers how to close it with {@link DialogCompletion#onCancel} and completes {@code picked}
+   * with the number of the entry picked, 0 for none, once the menu is closed; the core does what
+   * the entry does.
+   */
+  protected abstract void presentContextMenu(
+      MenuCommands commands, WindowPosition place, DialogCompletion<Integer> picked);
+
+  /** Runs the editing command of {@code role} on the page, on the UI thread. */
+  protected abstract void performEditing(MenuRole role);
+
+  /**
+   * {@code window.lwjwae.menu} and the context menu of the page: the body is {@code context} or
+   * {@code popup}, the place, and for a popup the entries, see {@link BridgeProtocol#parseMenu}. A
+   * popup answers with the ID that the page gave the entry picked, empty for none. A page that
+   * abandons the call closes the menu.
+   */
+  private void menuFromPage(RpcCall call) throws Exception {
+    String[] parts = call.text().split(BridgeProtocol.SEPARATOR, 4);
+    if (parts.length < 3) {
+      throw RpcException.badRequest("malformed-menu", "Malformed menu");
+    }
+    WindowPosition place;
+    try {
+      place =
+          parts[1].isEmpty() || parts[2].isEmpty()
+              ? null
+              : new WindowPosition(Integer.parseInt(parts[1]), Integer.parseInt(parts[2]));
+    } catch (NumberFormatException _) {
+      throw RpcException.badRequest(
+          "malformed-menu", "Malformed place: " + parts[1] + ", " + parts[2]);
+    }
+    MenuCommands commands;
+    Map<MenuItem, String> pageIds;
+    switch (parts[0]) {
+      case "context" -> {
+        commands = this.contextMenu;
+        pageIds = Map.of();
+      }
+      case "popup" -> {
+        PageMenu menu = parts.length < 4 ? null : BridgeProtocol.parseMenu(parts[3]);
+        if (menu == null) {
+          throw RpcException.badRequest("malformed-menu", "Malformed entries");
+        }
+        commands = new MenuCommands(menu.items());
+        pageIds = menu.pageIds();
+      }
+      default -> throw RpcException.badRequest("malformed-menu", "Malformed menu: " + parts[0]);
+    }
+    if (commands == null || commands.isEmpty()) {
+      call.reply("");
+      return;
+    }
+    CompletableFuture<Integer> picked = this.popUp(commands, place);
+    // A page that gives the call up interrupts this thread.
+    try {
+      if (call.isCancelled()) {
+        throw new InterruptedException();
+      }
+      MenuItem item = commands.item(picked.get());
+      call.reply(item == null ? "" : pageIds.getOrDefault(item, ""));
+    } catch (InterruptedException e) {
+      picked.cancel(false);
       throw e;
     }
   }

@@ -18,10 +18,13 @@ import dev.ivchenko.lwjwae.foreign.NativeLibraries;
 import dev.ivchenko.lwjwae.glib.PortalShortcuts;
 import dev.ivchenko.lwjwae.glib.binding.Glib;
 import dev.ivchenko.lwjwae.glib.util.DecorationLayoutUtil;
+import dev.ivchenko.lwjwae.glib.util.WebKitEditingUtil;
 import dev.ivchenko.lwjwae.gtk.binding.Gdk;
 import dev.ivchenko.lwjwae.gtk.binding.Gtk;
 import dev.ivchenko.lwjwae.gtk.binding.Signatures;
 import dev.ivchenko.lwjwae.gtk.binding.WebKit;
+import dev.ivchenko.lwjwae.menu.MenuCommands;
+import dev.ivchenko.lwjwae.menu.MenuRole;
 import dev.ivchenko.lwjwae.rpc.RpcExchange;
 import dev.ivchenko.lwjwae.util.ThrowableUtil;
 import java.lang.foreign.MemorySegment;
@@ -139,6 +142,15 @@ public class GtkWindow extends AbstractWindow {
   private volatile MemorySegment userContentManager;
   private volatile MemorySegment headerBar;
 
+  /** The box that holds the menu bar, if any, above the web view. */
+  private volatile MemorySegment box;
+
+  /** The group that the keys of the menu bar go to, which the window owns. */
+  private volatile MemorySegment accelGroup;
+
+  private volatile MemorySegment menuBarWidget;
+  private volatile GtkMenuBuilder menuBarBuilder;
+
   // GTK keeps these without a getter, so the window remembers what it asked for.
   private volatile WindowSize minimumSize = WindowSize.NONE;
   private volatile WindowSize maximumSize = WindowSize.NONE;
@@ -216,7 +228,12 @@ public class GtkWindow extends AbstractWindow {
       WebKit.setTransparentBackground(newWebView);
     }
     WebKit.setUserAgent(newWebView, this.userAgent(WebKit.userAgent(newWebView)));
-    Gtk.containerAdd(newWindow, newWebView);
+    MemorySegment newBox = Gtk.boxNew(Gtk.ORIENTATION_VERTICAL, 0);
+    Gtk.boxPackStart(newBox, newWebView, true);
+    Gtk.containerAdd(newWindow, newBox);
+    MemorySegment group = Gtk.accelGroupNew();
+    Gtk.windowAddAccelGroup(newWindow, group);
+    Glib.unref(group);
 
     Glib.signalConnect(newWindow, "delete-event", ON_DELETE_EVENT, userData);
     Glib.signalConnect(newWindow, "destroy", ON_DESTROY, userData);
@@ -232,6 +249,8 @@ public class GtkWindow extends AbstractWindow {
 
     this.window = newWindow;
     this.webView = newWebView;
+    this.box = newBox;
+    this.accelGroup = group;
     BY_WEB_VIEW.put(newWebView.address(), this);
     this.userContentManager = manager;
     this.installBridge();
@@ -465,6 +484,67 @@ public class GtkWindow extends AbstractWindow {
   }
 
   @Override
+  protected void presentMenuBar(MenuCommands commands) {
+    MemorySegment previous = this.menuBarWidget;
+    if (previous != null) {
+      this.menuBarWidget = null;
+      Gtk.widgetDestroy(previous);
+      this.menuBarBuilder.release();
+      this.menuBarBuilder = null;
+    }
+    if (commands.isEmpty() || this.box == null) {
+      return;
+    }
+    GtkMenuBuilder builder =
+        new GtkMenuBuilder(commands, id -> this.menuItemPicked(commands, id), this.accelGroup);
+    MemorySegment bar = builder.menuBar();
+    Gtk.boxPackStart(this.box, bar, false);
+    Gtk.boxReorderChild(this.box, bar, 0);
+    this.menuBarWidget = bar;
+    this.menuBarBuilder = builder;
+  }
+
+  /**
+   * A {@code GtkMenu} attached to the web view, which goes away once it closes. {@code deactivate}
+   * comes before the item picked activates, so the answer for no pick waits for the next turn of
+   * the loop, and an item picked answers first.
+   */
+  @Override
+  protected void presentContextMenu(
+      MenuCommands commands, WindowPosition place, DialogCompletion<Integer> picked) {
+    MemorySegment view = this.webView;
+    if (view == null) {
+      picked.complete(0);
+      return;
+    }
+    GtkMenuBuilder builder = new GtkMenuBuilder(commands, picked::complete, MemorySegment.NULL);
+    MemorySegment menu = builder.menu();
+    Gtk.menuAttachToWidget(menu, view);
+    builder.onDeactivate(
+        menu,
+        () ->
+            this.dispatcher()
+                .post(
+                    () -> {
+                      picked.complete(0);
+                      builder.release();
+                      Gtk.widgetDestroy(menu);
+                    }));
+    picked.onCancel(() -> Gtk.menuPopdown(menu));
+    MemorySegment gdkWindow = Gtk.widgetGetWindow(view);
+    int[] at = place != null ? new int[] {place.x(), place.y()} : Gdk.pointerPosition(gdkWindow);
+    Gtk.menuPopupAt(menu, gdkWindow, at[0], at[1]);
+  }
+
+  @Override
+  protected void performEditing(MenuRole role) {
+    MemorySegment view = this.webView;
+    if (view != null) {
+      WebKit.executeEditingCommand(view, WebKitEditingUtil.command(role));
+    }
+  }
+
+  @Override
   protected void beginMove() {
     this.dispatcher()
         .run(
@@ -657,6 +737,14 @@ public class GtkWindow extends AbstractWindow {
     this.webView = null;
     this.userContentManager = null;
     this.headerBar = null;
+    this.box = null;
+    this.accelGroup = null;
+    this.menuBarWidget = null;
+    GtkMenuBuilder builder = this.menuBarBuilder;
+    this.menuBarBuilder = null;
+    if (builder != null) {
+      builder.release();
+    }
     this.markClosed();
   }
 

@@ -21,6 +21,8 @@ import dev.ivchenko.lwjwae.event.SecondInstanceEvent;
 import dev.ivchenko.lwjwae.event.WindowEvent;
 import dev.ivchenko.lwjwae.event.WindowEventType;
 import dev.ivchenko.lwjwae.exception.ShortcutUnavailableException;
+import dev.ivchenko.lwjwae.menu.MenuItem;
+import dev.ivchenko.lwjwae.menu.MenuRole;
 import dev.ivchenko.lwjwae.shortcut.Shortcut;
 import dev.ivchenko.lwjwae.testing.Icons;
 import dev.ivchenko.lwjwae.testing.Loads;
@@ -253,6 +255,21 @@ public abstract class WindowContractTest extends DisplayContractTest {
    *     back.
    */
   protected boolean pressKeys(Shortcut shortcut) throws Exception {
+    return false;
+  }
+
+  /** Whether the menu bar is part of the window, and takes room from the page. Not on macOS. */
+  protected boolean hasMenuBarInWindow() {
+    return true;
+  }
+
+  /**
+   * Picks the first entry of the menu that is open over the window, from the keyboard.
+   *
+   * @return Whether the backend test can press keys; without that, the test only opens menus and
+   *     closes them from Java.
+   */
+  protected boolean pickFirstEntryOfOpenMenu() throws Exception {
     return false;
   }
 
@@ -692,6 +709,144 @@ public abstract class WindowContractTest extends DisplayContractTest {
       Thread.sleep(500);
       window.close();
       Assertions.assertTrue(left.isCancelled(), "a closed window cancels its dialogs");
+    }
+  }
+
+  @Test
+  void menuBarTakesRoomAndItsKeysPickItsEntries() throws Exception {
+    try (Application application = Application.create()) {
+      Window window =
+          application.open(
+              WindowParameters.builder().title("lwjwae :: menu bar").size(640, 480).build());
+      final var loaded = Loads.expectFinished(window);
+      window.loadResource("test-app/index.html");
+      window.show();
+      loaded.get(30, TimeUnit.SECONDS);
+      window.focus();
+      WindowContractTest.awaitTrue(window::isVisible, "the window must show");
+      int without = Integer.parseInt(Loads.eval(window, "String(window.innerHeight)"));
+
+      BlockingQueue<Object> heard = new LinkedBlockingQueue<>();
+      application.menu(
+          MenuItem.submenu(
+              "File",
+              MenuItem.of("Ping", "Ctrl+Alt+P", () -> heard.add("ping")),
+              MenuItem.checkbox("Mark", false, heard::add).withAccelerator("Ctrl+Alt+M"),
+              MenuItem.separator(),
+              MenuItem.submenu("More", MenuItem.of("Deep", () -> {}))),
+          MenuItem.editMenu(),
+          MenuItem.windowMenu());
+      Assertions.assertEquals(3, window.menu().size());
+      if (this.hasMenuBarInWindow()) {
+        WindowContractTest.awaitTrue(
+            () -> WindowContractTest.innerHeight(window) < without, "the bar takes room");
+      }
+      Thread.sleep(500);
+      Screenshots.capture("menu-bar");
+
+      if (this.canTakeFocus() && this.pressKeys(Shortcut.parse("Ctrl+Alt+P"))) {
+        Assertions.assertEquals("ping", heard.poll(10, TimeUnit.SECONDS), "the keys pick it");
+        this.pressKeys(Shortcut.parse("Ctrl+Alt+M"));
+        Assertions.assertEquals(true, heard.poll(10, TimeUnit.SECONDS), "the mark goes on");
+        this.pressKeys(Shortcut.parse("Ctrl+Alt+M"));
+        Assertions.assertEquals(false, heard.poll(10, TimeUnit.SECONDS), "and off");
+      }
+
+      window.menu(List.of());
+      Assertions.assertEquals(List.of(), window.menu());
+      if (this.hasMenuBarInWindow()) {
+        WindowContractTest.awaitTrue(
+            () -> WindowContractTest.innerHeight(window) == without, "no bar, no room");
+      }
+      window.useApplicationMenu();
+      Assertions.assertEquals(3, window.menu().size());
+      application.menu(List.of());
+      if (this.hasMenuBarInWindow()) {
+        WindowContractTest.awaitTrue(
+            () -> WindowContractTest.innerHeight(window) == without, "the bar goes away");
+      }
+    }
+  }
+
+  private static int innerHeight(Window window) {
+    try {
+      return Integer.parseInt(Loads.eval(window, "String(window.innerHeight)"));
+    } catch (Exception e) {
+      throw new IllegalStateException(e);
+    }
+  }
+
+  @Test
+  void contextMenusOpenFromJavaAndThePage() throws Exception {
+    try (Application application = Application.create()) {
+      Window window =
+          application.open(
+              WindowParameters.builder().title("lwjwae :: context menu").size(640, 480).build());
+      final var loaded = Loads.expectFinished(window);
+      window.loadResource("test-app/index.html");
+      window.show();
+      loaded.get(30, TimeUnit.SECONDS);
+      window.focus();
+      WindowContractTest.awaitTrue(window::isVisible, "the window must show");
+
+      CompletableFuture<Void> shown =
+          window.showContextMenu(
+              MenuItem.of("First", () -> {}),
+              MenuItem.separator(),
+              MenuItem.checkbox("Checked", true, _ -> {}),
+              MenuItem.submenu("More", MenuItem.of("Deep", () -> {})));
+      Thread.sleep(1000);
+      Screenshots.capture("context-menu");
+      Assertions.assertFalse(shown.isDone(), "the menu waits for the user");
+      shown.cancel(false);
+      Assertions.assertEquals("2", Loads.eval(window, "String(1 + 1)"), "the page goes on");
+
+      // A page that aborts its call closes the menu too.
+      Loads.eval(
+          window,
+          "window.__aborted = undefined; const controller = new AbortController();"
+              + " lwjwae.menu.popup([{ id: 'one', label: 'One' }], { x: 20, y: 20, signal:"
+              + " controller.signal }).catch((error) => window.__aborted = error.name);"
+              + " setTimeout(() => controller.abort(), 1000); undefined;");
+      Assertions.assertEquals("AbortError", Loads.awaitValue(window, "window.__aborted"));
+      Assertions.assertEquals("4", Loads.eval(window, "String(2 + 2)"));
+
+      Loads.eval(
+          window,
+          "lwjwae.menu.popup([{ id: 'first', label: 'First' }, { id: 'second', label: 'Second'"
+              + " }], { x: 20, y: 20 }).then((id) => window.__picked = String(id)); undefined;");
+      Thread.sleep(1000);
+      if (this.pickFirstEntryOfOpenMenu()) {
+        Assertions.assertEquals("first", Loads.awaitValue(window, "window.__picked"));
+
+        BlockingQueue<String> heard = new LinkedBlockingQueue<>();
+        window.contextMenu(MenuItem.of("Reload", () -> heard.add("reload")));
+        Loads.eval(
+            window,
+            "document.body.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true,"
+                + " cancelable: true, clientX: 30, clientY: 30 })); undefined;");
+        Thread.sleep(1000);
+        this.pickFirstEntryOfOpenMenu();
+        Assertions.assertEquals(
+            "reload", heard.poll(10, TimeUnit.SECONDS), "a right click opens the menu of Java");
+
+        if (this.canUseClipboardUnattended()) {
+          String text = "lwjwae copied " + System.nanoTime();
+          Loads.eval(
+              window,
+              "const input = document.createElement('input'); input.value = '"
+                  + text
+                  + "'; document.body.append(input); input.focus(); input.select(); undefined;");
+          window.showContextMenu(MenuItem.role(MenuRole.COPY));
+          Thread.sleep(1000);
+          this.pickFirstEntryOfOpenMenu();
+          WindowContractTest.awaitTrue(
+              () -> application.clipboard().readText().join().filter(text::equals).isPresent(),
+              "Copy copies the selection of the page");
+        }
+      } else {
+        window.close();
+      }
     }
   }
 

@@ -6,14 +6,21 @@ import dev.ivchenko.lwjwae.macos.binding.Foundation;
 import dev.ivchenko.lwjwae.macos.binding.MethodStub;
 import dev.ivchenko.lwjwae.macos.binding.ObjC;
 import dev.ivchenko.lwjwae.macos.binding.Signatures;
+import dev.ivchenko.lwjwae.menu.MenuCommands;
+import dev.ivchenko.lwjwae.menu.MenuItem;
+import dev.ivchenko.lwjwae.menu.MenuRole;
+import dev.ivchenko.lwjwae.menu.RoleMenuItem;
+import dev.ivchenko.lwjwae.menu.SubmenuItem;
 import dev.ivchenko.lwjwae.util.ThrowableUtil;
 import java.lang.foreign.MemorySegment;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.IntConsumer;
 import lombok.experimental.UtilityClass;
 
 /**
@@ -26,6 +33,11 @@ import lombok.experimental.UtilityClass;
  * application installs the menu bar that every Mac application has: the application menu, File,
  * Edit, and Window. Every item has no target and goes along the responder chain, which also enables
  * and disables it; nothing here runs Java code, except for quitting.
+ *
+ * <p>A menu of the program, {@link dev.ivchenko.lwjwae.Application#menu} or the one of a window,
+ * takes the place of File, Edit, and Window while a window that shows it is in front; the
+ * application menu stays first, as the Human Interface Guidelines ask. Its entries do run Java
+ * code, through {@link MacMenus}.
  *
  * <p>Quit, whether from the menu, the Dock, or a logout, is {@code terminate:}, which asks {@code
  * applicationShouldTerminate:} of the delegate of {@code NSApplication} and then calls {@code
@@ -57,6 +69,15 @@ class MacMainMenu {
   /** Whether the menu bar is in place. Main thread only. */
   private boolean menuBarInstalled;
 
+  /** The name in the titles of the application menu. Main thread only. */
+  private String applicationName;
+
+  /** The menu that the bar shows after the application menu, or {@code null} for the default. */
+  private MenuCommands shown;
+
+  /** The target of the items of {@link #shown}. Main thread only. */
+  private MemorySegment target;
+
   /**
    * Installs the menu bar, with {@code name} in the titles of the application menu, once, and the
    * delegate, unless something set one before. Runs on the main thread.
@@ -80,7 +101,58 @@ class MacMainMenu {
     }
     if (!menuBarInstalled) {
       menuBarInstalled = true;
-      MacMainMenu.installMenuBar(name != null ? name : Foundation.processName());
+      applicationName = name != null ? name : Foundation.processName();
+      MacMainMenu.installMenuBar();
+    }
+  }
+
+  /**
+   * Shows {@code commands} in the menu bar, after the application menu, with every pick of an entry
+   * going to {@code picked}, and the check mark of the entry following it. An empty menu brings the
+   * default menus back: File, Edit, and Window. Runs on the main thread; the same menu twice in a
+   * row changes nothing.
+   */
+  void show(MenuCommands commands, IntConsumer picked) {
+    if (commands == shown || (commands.isEmpty() && shown == null) || applicationName == null) {
+      return;
+    }
+    MemorySegment previous = target;
+    if (commands.isEmpty()) {
+      shown = null;
+      target = null;
+      MacMainMenu.installMenuBar();
+    } else {
+      Map<Integer, MemorySegment> checks = new HashMap<>();
+      MemorySegment newTarget =
+          MacMenus.target(
+              id -> {
+                picked.accept(id);
+                MemorySegment item = checks.get(id);
+                if (item != null) {
+                  AppKit.setItemChecked(item, commands.isChecked(id));
+                }
+              });
+      MemorySegment bar = AppKit.autoenabledMenu("");
+      AppKit.addSubmenu(bar, MacMainMenu.applicationMenu());
+      MemorySegment windowsMenu = MemorySegment.NULL;
+      for (MenuItem item : commands.items()) {
+        SubmenuItem submenu = (SubmenuItem) item;
+        MemorySegment menu = AppKit.menu();
+        MacMenus.fill(menu, commands, submenu.items(), newTarget, checks);
+        // Where AppKit lists the windows: the menu that minimizes one, as Window does.
+        if (submenu.items().stream()
+            .anyMatch(
+                entry -> entry instanceof RoleMenuItem role && role.role() == MenuRole.MINIMIZE)) {
+          windowsMenu = menu;
+        }
+        AppKit.addSubmenuItem(bar, submenu.label(), menu, submenu.enabled());
+      }
+      shown = commands;
+      target = newTarget;
+      AppKit.setMainMenu(bar, windowsMenu);
+    }
+    if (previous != null) {
+      MacMenus.release(previous);
     }
   }
 
@@ -94,10 +166,11 @@ class MacMainMenu {
     APPLICATIONS.remove(application);
   }
 
-  private void installMenuBar(String name) {
+  /** The application menu: About, Hide, Hide Others, Show All, and Quit. */
+  private MemorySegment applicationMenu() {
+    String name = applicationName;
     long command = AppKit.MODIFIER_COMMAND;
     long optionCommand = AppKit.MODIFIER_OPTION | AppKit.MODIFIER_COMMAND;
-
     MemorySegment applicationMenu = AppKit.autoenabledMenu(name);
     AppKit.addResponderItem(
         applicationMenu, "About " + name, "orderFrontStandardAboutPanel:", "", 0);
@@ -108,7 +181,13 @@ class MacMainMenu {
     AppKit.addResponderItem(applicationMenu, "Show All", "unhideAllApplications:", "", 0);
     AppKit.addMenuSeparator(applicationMenu);
     AppKit.addResponderItem(applicationMenu, "Quit " + name, "terminate:", "q", command);
+    return applicationMenu;
+  }
 
+  /** The default menu bar: the application menu, File, Edit, and Window. */
+  private void installMenuBar() {
+    long command = AppKit.MODIFIER_COMMAND;
+    long optionCommand = AppKit.MODIFIER_OPTION | AppKit.MODIFIER_COMMAND;
     MemorySegment fileMenu = AppKit.autoenabledMenu("File");
     AppKit.addResponderItem(fileMenu, "Close Window", "performClose:", "w", command);
 
@@ -131,7 +210,8 @@ class MacMainMenu {
     AppKit.addResponderItem(windowMenu, "Bring All to Front", "arrangeInFront:", "", 0);
 
     MemorySegment bar = AppKit.autoenabledMenu("");
-    for (MemorySegment menu : List.of(applicationMenu, fileMenu, editMenu, windowMenu)) {
+    for (MemorySegment menu :
+        List.of(MacMainMenu.applicationMenu(), fileMenu, editMenu, windowMenu)) {
       AppKit.addSubmenu(bar, menu);
     }
     AppKit.setMainMenu(bar, windowMenu);

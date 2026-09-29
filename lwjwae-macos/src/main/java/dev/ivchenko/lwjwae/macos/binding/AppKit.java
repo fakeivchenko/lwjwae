@@ -31,6 +31,12 @@ public class AppKit {
   /** {@code NSWindowStyleMaskFullSizeContentView}: the content reaches under the title bar. */
   public final long STYLE_FULL_SIZE_CONTENT_VIEW = 1 << 15;
 
+  /** {@code NSEventModifierFlagShift}. */
+  public final long MODIFIER_SHIFT = 1 << 17;
+
+  /** {@code NSEventModifierFlagControl}. */
+  public final long MODIFIER_CONTROL = 1 << 18;
+
   /** {@code NSEventModifierFlagOption}. */
   public final long MODIFIER_OPTION = 1 << 19;
 
@@ -564,6 +570,95 @@ public class AppKit {
   /** Adds a separator line. */
   public void addMenuSeparator(MemorySegment menu) {
     ObjC.sendVoid(menu, "addItem:", ObjC.send(ObjC.cls("NSMenuItem"), "separatorItem"));
+  }
+
+  /**
+   * Adds an item that sends {@code action} to {@code target}, or to the first responder that takes
+   * it for a {@code NULL} target, with {@code tag} to tell it apart and {@code key} and {@code
+   * modifiers} as its shortcut; an empty {@code key} gives none. The menu holds the item, which is
+   * returned for {@link #setItemChecked}.
+   */
+  public MemorySegment addItem(
+      MemorySegment menu,
+      String title,
+      MemorySegment target,
+      String action,
+      long tag,
+      boolean enabled,
+      String key,
+      long modifiers,
+      boolean checked) {
+    MemorySegment item = ObjC.send(ObjC.send(ObjC.cls("NSMenuItem"), "alloc"), "init");
+    ObjC.sendVoid(item, "setTitle:", Foundation.string(title));
+    if (!ObjC.isNull(target)) {
+      ObjC.sendVoid(item, "setTarget:", target);
+    }
+    ObjC.sendVoid(item, "setAction:", ObjC.sel(action));
+    ObjC.sendVoid(item, "setTag:", tag);
+    ObjC.sendVoid(item, "setEnabled:", enabled);
+    ObjC.sendVoid(item, "setKeyEquivalent:", Foundation.string(key));
+    ObjC.sendVoid(item, "setKeyEquivalentModifierMask:", modifiers);
+    AppKit.setItemChecked(item, checked);
+    ObjC.sendVoid(menu, "addItem:", item);
+    Foundation.release(item);
+    return item;
+  }
+
+  /** {@code -[NSMenuItem setState:]}: a check mark, or none. */
+  public void setItemChecked(MemorySegment item, boolean checked) {
+    ObjC.sendVoid(item, "setState:", checked ? 1L : 0L);
+  }
+
+  /**
+   * Adds an item titled {@code title} that opens {@code submenu}, and gives the submenu up: the
+   * menu holds it.
+   */
+  public void addSubmenuItem(
+      MemorySegment menu, String title, MemorySegment submenu, boolean enabled) {
+    ObjC.sendVoid(submenu, "setTitle:", Foundation.string(title));
+    MemorySegment item = ObjC.send(ObjC.send(ObjC.cls("NSMenuItem"), "alloc"), "init");
+    ObjC.sendVoid(item, "setTitle:", Foundation.string(title));
+    ObjC.sendVoid(item, "setSubmenu:", submenu);
+    ObjC.sendVoid(item, "setEnabled:", enabled);
+    ObjC.sendVoid(menu, "addItem:", item);
+    Foundation.release(item);
+    Foundation.release(submenu);
+  }
+
+  /**
+   * Opens {@code menu} at {@code x}, {@code y} in {@code view}, or at that place on the screen for
+   * a {@code NULL} view, and tracks it until it closes: {@code
+   * popUpMenuPositioningItem:atLocation:inView:}.
+   */
+  public void popUpMenu(MemorySegment menu, MemorySegment view, double x, double y) {
+    boolean _ =
+        ObjC.sendWithPoint(
+            menu, "popUpMenuPositioningItem:atLocation:inView:", MemorySegment.NULL, x, y, view);
+  }
+
+  /** {@code -[NSMenu cancelTracking]}: closes the menu while it's open. */
+  public void cancelTracking(MemorySegment menu) {
+    ObjC.sendVoid(menu, "cancelTracking");
+  }
+
+  /** {@code +[NSEvent mouseLocation]}: the pointer on the screen, from its bottom left corner. */
+  public double[] mouseLocation() {
+    return ObjC.sendPoint(ObjC.cls("NSEvent"), "mouseLocation");
+  }
+
+  /**
+   * Sends {@code action} along the responder chain, from the first responder of the key window, as
+   * a menu item without a target does: {@code sendAction:to:from:}. The answer, whether something
+   * took it, is left unread.
+   */
+  public void sendAction(String action) {
+    MemorySegment _ =
+        ObjC.send(
+            AppKit.application(),
+            "sendAction:to:from:",
+            ObjC.sel(action),
+            MemorySegment.NULL,
+            MemorySegment.NULL);
   }
 
   /** {@code -[NSMenuItem tag]}. */

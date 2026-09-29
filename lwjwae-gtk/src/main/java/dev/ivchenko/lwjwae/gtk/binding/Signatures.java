@@ -161,7 +161,31 @@ public class Signatures {
   public final FunctionDescriptor POINTER_INT_POINTER_POINTER =
       FunctionDescriptor.of(C_POINTER, C_INT, C_POINTER, C_POINTER);
 
+  /** {@code void f(T*, U*, gboolean, gboolean, guint)}: {@code gtk_box_pack_start}. */
+  public final FunctionDescriptor VOID_POINTER_POINTER_INT_INT_INT =
+      FunctionDescriptor.ofVoid(C_POINTER, C_POINTER, C_INT, C_INT, C_INT);
+
+  /**
+   * {@code T* f(U*, V*, gint*, gint*, GdkModifierType*)}: {@code gdk_window_get_device_position}.
+   */
+  public final FunctionDescriptor POINTER_POINTER_X5 =
+      FunctionDescriptor.of(C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER);
+
   // --- named signatures, too long to describe by shape ---
+
+  /**
+   * {@code void gtk_widget_add_accelerator(GtkWidget*, const gchar*, GtkAccelGroup*, guint,
+   * GdkModifierType, GtkAccelFlags)}.
+   */
+  public final FunctionDescriptor GTK_WIDGET_ADD_ACCELERATOR =
+      FunctionDescriptor.ofVoid(C_POINTER, C_POINTER, C_POINTER, C_INT, C_INT, C_INT);
+
+  /**
+   * {@code void gtk_menu_popup_at_rect(GtkMenu*, GdkWindow*, const GdkRectangle*, GdkGravity,
+   * GdkGravity, const GdkEvent*)}.
+   */
+  public final FunctionDescriptor GTK_MENU_POPUP_AT_RECT =
+      FunctionDescriptor.ofVoid(C_POINTER, C_POINTER, C_POINTER, C_INT, C_INT, C_POINTER);
 
   /**
    * {@code gulong g_signal_connect_data(gpointer, const gchar*, GCallback, gpointer,

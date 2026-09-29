@@ -6,6 +6,7 @@ import dev.ivchenko.lwjwae.glib.PortalShortcuts;
 import dev.ivchenko.lwjwae.glib.StatusNotifierTray;
 import dev.ivchenko.lwjwae.glib.binding.Dbus;
 import dev.ivchenko.lwjwae.glib.binding.GdkPixbuf;
+import dev.ivchenko.lwjwae.glib.binding.GioMenus;
 import dev.ivchenko.lwjwae.glib.binding.Glib;
 import dev.ivchenko.lwjwae.glib.binding.Unix;
 import dev.ivchenko.lwjwae.glib.binding.X11;
@@ -42,6 +43,7 @@ class GtkNativeImageMetadataTest extends NativeImageMetadataContractTest {
         // The GLib module, whose metadata this one inherits.
         Glib.class,
         Dbus.class,
+        GioMenus.class,
         GdkPixbuf.class,
         Unix.class,
         GlibDispatcher.class,
@@ -57,6 +59,7 @@ class GtkNativeImageMetadataTest extends NativeImageMetadataContractTest {
         GtkWindow.class,
         GtkDialogs.class,
         GtkApplication.class,
-        GtkTray.class);
+        GtkTray.class,
+        GtkMenuBuilder.class);
   }
 }

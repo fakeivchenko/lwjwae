@@ -18,9 +18,12 @@ import dev.ivchenko.lwjwae.foreign.NativeLibraries;
 import dev.ivchenko.lwjwae.glib.PortalShortcuts;
 import dev.ivchenko.lwjwae.glib.binding.Glib;
 import dev.ivchenko.lwjwae.glib.util.DecorationLayoutUtil;
+import dev.ivchenko.lwjwae.glib.util.WebKitEditingUtil;
 import dev.ivchenko.lwjwae.gtk4.binding.Gtk;
 import dev.ivchenko.lwjwae.gtk4.binding.Signatures;
 import dev.ivchenko.lwjwae.gtk4.binding.WebKit;
+import dev.ivchenko.lwjwae.menu.MenuCommands;
+import dev.ivchenko.lwjwae.menu.MenuRole;
 import dev.ivchenko.lwjwae.rpc.RpcExchange;
 import dev.ivchenko.lwjwae.util.ThrowableUtil;
 import java.lang.foreign.MemorySegment;
@@ -153,6 +156,13 @@ public class Gtk4Window extends AbstractWindow {
   private volatile MemorySegment webView;
   private volatile MemorySegment userContentManager;
 
+  /** The box that holds the menu bar, if any, above the web view. */
+  private volatile MemorySegment box;
+
+  private volatile MemorySegment menuBarWidget;
+  private volatile Gtk4MenuBuilder menuBarBuilder;
+  private volatile MemorySegment shortcutController;
+
   /**
    * Creates the native window on the GTK thread and returns when it exists. The window is hidden
    * until {@link #show()}.
@@ -216,7 +226,10 @@ public class Gtk4Window extends AbstractWindow {
           "Message handler '" + BridgeProtocol.CHANNEL + "' already registered");
     }
 
-    Gtk.windowSetChild(newWindow, newWebView);
+    MemorySegment newBox = Gtk.boxNew(Gtk.ORIENTATION_VERTICAL, 0);
+    Gtk.widgetSetVexpand(newWebView, true);
+    Gtk.boxAppend(newBox, newWebView);
+    Gtk.windowSetChild(newWindow, newBox);
 
     Glib.signalConnect(newWindow, "close-request", ON_CLOSE_REQUEST, userData);
     Glib.signalConnect(newWindow, "realize", ON_REALIZE, userData);
@@ -228,6 +241,7 @@ public class Gtk4Window extends AbstractWindow {
 
     this.window = newWindow;
     this.webView = newWebView;
+    this.box = newBox;
     BY_WEB_VIEW.put(newWebView.address(), this);
     this.userContentManager = manager;
     this.installBridge();
@@ -323,6 +337,94 @@ public class Gtk4Window extends AbstractWindow {
   protected void presentSaveDialog(
       SaveDialogParameters parameters, DialogCompletion<Optional<Path>> completion) {
     Gtk4Dialogs.save(this.window(), parameters, completion);
+  }
+
+  /**
+   * A {@code GtkPopoverMenuBar} above the web view, with its actions under {@code menu} in the
+   * window and its keys in a controller of the window, which sees them before the page.
+   */
+  @Override
+  protected void presentMenuBar(MenuCommands commands) {
+    this.dropMenuBar();
+    MemorySegment current = this.window;
+    if (current == null || commands.isEmpty()) {
+      return;
+    }
+    Gtk4MenuBuilder builder =
+        new Gtk4MenuBuilder(commands, id -> this.menuItemPicked(commands, id), "menu");
+    Gtk.widgetInsertActionGroup(current, "menu", builder.group());
+    MemorySegment bar = Gtk.popoverMenuBarNewFromModel(builder.model());
+    Gtk.boxPrepend(this.box, bar);
+    this.shortcutController = Gtk.addShortcutController(current, builder.shortcuts());
+    this.menuBarWidget = bar;
+    this.menuBarBuilder = builder;
+  }
+
+  /** Takes the menu bar, its actions, and its keys away. Runs on the GTK thread. */
+  private void dropMenuBar() {
+    MemorySegment bar = this.menuBarWidget;
+    this.menuBarWidget = null;
+    if (bar != null && this.box != null) {
+      Gtk.boxRemove(this.box, bar);
+    }
+    MemorySegment current = this.window;
+    MemorySegment controller = this.shortcutController;
+    this.shortcutController = null;
+    if (controller != null && current != null) {
+      Gtk.widgetRemoveController(current, controller);
+    }
+    Gtk4MenuBuilder builder = this.menuBarBuilder;
+    this.menuBarBuilder = null;
+    if (builder != null) {
+      if (current != null) {
+        Gtk.widgetInsertActionGroup(current, "menu", MemorySegment.NULL);
+      }
+      builder.release();
+    }
+  }
+
+  /**
+   * A {@code GtkPopoverMenu} on the web view, with its actions under {@code context} in the window
+   * while it's open. The answer for no pick waits for the next turn of the loop after {@code
+   * closed}, so an entry picked answers first.
+   */
+  @Override
+  protected void presentContextMenu(
+      MenuCommands commands, WindowPosition place, DialogCompletion<Integer> picked) {
+    MemorySegment current = this.window;
+    MemorySegment view = this.webView;
+    if (current == null || view == null) {
+      picked.complete(0);
+      return;
+    }
+    Gtk4MenuBuilder builder = new Gtk4MenuBuilder(commands, picked::complete, "context");
+    Gtk.widgetInsertActionGroup(current, "context", builder.group());
+    MemorySegment popover = Gtk.popoverMenuNewFromModel(builder.model());
+    builder.onClosed(
+        popover,
+        () ->
+            this.dispatcher()
+                .post(
+                    () -> {
+                      picked.complete(0);
+                      Gtk.widgetUnparent(popover);
+                      MemorySegment still = this.window;
+                      if (still != null) {
+                        Gtk.widgetInsertActionGroup(still, "context", MemorySegment.NULL);
+                      }
+                      builder.release();
+                    }));
+    picked.onCancel(() -> Gtk.popoverPopdown(popover));
+    int[] at = place != null ? new int[] {place.x(), place.y()} : Gtk.pointerIn(current, view);
+    Gtk.popupAt(popover, view, at[0], at[1]);
+  }
+
+  @Override
+  protected void performEditing(MenuRole role) {
+    MemorySegment view = this.webView;
+    if (view != null) {
+      WebKit.executeEditingCommand(view, WebKitEditingUtil.command(role));
+    }
   }
 
   @Override
@@ -608,6 +710,14 @@ public class Gtk4Window extends AbstractWindow {
     if (view != null) {
       BY_WEB_VIEW.remove(view.address());
     }
+    Gtk4MenuBuilder builder = this.menuBarBuilder;
+    this.menuBarBuilder = null;
+    if (builder != null) {
+      builder.release();
+    }
+    this.menuBarWidget = null;
+    this.shortcutController = null;
+    this.box = null;
     this.window = null;
     this.webView = null;
     this.userContentManager = null;
