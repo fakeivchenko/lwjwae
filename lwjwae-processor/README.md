@@ -34,8 +34,10 @@ The processor lists every annotated type and every type that one of them holds, 
 - the components of a record;
 - the instance fields of a class;
 - the superclasses;
+- the permitted subclasses of a sealed type;
 - the component type of an array;
-- the type arguments of a declared type, such as the `Point` of `List<Point>`.
+- the type arguments of a declared type, such as the `Point` of `List<Point>`;
+- the bounds of a wildcard or a type variable, such as the `Point` of `List<? extends Point>`.
 
 Types of the JDK stay out: a native image reaches the collections and the boxed values on its
 own. Each type gets reflection on its declared constructors, methods, and fields, which covers
@@ -46,11 +48,12 @@ Jackson, Gson, and JSON-B.
 The processor writes one file to the classes of the compilation:
 
 ```text
-META-INF/native-image/dev.ivchenko.lwjwae/bridge-types/PACKAGE/reachability-metadata.json
+META-INF/native-image/dev.ivchenko.lwjwae/bridge-types/TYPE/reachability-metadata.json
 ```
 
-`PACKAGE` is the package of the first annotated type in name order, so two modules of an
-application write two files that don't replace each other. To choose the directory under
+`TYPE` is the binary name of the first annotated type in name order, such as
+`com.example.Outline`. A class belongs to one module, so two modules of an application write two
+files that don't replace each other, even when they share a package or end up in one JAR file. To choose the directory under
 `META-INF/native-image` yourself, pass an option to the compiler:
 
 ```kotlin

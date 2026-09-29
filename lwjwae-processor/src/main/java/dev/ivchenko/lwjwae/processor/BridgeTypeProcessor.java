@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.io.Writer;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
@@ -15,14 +16,15 @@ import javax.lang.model.SourceVersion;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.ElementKind;
 import javax.lang.model.element.Modifier;
-import javax.lang.model.element.PackageElement;
 import javax.lang.model.element.RecordComponentElement;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.element.VariableElement;
 import javax.lang.model.type.ArrayType;
 import javax.lang.model.type.DeclaredType;
-import javax.lang.model.type.TypeKind;
+import javax.lang.model.type.IntersectionType;
 import javax.lang.model.type.TypeMirror;
+import javax.lang.model.type.TypeVariable;
+import javax.lang.model.type.WildcardType;
 import javax.lang.model.util.ElementFilter;
 import javax.tools.Diagnostic;
 import javax.tools.FileObject;
@@ -34,16 +36,18 @@ import javax.tools.StandardLocation;
  * constructors, methods, and fields, which is what a codec reads it and creates it through.
  *
  * <p>The processor follows what a codec follows: the components of a record, the instance fields of
- * a class, its superclasses, the component type of an array, and the type arguments of a declared
- * type, so {@code List<Point>} brings {@code Point}. The types of the JDK stay out; a native image
+ * a class, its superclasses, the permitted subclasses of a sealed type, the component type of an
+ * array, the type arguments of a declared type, and the bounds of a wildcard or a type variable, so
+ * {@code List<? extends Point>} brings {@code Point}. The types of the JDK stay out; a native image
  * reaches the collections and the boxes on its own.
  *
  * <p>The metadata goes to one file, {@code
- * META-INF/native-image/dev.ivchenko.lwjwae/bridge-types/PACKAGE/reachability-metadata.json}, with
- * {@code PACKAGE} the package of the first annotated type in name order, so that two modules of an
- * application write two files. The option {@code lwjwae.metadataDirectory} names the directory
- * under {@code META-INF/native-image} instead. The processor is aggregating: Gradle runs it again
- * when an annotated type changes, and the file lists every type of the compilation.
+ * META-INF/native-image/dev.ivchenko.lwjwae/bridge-types/TYPE/reachability-metadata.json}, with
+ * {@code TYPE} the binary name of the first annotated type in name order: a class belongs to one
+ * module, so two modules of an application write two files, even into one JAR file. The option
+ * {@code lwjwae.metadataDirectory} names the directory under {@code META-INF/native-image} instead.
+ * The processor is aggregating: Gradle runs it again when an annotated type changes, and the file
+ * lists every type of the compilation.
  */
 @SupportedAnnotationTypes(BridgeTypeProcessor.ANNOTATION)
 @SupportedOptions(BridgeTypeProcessor.DIRECTORY_OPTION)
@@ -60,6 +64,9 @@ public final class BridgeTypeProcessor extends AbstractProcessor {
 
   /** The annotated types, which the file is made from, for incremental builds. */
   private final List<TypeElement> annotated = new ArrayList<>();
+
+  /** The type variables followed so far, since a bound can name its own variable. */
+  private final Set<Element> variables = new HashSet<>();
 
   @Override
   public SourceVersion getSupportedSourceVersion() {
@@ -100,17 +107,35 @@ public final class BridgeTypeProcessor extends AbstractProcessor {
       }
     }
     this.collect(type.getSuperclass());
+    type.getPermittedSubclasses().forEach(this::collect);
   }
 
   private void collect(TypeMirror type) {
-    if (type.getKind() == TypeKind.ARRAY) {
-      this.collect(((ArrayType) type).getComponentType());
-    } else if (type.getKind() == TypeKind.DECLARED) {
-      DeclaredType declared = (DeclaredType) type;
-      if (declared.asElement() instanceof TypeElement element) {
-        this.collect(element);
+    switch (type) {
+      case ArrayType array -> this.collect(array.getComponentType());
+      case DeclaredType declared -> {
+        if (declared.asElement() instanceof TypeElement element) {
+          this.collect(element);
+        }
+        declared.getTypeArguments().forEach(this::collect);
       }
-      declared.getTypeArguments().forEach(this::collect);
+      case WildcardType wildcard -> {
+        if (wildcard.getExtendsBound() != null) {
+          this.collect(wildcard.getExtendsBound());
+        }
+        if (wildcard.getSuperBound() != null) {
+          this.collect(wildcard.getSuperBound());
+        }
+      }
+      case TypeVariable variable -> {
+        if (this.variables.add(variable.asElement())) {
+          this.collect(variable.getUpperBound());
+        }
+      }
+      case IntersectionType intersection -> intersection.getBounds().forEach(this::collect);
+      default -> {
+        // A primitive, void, or none: nothing to reflect on.
+      }
     }
   }
 
@@ -142,8 +167,7 @@ public final class BridgeTypeProcessor extends AbstractProcessor {
         this.annotated.stream()
             .min(Comparator.comparing(type -> type.getQualifiedName().toString()))
             .orElseThrow();
-    PackageElement enclosing = this.processingEnv.getElementUtils().getPackageOf(first);
-    return DEFAULT_DIRECTORY + (enclosing.isUnnamed() ? "default" : enclosing.getQualifiedName());
+    return DEFAULT_DIRECTORY + this.processingEnv.getElementUtils().getBinaryName(first);
   }
 
   /** The metadata of {@code names}, one reflection entry each, in name order. */

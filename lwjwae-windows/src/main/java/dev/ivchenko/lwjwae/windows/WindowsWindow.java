@@ -665,7 +665,12 @@ public class WindowsWindow extends AbstractWindow {
         WebView2.setTransparentBackground(createdController);
       }
       WebView2.setDevToolsEnabled(this.webView, false);
-      WebView2.changeUserAgent(this.webView, this::userAgent);
+      try {
+        WebView2.changeUserAgent(this.webView, this::userAgent);
+      } catch (RuntimeException e) {
+        // The engine's own user agent is a loss of a token, not of the window.
+        ThrowableUtil.report(e);
+      }
 
       this.subscribe(
           WebView2::onNavigationStarting,

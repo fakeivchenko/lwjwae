@@ -10,6 +10,7 @@ import dev.ivchenko.lwjwae.event.EventSubscription;
 import dev.ivchenko.lwjwae.exception.ResourceNotFoundException;
 import dev.ivchenko.lwjwae.foreign.NativeLibraries;
 import dev.ivchenko.lwjwae.glib.DesktopServices;
+import dev.ivchenko.lwjwae.glib.PortalDialogs;
 import dev.ivchenko.lwjwae.glib.StatusNotifierTray;
 import dev.ivchenko.lwjwae.glib.X11Shortcuts;
 import dev.ivchenko.lwjwae.glib.binding.Glib;
@@ -138,7 +139,7 @@ public class GtkApplication extends AbstractApplication {
 
   @Override
   protected void launchExternal(String url) {
-    this.dispatcher().run(() -> Glib.launchDefaultForUri(url));
+    this.dispatcher().run(() -> Glib.launchDefaultForUri(url, PortalDialogs.originalEnvironment()));
   }
 
   @Override

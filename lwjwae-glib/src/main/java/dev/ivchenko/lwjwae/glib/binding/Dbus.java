@@ -110,8 +110,6 @@ public class Dbus {
           GLIB, "g_variant_new_array", Signatures.POINTER_POINTER_POINTER_LONG);
   private final MethodHandle VARIANT_GET_CHILD_VALUE =
       NativeLibraries.downcall(GLIB, "g_variant_get_child_value", Signatures.POINTER_POINTER_LONG);
-  private final MethodHandle VARIANT_GET_BOOLEAN =
-      NativeLibraries.downcall(GLIB, "g_variant_get_boolean", Signatures.INT_POINTER);
   private final MethodHandle VARIANT_GET_UINT32 =
       NativeLibraries.downcall(GLIB, "g_variant_get_uint32", Signatures.INT_POINTER);
   private final MethodHandle VARIANT_GET_STRING =
@@ -122,7 +120,8 @@ public class Dbus {
   private final MethodHandle VARIANT_UNREF =
       NativeLibraries.downcall(GLIB, "g_variant_unref", Signatures.VOID_POINTER);
 
-  private final int BUS_CALL_TIMEOUT_MILLIS = 2000;
+  // Long enough for the bus to start a service, such as the desktop portal, on the first call.
+  private final int BUS_CALL_TIMEOUT_MILLIS = 3000;
 
   // --- the bus ---
 
@@ -227,52 +226,30 @@ public class Dbus {
   }
 
   /**
-   * Whether {@code name} answers on the bus of {@code connection}: it has an owner now, or the bus
-   * starts one on the first call to it, as it does for the desktop portal.
+   * Whether the object {@code path} of {@code name} has the property {@code property} of the
+   * interface {@code interfaceName}: whether it implements the interface, for a service that
+   * exports only what it can do. The call starts the service when the bus can.
    */
-  public boolean hasService(MemorySegment connection, String name) {
-    MemorySegment owned =
-        Dbus.call(
-            connection,
-            "org.freedesktop.DBus",
-            "/org/freedesktop/DBus",
-            "org.freedesktop.DBus",
-            "NameHasOwner",
-            Dbus.tuple(List.of(Dbus.string(name))),
-            "(b)",
-            BUS_CALL_TIMEOUT_MILLIS);
+  public boolean hasProperty(
+      MemorySegment connection, String name, String path, String interfaceName, String property) {
+    MemorySegment reply;
     try {
-      if (Dbus.booleanAt(owned, 0)) {
-        return true;
-      }
-    } finally {
-      Dbus.unref(owned);
+      reply =
+          Dbus.call(
+              connection,
+              name,
+              path,
+              "org.freedesktop.DBus.Properties",
+              "Get",
+              Dbus.tuple(List.of(Dbus.string(interfaceName), Dbus.string(property))),
+              "(v)",
+              BUS_CALL_TIMEOUT_MILLIS);
+    } catch (IllegalStateException _) {
+      // No such service, object, interface, or property.
+      return false;
     }
-    MemorySegment activatable =
-        Dbus.call(
-            connection,
-            "org.freedesktop.DBus",
-            "/org/freedesktop/DBus",
-            "org.freedesktop.DBus",
-            "ListActivatableNames",
-            Dbus.tuple(List.of()),
-            "(as)",
-            BUS_CALL_TIMEOUT_MILLIS);
-    try {
-      MemorySegment names = Dbus.child(activatable, 0);
-      try {
-        for (int index = 0; index < Dbus.childCount(names); index++) {
-          if (name.equals(Dbus.stringAt(names, index))) {
-            return true;
-          }
-        }
-        return false;
-      } finally {
-        Dbus.unref(names);
-      }
-    } finally {
-      Dbus.unref(activatable);
-    }
+    Dbus.unref(reply);
+    return true;
   }
 
   /**
@@ -526,17 +503,6 @@ public class Dbus {
     MemorySegment child = Dbus.child(tuple, index);
     try {
       return (int) VARIANT_GET_UINT32.invokeExact(child);
-    } finally {
-      Dbus.unref(child);
-    }
-  }
-
-  /** The {@code b} at {@code index} of a tuple. */
-  @SneakyThrows
-  public boolean booleanAt(MemorySegment tuple, int index) {
-    MemorySegment child = Dbus.child(tuple, index);
-    try {
-      return (int) VARIANT_GET_BOOLEAN.invokeExact(child) != 0;
     } finally {
       Dbus.unref(child);
     }

@@ -37,7 +37,15 @@ public class Gtk4Dispatcher extends GlibDispatcher {
   @Override
   protected void initialize() {
     PortalDialogs.preferForGtk4();
-    if (!Gtk.initialize()) {
+    boolean initialized;
+    try {
+      initialized = Gtk.initialize();
+    } finally {
+      // GTK has read GDK_DEBUG; the processes that the application starts get the value from
+      // before.
+      PortalDialogs.restoreEnvironment();
+    }
+    if (!initialized) {
       throw new IllegalStateException(
           "gtk_init_check() failed: no display available (check DISPLAY / WAYLAND_DISPLAY)");
     }
