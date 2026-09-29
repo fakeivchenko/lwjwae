@@ -16,6 +16,7 @@ import dev.ivchenko.lwjwae.shortcut.Shortcut;
 import dev.ivchenko.lwjwae.state.SavedWindowState;
 import dev.ivchenko.lwjwae.state.WindowStateStore;
 import dev.ivchenko.lwjwae.state.WindowStateTracker;
+import dev.ivchenko.lwjwae.store.Store;
 import dev.ivchenko.lwjwae.taskbar.TaskbarProgress;
 import dev.ivchenko.lwjwae.tray.Tray;
 import dev.ivchenko.lwjwae.tray.TrayIcon;
@@ -25,6 +26,7 @@ import dev.ivchenko.lwjwae.util.ThrowableUtil;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -109,6 +111,7 @@ public abstract class AbstractApplication implements Application {
   private volatile List<MenuItem> menu = List.of();
   private volatile TaskbarProgress progress = TaskbarProgress.none();
   private volatile int badgeCount;
+  private Store store;
   private final Map<Shortcut, EventSubscription> globalShortcuts = new HashMap<>();
 
   // --- single instance, under the lock of the listener list ---
@@ -421,6 +424,20 @@ public abstract class AbstractApplication implements Application {
    * heard of it. For a platform whose menu bar belongs to the process; nothing by default.
    */
   protected void menuChanged(List<MenuItem> items) {}
+
+  @Override
+  public final synchronized Store store() {
+    this.checkOpen();
+    if (this.store == null) {
+      Path directory = this.parameters.dataDirectory();
+      if (directory == null) {
+        throw new IllegalStateException(
+            "A store needs a data directory: give the application a name");
+      }
+      this.store = Store.open(directory.resolve("store.sqlite"));
+    }
+    return this.store;
+  }
 
   @Override
   public final void progress(TaskbarProgress progress) {
@@ -776,6 +793,11 @@ public abstract class AbstractApplication implements Application {
       }
     } catch (InterruptedException _) {
       Thread.currentThread().interrupt();
+    }
+    synchronized (this) {
+      if (this.store != null) {
+        this.store.close();
+      }
     }
     this.signalIdle();
     this.onClose();

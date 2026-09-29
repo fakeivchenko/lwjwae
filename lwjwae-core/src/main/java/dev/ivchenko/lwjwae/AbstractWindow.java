@@ -18,6 +18,8 @@ import dev.ivchenko.lwjwae.event.EventSubscription;
 import dev.ivchenko.lwjwae.event.LoadEvent;
 import dev.ivchenko.lwjwae.event.WindowEvent;
 import dev.ivchenko.lwjwae.event.WindowEvents;
+import dev.ivchenko.lwjwae.exception.ConstraintViolatedException;
+import dev.ivchenko.lwjwae.exception.StoreFailedException;
 import dev.ivchenko.lwjwae.menu.ActionMenuItem;
 import dev.ivchenko.lwjwae.menu.CheckMenuItem;
 import dev.ivchenko.lwjwae.menu.MenuCommands;
@@ -29,6 +31,7 @@ import dev.ivchenko.lwjwae.rpc.RpcCall;
 import dev.ivchenko.lwjwae.rpc.RpcException;
 import dev.ivchenko.lwjwae.rpc.RpcExchange;
 import dev.ivchenko.lwjwae.rpc.RpcHandler;
+import dev.ivchenko.lwjwae.store.StorePageCommands;
 import dev.ivchenko.lwjwae.taskbar.ProgressState;
 import dev.ivchenko.lwjwae.taskbar.TaskbarProgress;
 import dev.ivchenko.lwjwae.ui.UiDispatcher;
@@ -382,6 +385,7 @@ public abstract class AbstractWindow implements Window {
       case BridgeProtocol.CLIPBOARD_CALL -> this::clipboardFromPage;
       case BridgeProtocol.DIALOG_CALL -> this::dialogFromPage;
       case BridgeProtocol.MENU_CALL -> this::menuFromPage;
+      case BridgeProtocol.STORE_CALL -> this::storeFromPage;
       default -> null;
     };
   }
@@ -530,6 +534,23 @@ public abstract class AbstractWindow implements Window {
       // Answered below, as a negative count is.
     }
     throw RpcException.badRequest("malformed-badge", "Malformed count: " + argument);
+  }
+
+  /**
+   * {@code window.lwjwae.store}: the body is a command of {@link StorePageCommands} as JSON, and
+   * the answer its result as JSON. A malformed command or SQL that SQLite refuses answers {@code
+   * 400}, a row that a constraint refuses {@code 409}.
+   */
+  private void storeFromPage(RpcCall call) {
+    try {
+      call.reply(StorePageCommands.run(this.application.store(), call.text()));
+    } catch (ConstraintViolatedException e) {
+      throw RpcException.conflict("constraint", e.getMessage());
+    } catch (StoreFailedException e) {
+      throw RpcException.badRequest("sql-error", e.getMessage());
+    } catch (IllegalArgumentException e) {
+      throw RpcException.badRequest("malformed-command", e.getMessage());
+    }
   }
 
   /**

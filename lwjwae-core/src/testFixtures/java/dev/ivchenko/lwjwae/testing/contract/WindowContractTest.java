@@ -38,6 +38,7 @@ import java.nio.ByteBuffer;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.BlockingQueue;
@@ -884,6 +885,40 @@ public abstract class WindowContractTest extends DisplayContractTest {
       later.show();
       WindowContractTest.awaitTrue(later::isVisible, "the window must show");
       Assertions.assertEquals(TaskbarProgress.of(0.7), application.progress());
+    }
+  }
+
+  @Test
+  void thePageQueriesTheStoreOfTheApplication(@TempDir Path directory) throws Exception {
+    ApplicationParameters parameters =
+        ApplicationParameters.builder().name("lwjwae-store").dataDirectory(directory).build();
+    try (Application application = Application.create(parameters)) {
+      application.store().executeScript("CREATE TABLE tasks (title TEXT UNIQUE, hours INTEGER)");
+      application.store().execute("INSERT INTO tasks VALUES (?, ?)", "from Java", 1);
+      Window window =
+          application.open(
+              WindowParameters.builder().title("lwjwae :: store").size(400, 300).build());
+      final var loaded = Loads.expectFinished(window);
+      window.loadResource("test-app/index.html");
+      window.show();
+      loaded.get(30, TimeUnit.SECONDS);
+      Loads.eval(
+          window,
+          "(async () => { const store = lwjwae.store; const inserted = await store.execute('INSERT"
+              + " INTO tasks VALUES (?, ?)', ['a', 2]); const added = await store.transaction(["
+              + " { sql: \"INSERT INTO tasks VALUES ('b', 3) RETURNING title\" } ]); const sums ="
+              + " await store.query('SELECT sum(hours) AS hours FROM tasks WHERE hours > :min',"
+              + " { min: 1 }); let conflict; try { await store.execute('INSERT INTO tasks VALUES"
+              + " (?, 0)', ['a']); } catch (error) { conflict = error.code; } window.__store ="
+              + " JSON.stringify({ inserted, added, sums, conflict }); })(); undefined;");
+      Assertions.assertEquals(
+          "{\"inserted\":{\"changes\":1,\"lastInsertRowId\":2},\"added\":[[{\"title\":\"b\"}]],"
+              + "\"sums\":[{\"hours\":5}],\"conflict\":\"constraint\"}",
+          Loads.awaitValue(window, "window.__store"));
+      Assertions.assertEquals(
+          List.of(Map.of("n", 3L)),
+          application.store().query("SELECT count(*) AS n FROM tasks"),
+          "one store");
     }
   }
 

@@ -13,6 +13,7 @@ import dev.ivchenko.lwjwae.notification.Notification;
 import dev.ivchenko.lwjwae.notification.NotificationHandle;
 import dev.ivchenko.lwjwae.rpc.RpcHandler;
 import dev.ivchenko.lwjwae.shortcut.Shortcut;
+import dev.ivchenko.lwjwae.store.Store;
 import dev.ivchenko.lwjwae.taskbar.TaskbarProgress;
 import dev.ivchenko.lwjwae.tray.Tray;
 import dev.ivchenko.lwjwae.tray.TrayIcon;
@@ -505,6 +506,33 @@ public interface Application extends AutoCloseable {
 
   /** The menu bar of the application, empty for none. */
   List<MenuItem> menu();
+
+  /**
+   * The store of the application: a database of SQLite, with all of its SQL, in {@code
+   * store.sqlite} of {@link ApplicationParameters#dataDirectory()}. It opens on the first call and
+   * closes with the application. A page reaches it as {@code lwjwae.store}:
+   *
+   * <pre>{@code
+   * const store = lwjwae.store;
+   * await store.executeScript("CREATE TABLE IF NOT EXISTS notes (id INTEGER PRIMARY KEY, title)");
+   * const { lastInsertRowId } = await store.execute("INSERT INTO notes (title) VALUES ('Milk')");
+   * const rows = await store.query("SELECT * FROM notes WHERE id = :id", { id: lastInsertRowId });
+   * }</pre>
+   *
+   * <p>Platforms:
+   *
+   * <ul>
+   *   <li>Windows: Through {@code winsqlite3.dll}, which Windows 10 and later have.
+   *   <li>macOS: Through the {@code libsqlite3.dylib} of the system.
+   *   <li>Linux, GTK 3: Through {@code libsqlite3.so.0}, which WebKitGTK depends on.
+   *   <li>Linux, GTK 4: As on GTK 3.
+   * </ul>
+   *
+   * @throws IllegalStateException If the application has no data directory, which it has when it
+   *     has a name, or is closed.
+   * @throws dev.ivchenko.lwjwae.exception.StoreFailedException If SQLite can't open the file.
+   */
+  Store store();
 
   /**
    * Shows {@code progress} on the icon of the application in the taskbar or the Dock, until the

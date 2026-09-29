@@ -110,6 +110,10 @@ events need a codec from [lwjwae-codecs](https://github.com/fakeivchenko/lwjwae-
   application, also indeterminate, paused, or failed, and `application.badgeCount(3)` a count, and
   `lwjwae.taskbar` does both from the page: `ITaskbarList3` on Windows, the Dock on macOS, and the
   `LauncherEntry` signal of KDE Plasma and the Ubuntu dock on Linux.
+- **A SQLite store.** `application.store()` and `lwjwae.store` on the page run the SQL of SQLite
+  on a file of the application: `query("SELECT * FROM notes WHERE id = ?", id)`, `execute`,
+  `executeScript` for a schema, and transactions, with parameters by position or by name. It is
+  the SQLite of the system, so there is no dependency, and a write is atomic and survives a crash.
 - **Links go to the browser.** A link to another site, `target="_blank"`, and `window.open` open in
   the browser of the system rather than in the window, or wherever `externalLinkHandler` says;
   `Application.openExternal(url)` does the same from Java.

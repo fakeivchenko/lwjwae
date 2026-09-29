@@ -30,6 +30,11 @@ public class RpcException extends RuntimeException {
     return new RpcException(400, code, message);
   }
 
+  /** The call conflicts with what's there, such as a key that's taken: {@code 409}. */
+  public static RpcException conflict(String code, String message) {
+    return new RpcException(409, code, message);
+  }
+
   /** What the call asks for doesn't exist: {@code 404}. */
   public static RpcException notFound(String code, String message) {
     return new RpcException(404, code, message);

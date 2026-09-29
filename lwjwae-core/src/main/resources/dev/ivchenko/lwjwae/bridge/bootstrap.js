@@ -503,5 +503,19 @@
         badge: (count) => control("badge", String(Math.round(count || 0))).then(done)
     };
 
-    window.${pageApi} = { listen, once, emit, open, close, openExternal, call: callRpc, invoke: rpcInvoke, RpcError, window: windowApi, dialog, clipboard, menu, taskbar };
+    // The SQLite store of the application: query resolves to the rows, execute to
+    // { changes, lastInsertRowId }, executeScript to nothing, and transaction to the rows of every
+    // statement, all or none of which happen. A refused command or SQL rejects with the code
+    // malformed-command or sql-error, and a row that a constraint refuses with constraint.
+    const storeCall = (command) =>
+        callText("${storeCall}", JSON.stringify(command))
+            .then(({ text }) => text === "" ? undefined : JSON.parse(text));
+    const store = {
+        query: (sql, params) => storeCall({ op: "query", sql, params }),
+        execute: (sql, params) => storeCall({ op: "execute", sql, params }),
+        executeScript: (sql) => storeCall({ op: "script", sql }),
+        transaction: (statements) => storeCall({ op: "transaction", statements })
+    };
+
+    window.${pageApi} = { listen, once, emit, open, close, openExternal, call: callRpc, invoke: rpcInvoke, RpcError, window: windowApi, dialog, clipboard, menu, taskbar, store };
 })();

@@ -124,6 +124,13 @@ public class BridgeProtocol {
   public final String MENU_CALL = "lwjwae:menu";
 
   /**
+   * The name under which a page uses the store of the application, through {@code
+   * window.lwjwae.store}. Reserved like {@link #EVENT_CALL}. The body is a command of {@link
+   * dev.ivchenko.lwjwae.store.StorePageCommands} as JSON, and the answer its result as JSON.
+   */
+  public final String STORE_CALL = "lwjwae:store";
+
+  /**
    * The separator between the kinds of file of a dialog in a {@link #DIALOG_CALL}: the ASCII record
    * separator.
    */
@@ -215,6 +222,7 @@ public class BridgeProtocol {
         .replace("${dialogCall}", DIALOG_CALL)
         .replace("${clipboardCall}", CLIPBOARD_CALL)
         .replace("${menuCall}", MENU_CALL)
+        .replace("${storeCall}", STORE_CALL)
         .replace("${resizeEdges}", edges)
         .replace("${separator}", "\u001f")
         .replace("${post}", postMessage)
