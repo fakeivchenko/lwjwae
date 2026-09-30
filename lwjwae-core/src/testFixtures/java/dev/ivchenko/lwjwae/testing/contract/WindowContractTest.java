@@ -806,15 +806,27 @@ public abstract class WindowContractTest extends DisplayContractTest {
       shown.cancel(false);
       Assertions.assertEquals("2", Loads.eval(window, "String(1 + 1)"), "the page goes on");
 
+      // Diagnostics of macOS, where the menu of a page closes at once: whether a menu of Java right
+      // after a cancelled one stays open, and whether the page gets its menu when it asks later.
+      CompletableFuture<Void> again = window.showContextMenu(MenuItem.of("Again", () -> {}));
+      Thread.sleep(1000);
+      boolean againOpen = !again.isDone();
+      again.cancel(false);
+
       // A page that aborts its call closes the menu too.
-      Loads.eval(
-          window,
-          "window.__aborted = undefined; const controller = new AbortController();"
-              + " lwjwae.menu.popup([{ id: 'one', label: 'One' }], { x: 20, y: 20, signal:"
-              + " controller.signal }).then((id) => window.__aborted = 'resolved with ' + id,"
-              + " (error) => window.__aborted = error.name);"
-              + " setTimeout(() => controller.abort(), 1000); undefined;");
-      Assertions.assertEquals("AbortError", Loads.awaitValue(window, "window.__aborted"));
+      String first = WindowContractTest.pageAbortsItsMenu(window, "context-menu-page");
+      String retry = null;
+      if (!"AbortError".equals(first)) {
+        Thread.sleep(2000);
+        retry = WindowContractTest.pageAbortsItsMenu(window, "context-menu-page-retry");
+      }
+      Assertions.assertEquals(
+          "AbortError",
+          first,
+          "a menu of Java after a cancelled one stayed open: "
+              + againOpen
+              + "; the page asking again 2 s later: "
+              + retry);
       Assertions.assertEquals("4", Loads.eval(window, "String(2 + 2)"));
 
       Loads.eval(
@@ -924,6 +936,23 @@ public abstract class WindowContractTest extends DisplayContractTest {
           application.store().query("SELECT count(*) AS n FROM tasks"),
           "one store");
     }
+  }
+
+  /**
+   * Opens a menu from the page that the page aborts after a second, and returns how its call ended:
+   * {@code AbortError}, or what it resolved with.
+   */
+  private static String pageAbortsItsMenu(Window window, String screenshot) throws Exception {
+    Loads.eval(
+        window,
+        "window.__aborted = undefined; { const controller = new AbortController();"
+            + " lwjwae.menu.popup([{ id: 'one', label: 'One' }], { x: 20, y: 20, signal:"
+            + " controller.signal }).then((id) => window.__aborted = 'resolved with ' + id,"
+            + " (error) => window.__aborted = error.name);"
+            + " setTimeout(() => controller.abort(), 1000); } undefined;");
+    Thread.sleep(300);
+    Screenshots.capture(screenshot);
+    return Loads.awaitValue(window, "window.__aborted");
   }
 
   @Test
