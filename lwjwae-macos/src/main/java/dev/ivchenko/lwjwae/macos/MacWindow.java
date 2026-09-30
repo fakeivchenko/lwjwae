@@ -352,17 +352,31 @@ public class MacWindow extends AbstractWindow {
    * {@code popUpMenuPositioningItem:atLocation:inView:}, which tracks the menu until it closes. The
    * item picked sends its action while it does; the answer waits for the next task, in case AppKit
    * sends it after. A role goes along the responder chain, and answers as no pick.
+   *
+   * <p>A cancel goes to the main thread too, as everything that touches AppKit: {@code
+   * performSelectorOnMainThread:} runs in the tracking loop of the menu, and {@code cancelTracking}
+   * from another thread can end the tracking of the next menu instead of this one. It does nothing
+   * once the menu is closed, whose memory may be gone by then.
    */
   @Override
   protected void presentContextMenu(
       MenuCommands commands, WindowPosition place, DialogCompletion<Integer> picked) {
     MemorySegment view = this.webView();
     int[] chosen = {0};
+    boolean[] tracking = {true};
     MemorySegment target = MacMenus.target(id -> chosen[0] = id);
     MemorySegment menu = AppKit.menu();
     try {
       MacMenus.fill(menu, commands, commands.items(), target, new ConcurrentHashMap<>());
-      picked.onCancel(() -> AppKit.cancelTracking(menu));
+      picked.onCancel(
+          () ->
+              this.dispatcher()
+                  .post(
+                      () -> {
+                        if (tracking[0]) {
+                          AppKit.cancelTracking(menu);
+                        }
+                      }));
       if (place != null) {
         // WKWebView is flipped: its origin is the top left corner, as on the page.
         AppKit.popUpMenu(menu, view, place.x(), place.y());
@@ -371,6 +385,7 @@ public class MacWindow extends AbstractWindow {
         AppKit.popUpMenu(menu, MemorySegment.NULL, pointer[0], pointer[1]);
       }
     } finally {
+      tracking[0] = false;
       this.dispatcher()
           .post(
               () -> {

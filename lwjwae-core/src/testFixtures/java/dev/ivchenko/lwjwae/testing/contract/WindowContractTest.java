@@ -811,7 +811,8 @@ public abstract class WindowContractTest extends DisplayContractTest {
           window,
           "window.__aborted = undefined; const controller = new AbortController();"
               + " lwjwae.menu.popup([{ id: 'one', label: 'One' }], { x: 20, y: 20, signal:"
-              + " controller.signal }).catch((error) => window.__aborted = error.name);"
+              + " controller.signal }).then((id) => window.__aborted = 'resolved with ' + id,"
+              + " (error) => window.__aborted = error.name);"
               + " setTimeout(() => controller.abort(), 1000); undefined;");
       Assertions.assertEquals("AbortError", Loads.awaitValue(window, "window.__aborted"));
       Assertions.assertEquals("4", Loads.eval(window, "String(2 + 2)"));
