@@ -131,6 +131,17 @@ public class BridgeProtocol {
   public final String STORE_CALL = "lwjwae:store";
 
   /**
+   * The name under which a page uses the updater of the application, through {@code
+   * window.lwjwae.updates}. Reserved like {@link #EVENT_CALL}. The body is {@code check}, answered
+   * with the update as JSON or nothing, or {@code install}, which reports its progress as {@link
+   * #UPDATE_PROGRESS_EVENT} events to the window and ends with the application.
+   */
+  public final String UPDATE_CALL = "lwjwae:update";
+
+  /** The event whose payload is how much of an update the page asked for is downloaded, 0 to 1. */
+  public final String UPDATE_PROGRESS_EVENT = "lwjwae:update-progress";
+
+  /**
    * The separator between the kinds of file of a dialog in a {@link #DIALOG_CALL}: the ASCII record
    * separator.
    */
@@ -223,6 +234,8 @@ public class BridgeProtocol {
         .replace("${clipboardCall}", CLIPBOARD_CALL)
         .replace("${menuCall}", MENU_CALL)
         .replace("${storeCall}", STORE_CALL)
+        .replace("${updateCall}", UPDATE_CALL)
+        .replace("${updateProgressEvent}", UPDATE_PROGRESS_EVENT)
         .replace("${resizeEdges}", edges)
         .replace("${separator}", "\u001f")
         .replace("${post}", postMessage)

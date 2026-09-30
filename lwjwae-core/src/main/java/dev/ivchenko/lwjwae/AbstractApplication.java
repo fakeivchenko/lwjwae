@@ -22,6 +22,8 @@ import dev.ivchenko.lwjwae.taskbar.TaskbarProgress;
 import dev.ivchenko.lwjwae.tray.Tray;
 import dev.ivchenko.lwjwae.tray.TrayIcon;
 import dev.ivchenko.lwjwae.ui.UiDispatcher;
+import dev.ivchenko.lwjwae.update.UpdateParameters;
+import dev.ivchenko.lwjwae.update.Updater;
 import dev.ivchenko.lwjwae.util.HandlerUtil;
 import dev.ivchenko.lwjwae.util.ThrowableUtil;
 import java.net.URI;
@@ -114,6 +116,7 @@ public abstract class AbstractApplication implements Application {
   private volatile TaskbarProgress progress = TaskbarProgress.none();
   private volatile int badgeCount;
   private Store store;
+  private Updater updater;
   private final Map<Shortcut, EventSubscription> globalShortcuts = new HashMap<>();
 
   // --- single instance, under the lock of the listener list ---
@@ -439,6 +442,20 @@ public abstract class AbstractApplication implements Application {
       this.store = Store.open(directory.resolve("store.sqlite"));
     }
     return this.store;
+  }
+
+  @Override
+  public final synchronized Updater updater() {
+    this.checkOpen();
+    if (this.updater == null) {
+      UpdateParameters updates = this.parameters.updates();
+      if (updates == null) {
+        throw new IllegalStateException(
+            "An updater needs update parameters: set them, or the updates block of the plugin");
+      }
+      this.updater = new Updater(updates, this::quit);
+    }
+    return this.updater;
   }
 
   @Override
@@ -823,6 +840,9 @@ public abstract class AbstractApplication implements Application {
     synchronized (this) {
       if (this.store != null) {
         this.store.close();
+      }
+      if (this.updater != null) {
+        this.updater.close();
       }
     }
     this.signalIdle();

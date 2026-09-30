@@ -517,5 +517,24 @@
         transaction: (statements) => storeCall({ op: "transaction", statements })
     };
 
-    window.${pageApi} = { listen, once, emit, open, close, openExternal, call: callRpc, invoke: rpcInvoke, RpcError, window: windowApi, dialog, clipboard, menu, taskbar, store };
+    // The updater of the application: check resolves to { version, notes, mandatory, installable,
+    // size } or null, and install downloads the update, reporting to onProgress from 0 to 1, and
+    // installs it, which ends the application. It rejects with no-update, not-installable,
+    // update-rejected, or download-failed.
+    const updates = {
+        check: () => callText("${updateCall}", "check")
+            .then(({ text }) => text === "" ? null : JSON.parse(text)),
+        install: async ({ onProgress } = {}) => {
+            const stop = typeof onProgress === "function"
+                ? await listen("${updateProgressEvent}", (event) => onProgress(Number(event.payload)))
+                : () => {};
+            try {
+                await callText("${updateCall}", "install");
+            } finally {
+                stop();
+            }
+        }
+    };
+
+    window.${pageApi} = { listen, once, emit, open, close, openExternal, call: callRpc, invoke: rpcInvoke, RpcError, window: windowApi, dialog, clipboard, menu, taskbar, store, updates };
 })();

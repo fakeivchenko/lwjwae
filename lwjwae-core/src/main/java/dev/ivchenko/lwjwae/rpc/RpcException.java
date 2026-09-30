@@ -40,6 +40,11 @@ public class RpcException extends RuntimeException {
     return new RpcException(404, code, message);
   }
 
+  /** A server that the handler depends on failed it: {@code 502}. */
+  public static RpcException badGateway(String code, String message) {
+    return new RpcException(502, code, message);
+  }
+
   /** The caller may not make this call: {@code 403}. */
   public static RpcException forbidden(String code, String message) {
     return new RpcException(403, code, message);

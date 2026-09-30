@@ -1,6 +1,7 @@
 package dev.ivchenko.lwjwae;
 
 import dev.ivchenko.lwjwae.bridge.codec.BridgeCodec;
+import dev.ivchenko.lwjwae.update.UpdateParameters;
 import dev.ivchenko.lwjwae.util.PlatformUtil;
 import java.nio.file.Path;
 import lombok.Builder;
@@ -46,10 +47,17 @@ import lombok.Builder;
  *     the data of an application, named after {@code name}: {@code $XDG_CONFIG_HOME/NAME} or {@code
  *     ~/.config/NAME} on Linux, {@code ~/Library/Application Support/NAME} on macOS, {@code
  *     %APPDATA%\NAME} on Windows. Without a name, none, and windows remember nothing.
+ * @param updates Where {@link Application#updater()} looks for updates, and the key that signs
+ *     them. Default: the ones that the Gradle plugin writes into the application, {@link
+ *     UpdateParameters#discover()}, or none.
  */
 @Builder(toBuilder = true)
 public record ApplicationParameters(
-    String devServerUrl, BridgeCodec codec, String name, Path dataDirectory) {
+    String devServerUrl,
+    BridgeCodec codec,
+    String name,
+    Path dataDirectory,
+    UpdateParameters updates) {
   /** The system property that supplies {@link #devServerUrl()} when the builder leaves it unset. */
   public static final String DEV_SERVER_URL_PROPERTY = "lwjwae.devServerUrl";
 
@@ -74,6 +82,9 @@ public record ApplicationParameters(
     }
     if (dataDirectory == null && name != null) {
       dataDirectory = ApplicationParameters.defaultDataDirectory(name);
+    }
+    if (updates == null) {
+      updates = UpdateParameters.discover().orElse(null);
     }
   }
 

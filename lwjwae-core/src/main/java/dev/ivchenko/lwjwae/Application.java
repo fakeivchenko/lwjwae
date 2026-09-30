@@ -19,6 +19,7 @@ import dev.ivchenko.lwjwae.taskbar.TaskbarProgress;
 import dev.ivchenko.lwjwae.tray.Tray;
 import dev.ivchenko.lwjwae.tray.TrayIcon;
 import dev.ivchenko.lwjwae.tray.TrayMenuItem;
+import dev.ivchenko.lwjwae.update.Updater;
 import dev.ivchenko.lwjwae.util.PlatformUtil;
 import java.io.UncheckedIOException;
 import java.nio.file.Path;
@@ -534,6 +535,33 @@ public interface Application extends AutoCloseable {
    * @throws dev.ivchenko.lwjwae.exception.StoreFailedException If SQLite can't open the file.
    */
   Store store();
+
+  /**
+   * The updater of the application, which finds, downloads, and installs its new versions from the
+   * manifest of {@link ApplicationParameters#updates()}. A page reaches it as {@code
+   * lwjwae.updates}:
+   *
+   * <pre>{@code
+   * const update = await lwjwae.updates.check();
+   * if (update?.installable) {
+   *   await lwjwae.updates.install({ onProgress: (fraction) => bar.value = fraction });
+   * }
+   * }</pre>
+   *
+   * <p>Platforms:
+   *
+   * <ul>
+   *   <li>Windows: Installs the {@code .msi} of the new version with {@code msiexec /passive}.
+   *   <li>macOS: Replaces the {@code .app} bundle with the one of the new version, signed by the
+   *       same team.
+   *   <li>Linux, GTK 3: Replaces the AppImage; a Debian or Arch package updates through its package
+   *       manager, so the update is found but not installable.
+   *   <li>Linux, GTK 4: As on GTK 3.
+   * </ul>
+   *
+   * @throws IllegalStateException If the application has no update parameters, or is closed.
+   */
+  Updater updater();
 
   /**
    * Shows {@code progress} on the icon of the application in the taskbar or the Dock, until the

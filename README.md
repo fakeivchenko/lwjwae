@@ -117,6 +117,11 @@ events need a codec from [lwjwae-codecs](https://github.com/fakeivchenko/lwjwae-
 - **Cookies.** `application.cookies()` reads, sets, and deletes the cookies of the engine, which
   every window shares, for a URL or all at once: `WebKitCookieManager` on Linux,
   `ICoreWebView2CookieManager` on Windows, and `WKHTTPCookieStore` on macOS.
+- **Self-updates.** `application.updater()` and `lwjwae.updates` find a newer version in a
+  manifest at any URL, download it, and install it over the running one: the `.msi` on Windows,
+  the `.app` bundle on macOS, and the AppImage on Linux. The manifest is signed with Ed25519 and
+  every file checked by size and SHA-256, so only what your key signed runs. The Gradle plugin
+  writes and signs the manifest.
 - **Links go to the browser.** A link to another site, `target="_blank"`, and `window.open` open in
   the browser of the system rather than in the window, or wherever `externalLinkHandler` says;
   `Application.openExternal(url)` does the same from Java.
