@@ -641,6 +641,16 @@ public class AppKit {
     ObjC.sendVoid(menu, "cancelTracking");
   }
 
+  /**
+   * The point of the screen, from its bottom left corner, of a point of the content area of {@code
+   * window} given from the top left of that area, as a page gives it.
+   */
+  public double[] screenPointOfContent(MemorySegment window, double x, double y) {
+    double[] frame = Foundation.rect(window, "frame");
+    double[] content = Foundation.rect(ObjC.send(window, "contentView"), "frame");
+    return new double[] {frame[0] + content[0] + x, frame[1] + content[1] + content[3] - y};
+  }
+
   /** {@code +[NSEvent mouseLocation]}: the pointer on the screen, from its bottom left corner. */
   public double[] mouseLocation() {
     return ObjC.sendPoint(ObjC.cls("NSEvent"), "mouseLocation");

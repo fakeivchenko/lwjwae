@@ -361,7 +361,6 @@ public class MacWindow extends AbstractWindow {
   @Override
   protected void presentContextMenu(
       MenuCommands commands, WindowPosition place, DialogCompletion<Integer> picked) {
-    MemorySegment view = this.webView();
     int[] chosen = {0};
     boolean[] tracking = {true};
     MemorySegment target = MacMenus.target(id -> chosen[0] = id);
@@ -377,13 +376,12 @@ public class MacWindow extends AbstractWindow {
                           AppKit.cancelTracking(menu);
                         }
                       }));
-      if (place != null) {
-        // WKWebView is flipped: its origin is the top left corner, as on the page.
-        AppKit.popUpMenu(menu, view, place.x(), place.y());
-      } else {
-        double[] pointer = AppKit.mouseLocation();
-        AppKit.popUpMenu(menu, MemorySegment.NULL, pointer[0], pointer[1]);
-      }
+      // In screen coordinates, with no view: a menu that pops up in the web view closes at once.
+      double[] point =
+          place == null
+              ? AppKit.mouseLocation()
+              : AppKit.screenPointOfContent(this.window(), place.x(), place.y());
+      AppKit.popUpMenu(menu, MemorySegment.NULL, point[0], point[1]);
     } finally {
       tracking[0] = false;
       this.dispatcher()
