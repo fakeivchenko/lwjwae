@@ -254,9 +254,20 @@ public class Signatures {
   public final FunctionDescriptor MSG_ID_RECT_ID =
       FunctionDescriptor.of(C_POINTER, C_POINTER, C_POINTER, NSRECT, C_POINTER);
 
+  /** {@code id -[receiver selector:NSRect]}. */
+  public final FunctionDescriptor MSG_ID_RECT =
+      FunctionDescriptor.of(C_POINTER, C_POINTER, C_POINTER, NSRECT);
+
   /** {@code void -[receiver selector:NSSize]}. */
   public final FunctionDescriptor MSG_VOID_SIZE =
       FunctionDescriptor.ofVoid(C_POINTER, C_POINTER, NSSIZE);
+
+  /** {@code NSPoint -[receiver selector]}: an {@code NSPoint} has the layout of an NSSize. */
+  public final FunctionDescriptor MSG_POINT = FunctionDescriptor.of(NSSIZE, C_POINTER, C_POINTER);
+
+  /** {@code BOOL -[receiver selector:id atLocation:NSPoint inView:id]}. */
+  public final FunctionDescriptor MSG_BOOL_ID_POINT_ID =
+      FunctionDescriptor.of(C_BOOL, C_POINTER, C_POINTER, C_POINTER, NSSIZE, C_POINTER);
 
   /**
    * {@code +[NSEvent
@@ -322,6 +333,12 @@ public class Signatures {
 
   /** {@code void (^)(NSError* error)}. It receives the block itself first. */
   public final FunctionDescriptor ERROR_BLOCK = DELEGATE_0;
+
+  /** {@code void (^)(id result)}. It receives the block itself first. */
+  public final FunctionDescriptor RESULT_BLOCK = DELEGATE_0;
+
+  /** {@code void (^)(void)}. It receives the block itself. */
+  public final FunctionDescriptor DONE_BLOCK = VOID_POINTER;
 
   /** {@code void (^)(BOOL granted, NSError* error)}. It receives the block itself first. */
   public final FunctionDescriptor AUTHORIZATION_BLOCK =

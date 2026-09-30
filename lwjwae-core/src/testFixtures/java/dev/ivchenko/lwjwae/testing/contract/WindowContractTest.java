@@ -9,6 +9,8 @@ import dev.ivchenko.lwjwae.WindowParameters;
 import dev.ivchenko.lwjwae.WindowPosition;
 import dev.ivchenko.lwjwae.WindowSize;
 import dev.ivchenko.lwjwae.clipboard.Clipboard;
+import dev.ivchenko.lwjwae.cookie.Cookie;
+import dev.ivchenko.lwjwae.cookie.Cookies;
 import dev.ivchenko.lwjwae.dialog.FileType;
 import dev.ivchenko.lwjwae.dialog.MessageButtons;
 import dev.ivchenko.lwjwae.dialog.MessageDialogParameters;
@@ -21,7 +23,10 @@ import dev.ivchenko.lwjwae.event.SecondInstanceEvent;
 import dev.ivchenko.lwjwae.event.WindowEvent;
 import dev.ivchenko.lwjwae.event.WindowEventType;
 import dev.ivchenko.lwjwae.exception.ShortcutUnavailableException;
+import dev.ivchenko.lwjwae.menu.MenuItem;
+import dev.ivchenko.lwjwae.menu.MenuRole;
 import dev.ivchenko.lwjwae.shortcut.Shortcut;
+import dev.ivchenko.lwjwae.taskbar.TaskbarProgress;
 import dev.ivchenko.lwjwae.testing.Icons;
 import dev.ivchenko.lwjwae.testing.Loads;
 import dev.ivchenko.lwjwae.testing.LocalPages;
@@ -35,7 +40,9 @@ import java.nio.ByteBuffer;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
@@ -253,6 +260,21 @@ public abstract class WindowContractTest extends DisplayContractTest {
    *     back.
    */
   protected boolean pressKeys(Shortcut shortcut) throws Exception {
+    return false;
+  }
+
+  /** Whether the menu bar is part of the window, and takes room from the page. Not on macOS. */
+  protected boolean hasMenuBarInWindow() {
+    return true;
+  }
+
+  /**
+   * Picks the first entry of the menu that is open over the window, from the keyboard.
+   *
+   * @return Whether the backend test can press keys; without that, the test only opens menus and
+   *     closes them from Java.
+   */
+  protected boolean pickFirstEntryOfOpenMenu() throws Exception {
     return false;
   }
 
@@ -693,6 +715,279 @@ public abstract class WindowContractTest extends DisplayContractTest {
       window.close();
       Assertions.assertTrue(left.isCancelled(), "a closed window cancels its dialogs");
     }
+  }
+
+  @Test
+  void menuBarTakesRoomAndItsKeysPickItsEntries() throws Exception {
+    try (Application application = Application.create()) {
+      Window window =
+          application.open(
+              WindowParameters.builder().title("lwjwae :: menu bar").size(640, 480).build());
+      final var loaded = Loads.expectFinished(window);
+      window.loadResource("test-app/index.html");
+      window.show();
+      loaded.get(30, TimeUnit.SECONDS);
+      window.focus();
+      WindowContractTest.awaitTrue(window::isVisible, "the window must show");
+      int without = Integer.parseInt(Loads.eval(window, "String(window.innerHeight)"));
+
+      BlockingQueue<Object> heard = new LinkedBlockingQueue<>();
+      application.menu(
+          MenuItem.submenu(
+              "File",
+              MenuItem.of("Ping", "Ctrl+Alt+P", () -> heard.add("ping")),
+              MenuItem.checkbox("Mark", false, heard::add).withAccelerator("Ctrl+Alt+M"),
+              MenuItem.separator(),
+              MenuItem.submenu("More", MenuItem.of("Deep", () -> {}))),
+          MenuItem.editMenu(),
+          MenuItem.windowMenu());
+      Assertions.assertEquals(3, window.menu().size());
+      if (this.hasMenuBarInWindow()) {
+        WindowContractTest.awaitTrue(
+            () -> WindowContractTest.innerHeight(window) < without, "the bar takes room");
+      }
+      Thread.sleep(500);
+      Screenshots.capture("menu-bar");
+
+      if (this.canTakeFocus() && this.pressKeys(Shortcut.parse("Ctrl+Alt+P"))) {
+        Assertions.assertEquals("ping", heard.poll(10, TimeUnit.SECONDS), "the keys pick it");
+        this.pressKeys(Shortcut.parse("Ctrl+Alt+M"));
+        Assertions.assertEquals(true, heard.poll(10, TimeUnit.SECONDS), "the mark goes on");
+        this.pressKeys(Shortcut.parse("Ctrl+Alt+M"));
+        Assertions.assertEquals(false, heard.poll(10, TimeUnit.SECONDS), "and off");
+      }
+
+      window.menu(List.of());
+      Assertions.assertEquals(List.of(), window.menu());
+      if (this.hasMenuBarInWindow()) {
+        WindowContractTest.awaitTrue(
+            () -> WindowContractTest.innerHeight(window) == without, "no bar, no room");
+      }
+      window.useApplicationMenu();
+      Assertions.assertEquals(3, window.menu().size());
+      application.menu(List.of());
+      if (this.hasMenuBarInWindow()) {
+        WindowContractTest.awaitTrue(
+            () -> WindowContractTest.innerHeight(window) == without, "the bar goes away");
+      }
+    }
+  }
+
+  private static int innerHeight(Window window) {
+    try {
+      return Integer.parseInt(Loads.eval(window, "String(window.innerHeight)"));
+    } catch (Exception e) {
+      throw new IllegalStateException(e);
+    }
+  }
+
+  @Test
+  void contextMenusOpenFromJavaAndThePage() throws Exception {
+    try (Application application = Application.create()) {
+      Window window =
+          application.open(
+              WindowParameters.builder().title("lwjwae :: context menu").size(640, 480).build());
+      final var loaded = Loads.expectFinished(window);
+      window.loadResource("test-app/index.html");
+      window.show();
+      loaded.get(30, TimeUnit.SECONDS);
+      window.focus();
+      WindowContractTest.awaitTrue(window::isVisible, "the window must show");
+
+      CompletableFuture<Void> shown =
+          window.showContextMenu(
+              MenuItem.of("First", () -> {}),
+              MenuItem.separator(),
+              MenuItem.checkbox("Checked", true, _ -> {}),
+              MenuItem.submenu("More", MenuItem.of("Deep", () -> {})));
+      Thread.sleep(1000);
+      Screenshots.capture("context-menu");
+      Assertions.assertFalse(shown.isDone(), "the menu waits for the user");
+      shown.cancel(false);
+      Assertions.assertEquals("2", Loads.eval(window, "String(1 + 1)"), "the page goes on");
+
+      // A page that aborts its call closes the menu too, right after the one of Java closed.
+      Assertions.assertEquals("AbortError", WindowContractTest.pageAbortsItsMenu(window));
+      Assertions.assertEquals("4", Loads.eval(window, "String(2 + 2)"));
+
+      Loads.eval(
+          window,
+          "lwjwae.menu.popup([{ id: 'first', label: 'First' }, { id: 'second', label: 'Second'"
+              + " }], { x: 20, y: 20 }).then((id) => window.__picked = String(id)); undefined;");
+      Thread.sleep(1000);
+      if (this.pickFirstEntryOfOpenMenu()) {
+        Assertions.assertEquals("first", Loads.awaitValue(window, "window.__picked"));
+
+        BlockingQueue<String> heard = new LinkedBlockingQueue<>();
+        window.contextMenu(MenuItem.of("Reload", () -> heard.add("reload")));
+        Loads.eval(
+            window,
+            "document.body.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true,"
+                + " cancelable: true, clientX: 30, clientY: 30 })); undefined;");
+        Thread.sleep(1000);
+        this.pickFirstEntryOfOpenMenu();
+        Assertions.assertEquals(
+            "reload", heard.poll(10, TimeUnit.SECONDS), "a right click opens the menu of Java");
+
+        if (this.canUseClipboardUnattended()) {
+          String text = "lwjwae copied " + System.nanoTime();
+          Loads.eval(
+              window,
+              "const input = document.createElement('input'); input.value = '"
+                  + text
+                  + "'; document.body.append(input); input.focus(); input.select(); undefined;");
+          window.showContextMenu(MenuItem.role(MenuRole.COPY));
+          Thread.sleep(1000);
+          this.pickFirstEntryOfOpenMenu();
+          WindowContractTest.awaitTrue(
+              () -> application.clipboard().readText().join().filter(text::equals).isPresent(),
+              "Copy copies the selection of the page");
+        }
+      } else {
+        window.close();
+      }
+    }
+  }
+
+  @Test
+  void iconShowsTheProgressAndTheBadge() throws Exception {
+    try (Application application = Application.create()) {
+      Window window =
+          application.open(
+              WindowParameters.builder().title("lwjwae :: taskbar").size(400, 300).build());
+      window.show();
+      WindowContractTest.awaitTrue(window::isVisible, "the window must show");
+      application.progress(0.4);
+      application.badgeCount(3);
+      Assertions.assertEquals(TaskbarProgress.of(0.4), application.progress());
+      Assertions.assertEquals(3, application.badgeCount());
+      Thread.sleep(500);
+      Screenshots.capture("taskbar-progress");
+      for (TaskbarProgress progress :
+          List.of(
+              TaskbarProgress.indeterminate(),
+              TaskbarProgress.paused(0.6),
+              TaskbarProgress.error(0.8),
+              TaskbarProgress.none())) {
+        application.progress(progress);
+      }
+      application.badgeCount(12);
+      Thread.sleep(500);
+      Screenshots.capture("taskbar-badge");
+      application.badgeCount(0);
+
+      // A window opened later shows what the application shows.
+      application.progress(0.7);
+      Window later = application.open(WindowParameters.builder().title("lwjwae :: later").build());
+      later.show();
+      WindowContractTest.awaitTrue(later::isVisible, "the window must show");
+      Assertions.assertEquals(TaskbarProgress.of(0.7), application.progress());
+    }
+  }
+
+  @Test
+  void thePageQueriesTheStoreOfTheApplication(@TempDir Path directory) throws Exception {
+    ApplicationParameters parameters =
+        ApplicationParameters.builder().name("lwjwae-store").dataDirectory(directory).build();
+    try (Application application = Application.create(parameters)) {
+      application.store().executeScript("CREATE TABLE tasks (title TEXT UNIQUE, hours INTEGER)");
+      application.store().execute("INSERT INTO tasks VALUES (?, ?)", "from Java", 1);
+      Window window =
+          application.open(
+              WindowParameters.builder().title("lwjwae :: store").size(400, 300).build());
+      final var loaded = Loads.expectFinished(window);
+      window.loadResource("test-app/index.html");
+      window.show();
+      loaded.get(30, TimeUnit.SECONDS);
+      Loads.eval(
+          window,
+          "(async () => { const store = lwjwae.store; const inserted = await store.execute('INSERT"
+              + " INTO tasks VALUES (?, ?)', ['a', 2]); const added = await store.transaction(["
+              + " { sql: \"INSERT INTO tasks VALUES ('b', 3) RETURNING title\" } ]); const sums ="
+              + " await store.query('SELECT sum(hours) AS hours FROM tasks WHERE hours > :min',"
+              + " { min: 1 }); let conflict; try { await store.execute('INSERT INTO tasks VALUES"
+              + " (?, 0)', ['a']); } catch (error) { conflict = error.code; } window.__store ="
+              + " JSON.stringify({ inserted, added, sums, conflict }); })(); undefined;");
+      Assertions.assertEquals(
+          "{\"inserted\":{\"changes\":1,\"lastInsertRowId\":2},\"added\":[[{\"title\":\"b\"}]],"
+              + "\"sums\":[{\"hours\":5}],\"conflict\":\"constraint\"}",
+          Loads.awaitValue(window, "window.__store"));
+      Assertions.assertEquals(
+          List.of(Map.of("n", 3L)),
+          application.store().query("SELECT count(*) AS n FROM tasks"),
+          "one store");
+    }
+  }
+
+  /**
+   * Opens a menu from the page that the page aborts after a second, and returns how its call ended:
+   * {@code AbortError}, or what it resolved with.
+   */
+  private static String pageAbortsItsMenu(Window window) throws Exception {
+    Loads.eval(
+        window,
+        "window.__aborted = undefined; { const controller = new AbortController();"
+            + " lwjwae.menu.popup([{ id: 'one', label: 'One' }], { x: 20, y: 20, signal:"
+            + " controller.signal }).then((id) => window.__aborted = 'resolved with ' + id,"
+            + " (error) => window.__aborted = error.name);"
+            + " setTimeout(() => controller.abort(), 1000); } undefined;");
+    return Loads.awaitValue(window, "window.__aborted");
+  }
+
+  @Test
+  void cookiesGoBothWaysBetweenJavaAndThePage() throws Exception {
+    try (LocalPages pages = new LocalPages();
+        Application application = Application.create()) {
+      Window window =
+          application.open(
+              WindowParameters.builder().title("lwjwae :: cookies").size(400, 300).build());
+      window.show();
+      Cookies cookies = application.cookies();
+      cookies
+          .set(Cookie.builder().name("fromJava").value("1").domain("127.0.0.1").build())
+          .get(10, TimeUnit.SECONDS);
+      String url = pages.page("/cookies.html", "<!DOCTYPE html><html><body>cookies</body></html>");
+      final var loaded = Loads.expectFinished(window);
+      window.navigate(url);
+      loaded.get(30, TimeUnit.SECONDS);
+      Assertions.assertEquals(
+          "fromJava=1", Loads.eval(window, "document.cookie"), "the page reads the cookie of Java");
+
+      Loads.eval(window, "document.cookie = 'fromPage=2; path=/'; undefined;");
+      Map<String, String> seen = WindowContractTest.cookieValues(cookies.get(url));
+      Assertions.assertEquals(Map.of("fromJava", "1", "fromPage", "2"), seen);
+
+      Cookie fromJava =
+          cookies.get(url).get(10, TimeUnit.SECONDS).stream()
+              .filter(cookie -> cookie.name().equals("fromJava"))
+              .findFirst()
+              .orElseThrow();
+      Assertions.assertEquals("/", fromJava.path());
+      Assertions.assertTrue(fromJava.isSession());
+      cookies.delete(fromJava).get(10, TimeUnit.SECONDS);
+      Assertions.assertEquals(
+          Map.of("fromPage", "2"), WindowContractTest.cookieValues(cookies.get(url)));
+      Assertions.assertEquals(
+          Map.of("fromPage", "2"), WindowContractTest.cookieValues(cookies.getAll()));
+
+      cookies.clear().get(10, TimeUnit.SECONDS);
+      Assertions.assertEquals(Map.of(), WindowContractTest.cookieValues(cookies.getAll()));
+      // The page keeps a cache of its cookies, which the engine updates when its network process
+      // tells it: the page sees the change a moment later.
+      long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+      while (!Loads.eval(window, "document.cookie").isEmpty() && System.nanoTime() < deadline) {
+        Thread.sleep(100);
+      }
+      Assertions.assertEquals("", Loads.eval(window, "document.cookie"));
+    }
+  }
+
+  /** The names and values of the cookies that {@code pending} lists. */
+  private static Map<String, String> cookieValues(CompletableFuture<List<Cookie>> pending)
+      throws Exception {
+    Map<String, String> values = new TreeMap<>();
+    pending.get(10, TimeUnit.SECONDS).forEach(cookie -> values.put(cookie.name(), cookie.value()));
+    return values;
   }
 
   /** Waits for an event of {@code type}, passing over the others, and returns it. */

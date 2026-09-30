@@ -32,6 +32,9 @@ public class Signatures {
   /** {@code WORD}, {@code ATOM}. */
   public final ValueLayout.OfShort C_SHORT = Layouts.C_SHORT;
 
+  /** {@code double}. */
+  public final ValueLayout.OfDouble C_DOUBLE = Layouts.C_DOUBLE;
+
   /** C {@code bool}. */
   public final ValueLayout.OfBoolean C_BOOL = Layouts.C_BOOL;
 
@@ -152,12 +155,27 @@ public class Signatures {
   public final FunctionDescriptor INT_POINTER_X4 =
       FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_POINTER, C_POINTER);
 
+  /**
+   * {@code HRESULT f(T*, U*, V*, W*, X*, Y*)}: {@code ICoreWebView2CookieManager::CreateCookie}.
+   */
+  public final FunctionDescriptor INT_POINTER_X6 =
+      FunctionDescriptor.of(
+          C_INT, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER);
+
+  /** {@code HRESULT f(T*, double)}: {@code ICoreWebView2Cookie::put_Expires}. */
+  public final FunctionDescriptor INT_POINTER_DOUBLE =
+      FunctionDescriptor.of(C_INT, C_POINTER, C_DOUBLE);
+
   /** {@code int f(T*, U*, V*, UINT)}: {@code MessageBoxW}. */
   public final FunctionDescriptor INT_POINTER_POINTER_POINTER_INT =
       FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_POINTER, C_INT);
 
   /** {@code SHORT f(int)}: {@code GetAsyncKeyState}. */
   public final FunctionDescriptor SHORT_INT = FunctionDescriptor.of(C_SHORT, C_INT);
+
+  /** {@code UINT f(UINT, INPUT*, int)}: {@code SendInput}. */
+  public final FunctionDescriptor INT_INT_POINTER_INT =
+      FunctionDescriptor.of(C_INT, C_INT, C_POINTER, C_INT);
 
   /** {@code BOOL f(T*, UINT, UINT)}: {@code EnableMenuItem}. */
   public final FunctionDescriptor INT_POINTER_INT_INT =
@@ -176,6 +194,10 @@ public class Signatures {
   /** {@code int f(T*, int, long, long)}: {@code PostMessageW}. */
   public final FunctionDescriptor INT_POINTER_INT_LONG_LONG =
       FunctionDescriptor.of(C_INT, C_POINTER, C_INT, C_LONG_PTR, C_LONG_PTR);
+
+  /** {@code HRESULT f(T*, HWND, ULONGLONG, ULONGLONG)}: {@code ITaskbarList3::SetProgressValue}. */
+  public final FunctionDescriptor INT_POINTER_POINTER_LONG_LONG =
+      FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_LONG_PTR, C_LONG_PTR);
 
   /** {@code int f(T*, int, int, int, int, U*, V*)}: {@code TrackPopupMenu}. */
   public final FunctionDescriptor INT_POINTER_INT_X4_POINTER_POINTER =

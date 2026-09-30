@@ -147,6 +147,26 @@
           ]
         }
       ]
+    },
+    {
+      "type": "dev.ivchenko.lwjwae.gtk4.Gtk4MenuBuilder",
+      "methods": [
+        {
+          "name": "onActivate",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
+        },
+        {
+          "name": "onPopoverClosed",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
+        }
+      ]
     }
   ],
   "resources": [
@@ -298,6 +318,27 @@
           "void*",
           "void*",
           "void*"
+        ]
+      },
+      {
+        "returnType": "jint",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "jdouble",
+          "jdouble",
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "returnType": "void*",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "void*",
+          "void*",
+          "jint"
         ]
       }
     ],
@@ -458,6 +499,25 @@
         "returnType": "jint",
         "parameterTypes": [
           "void*",
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.gtk4.Gtk4MenuBuilder",
+        "method": "onActivate",
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.gtk4.Gtk4MenuBuilder",
+        "method": "onPopoverClosed",
+        "returnType": "void",
+        "parameterTypes": [
           "void*",
           "void*"
         ]

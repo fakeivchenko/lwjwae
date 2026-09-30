@@ -12,5 +12,100 @@
     {
       "glob": "META-INF/services/dev.ivchenko.lwjwae.bridge.codec.BridgeCodec"
     }
-  ]
+  ],
+  "foreign": {
+    "downcalls": [
+      {
+        "returnType": "jint",
+        "parameterTypes": [
+          "void*"
+        ]
+      },
+      {
+        "returnType": "jint",
+        "parameterTypes": [
+          "void*",
+          "jint"
+        ]
+      },
+      {
+        "returnType": "jint",
+        "parameterTypes": [
+          "void*",
+          "jint",
+          "jdouble"
+        ]
+      },
+      {
+        "returnType": "jint",
+        "parameterTypes": [
+          "void*",
+          "jint",
+          "jlong"
+        ]
+      },
+      {
+        "returnType": "jint",
+        "parameterTypes": [
+          "void*",
+          "jint",
+          "void*",
+          "jint",
+          "void*"
+        ]
+      },
+      {
+        "returnType": "jint",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "jint",
+          "void*"
+        ]
+      },
+      {
+        "returnType": "jint",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "jint",
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "returnType": "void*",
+        "parameterTypes": [
+          "void*"
+        ]
+      },
+      {
+        "returnType": "void*",
+        "parameterTypes": [
+          "void*",
+          "jint"
+        ]
+      },
+      {
+        "returnType": "jdouble",
+        "parameterTypes": [
+          "void*",
+          "jint"
+        ]
+      },
+      {
+        "returnType": "jlong",
+        "parameterTypes": [
+          "void*"
+        ]
+      },
+      {
+        "returnType": "jlong",
+        "parameterTypes": [
+          "void*",
+          "jint"
+        ]
+      }
+    ]
+  }
 }

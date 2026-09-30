@@ -3,11 +3,13 @@ package dev.ivchenko.lwjwae;
 import dev.ivchenko.lwjwae.bridge.BridgeProtocol;
 import dev.ivchenko.lwjwae.bridge.codec.BridgeCodec;
 import dev.ivchenko.lwjwae.clipboard.Clipboard;
+import dev.ivchenko.lwjwae.cookie.Cookies;
 import dev.ivchenko.lwjwae.event.Event;
 import dev.ivchenko.lwjwae.event.EventSubscription;
 import dev.ivchenko.lwjwae.event.SecondInstanceEvent;
 import dev.ivchenko.lwjwae.exception.ShortcutUnavailableException;
 import dev.ivchenko.lwjwae.instance.InstanceLock;
+import dev.ivchenko.lwjwae.menu.MenuItem;
 import dev.ivchenko.lwjwae.notification.Notification;
 import dev.ivchenko.lwjwae.notification.NotificationHandle;
 import dev.ivchenko.lwjwae.rpc.RpcHandler;
@@ -15,14 +17,19 @@ import dev.ivchenko.lwjwae.shortcut.Shortcut;
 import dev.ivchenko.lwjwae.state.SavedWindowState;
 import dev.ivchenko.lwjwae.state.WindowStateStore;
 import dev.ivchenko.lwjwae.state.WindowStateTracker;
+import dev.ivchenko.lwjwae.store.Store;
+import dev.ivchenko.lwjwae.taskbar.TaskbarProgress;
 import dev.ivchenko.lwjwae.tray.Tray;
 import dev.ivchenko.lwjwae.tray.TrayIcon;
 import dev.ivchenko.lwjwae.ui.UiDispatcher;
+import dev.ivchenko.lwjwae.update.UpdateParameters;
+import dev.ivchenko.lwjwae.update.Updater;
 import dev.ivchenko.lwjwae.util.HandlerUtil;
 import dev.ivchenko.lwjwae.util.ThrowableUtil;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -104,6 +111,12 @@ public abstract class AbstractApplication implements Application {
   private final AtomicBoolean closed = new AtomicBoolean();
 
   private volatile Clipboard clipboard;
+  private volatile Cookies cookies;
+  private volatile List<MenuItem> menu = List.of();
+  private volatile TaskbarProgress progress = TaskbarProgress.none();
+  private volatile int badgeCount;
+  private Store store;
+  private Updater updater;
   private final Map<Shortcut, EventSubscription> globalShortcuts = new HashMap<>();
 
   // --- single instance, under the lock of the listener list ---
@@ -154,6 +167,7 @@ public abstract class AbstractApplication implements Application {
     long id = this.windowIds.incrementAndGet();
     AbstractWindow window = this.createWindow(id, parameters);
     window.closeAction(parameters.closeAction());
+    window.initializeMenu(parameters.menu());
     AbstractApplication.applyLimits(window, parameters);
     this.restoreState(window, parameters);
     this.windows.put(id, window);
@@ -397,6 +411,102 @@ public abstract class AbstractApplication implements Application {
   }
 
   @Override
+  public final void menu(List<MenuItem> items) {
+    List<MenuItem> bar = AbstractWindow.requireMenuBar(items);
+    this.checkOpen();
+    this.menu = bar;
+    this.forEachWindow(AbstractWindow::applicationMenuChanged);
+    this.menuChanged(bar);
+  }
+
+  @Override
+  public final List<MenuItem> menu() {
+    return this.menu;
+  }
+
+  /**
+   * Tells the backend that the menu of the application is now {@code items}, after every window
+   * heard of it. For a platform whose menu bar belongs to the process; nothing by default.
+   */
+  protected void menuChanged(List<MenuItem> items) {}
+
+  @Override
+  public final synchronized Store store() {
+    this.checkOpen();
+    if (this.store == null) {
+      Path directory = this.parameters.dataDirectory();
+      if (directory == null) {
+        throw new IllegalStateException(
+            "A store needs a data directory: give the application a name");
+      }
+      this.store = Store.open(directory.resolve("store.sqlite"));
+    }
+    return this.store;
+  }
+
+  @Override
+  public final synchronized Updater updater() {
+    this.checkOpen();
+    if (this.updater == null) {
+      UpdateParameters updates = this.parameters.updates();
+      if (updates == null) {
+        throw new IllegalStateException(
+            "An updater needs update parameters: set them, or the updates block of the plugin");
+      }
+      this.updater = new Updater(updates, this::quit);
+    }
+    return this.updater;
+  }
+
+  @Override
+  public final void progress(TaskbarProgress progress) {
+    Objects.requireNonNull(progress, "progress");
+    this.checkOpen();
+    this.progress = progress;
+    this.dispatcher().run(() -> this.showProgress(progress));
+  }
+
+  @Override
+  public final TaskbarProgress progress() {
+    return this.progress;
+  }
+
+  @Override
+  public final void badgeCount(int count) {
+    if (count < 0) {
+      throw new IllegalArgumentException("A badge counts from 0: " + count);
+    }
+    this.checkOpen();
+    this.badgeCount = count;
+    this.dispatcher().run(() -> this.showBadgeCount(count));
+  }
+
+  @Override
+  public final int badgeCount() {
+    return this.badgeCount;
+  }
+
+  /**
+   * Shows {@code progress} on the icon of the application, on the UI thread. A backend whose
+   * platform shows it per window reads {@link #progress()} for a window that opens later.
+   *
+   * @throws UnsupportedOperationException If this backend has no progress yet, the default.
+   */
+  protected void showProgress(TaskbarProgress progress) {
+    throw new UnsupportedOperationException("No progress on the icon on this backend yet");
+  }
+
+  /**
+   * Shows {@code count} on the icon of the application, on the UI thread, 0 for none, as {@link
+   * #showProgress} does.
+   *
+   * @throws UnsupportedOperationException If this backend has no badge yet, the default.
+   */
+  protected void showBadgeCount(int count) {
+    throw new UnsupportedOperationException("No badge on the icon on this backend yet");
+  }
+
+  @Override
   public final EventSubscription globalShortcut(Shortcut shortcut, Runnable handler) {
     Objects.requireNonNull(shortcut, "shortcut");
     Objects.requireNonNull(handler, "handler");
@@ -452,6 +562,30 @@ public abstract class AbstractApplication implements Application {
   protected EventSubscription bindGlobalShortcut(Shortcut shortcut, Runnable pressed) {
     throw new UnsupportedOperationException(
         "The " + this.engine() + " backend has no global shortcuts yet");
+  }
+
+  @Override
+  public final Cookies cookies() {
+    this.checkOpen();
+    Cookies current = this.cookies;
+    if (current == null) {
+      synchronized (this) {
+        if (this.cookies == null) {
+          this.cookies = this.createCookies();
+        }
+        current = this.cookies;
+      }
+    }
+    return current;
+  }
+
+  /**
+   * Creates the cookies of the engine, once, on first use.
+   *
+   * @throws UnsupportedOperationException If this backend has no cookies yet, the default.
+   */
+  protected Cookies createCookies() {
+    throw new UnsupportedOperationException("No cookies on this backend yet");
   }
 
   @Override
@@ -702,6 +836,14 @@ public abstract class AbstractApplication implements Application {
       }
     } catch (InterruptedException _) {
       Thread.currentThread().interrupt();
+    }
+    synchronized (this) {
+      if (this.store != null) {
+        this.store.close();
+      }
+      if (this.updater != null) {
+        this.updater.close();
+      }
     }
     this.signalIdle();
     this.onClose();

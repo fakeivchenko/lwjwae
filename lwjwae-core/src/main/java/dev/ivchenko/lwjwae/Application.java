@@ -2,19 +2,24 @@ package dev.ivchenko.lwjwae;
 
 import dev.ivchenko.lwjwae.bridge.codec.BridgeCodec;
 import dev.ivchenko.lwjwae.clipboard.Clipboard;
+import dev.ivchenko.lwjwae.cookie.Cookies;
 import dev.ivchenko.lwjwae.event.Event;
 import dev.ivchenko.lwjwae.event.EventSubscription;
 import dev.ivchenko.lwjwae.event.SecondInstanceEvent;
 import dev.ivchenko.lwjwae.exception.BackendNotAvailableException;
 import dev.ivchenko.lwjwae.exception.ShortcutUnavailableException;
 import dev.ivchenko.lwjwae.instance.InstanceLock;
+import dev.ivchenko.lwjwae.menu.MenuItem;
 import dev.ivchenko.lwjwae.notification.Notification;
 import dev.ivchenko.lwjwae.notification.NotificationHandle;
 import dev.ivchenko.lwjwae.rpc.RpcHandler;
 import dev.ivchenko.lwjwae.shortcut.Shortcut;
+import dev.ivchenko.lwjwae.store.Store;
+import dev.ivchenko.lwjwae.taskbar.TaskbarProgress;
 import dev.ivchenko.lwjwae.tray.Tray;
 import dev.ivchenko.lwjwae.tray.TrayIcon;
 import dev.ivchenko.lwjwae.tray.TrayMenuItem;
+import dev.ivchenko.lwjwae.update.Updater;
 import dev.ivchenko.lwjwae.util.PlatformUtil;
 import java.io.UncheckedIOException;
 import java.nio.file.Path;
@@ -460,6 +465,162 @@ public interface Application extends AutoCloseable {
   }
 
   /**
+   * Sets the menu bar of the application: a {@link dev.ivchenko.lwjwae.menu.SubmenuItem} for each
+   * menu of the bar, in order. Every window shows it, the ones already open and the ones opened
+   * later, unless it has a menu of its own, see {@link Window#menu(List)}. An empty list takes the
+   * bar away.
+   *
+   * <pre>{@code
+   * application.menu(
+   *     MenuItem.submenu("File", MenuItem.of("Open", "CmdOrCtrl+O", this::open)),
+   *     MenuItem.editMenu());
+   * }</pre>
+   *
+   * <p>The accelerators of the entries work while a window of the application has the keyboard, and
+   * they come before the page: a page that listens to {@code Ctrl+S} itself doesn't hear the {@code
+   * Ctrl+S} of an entry. The keys of an editing {@link dev.ivchenko.lwjwae.menu.MenuRole} stay with
+   * the page.
+   *
+   * <p>Platforms:
+   *
+   * <ul>
+   *   <li>Windows: A menu bar under the title bar of every window, which a window without a title
+   *       bar doesn't show.
+   *   <li>macOS: The menu bar at the top of the screen, which shows the menu of the window in
+   *       front. The application menu, with About, Hide, and Quit, stays first; the menus here
+   *       follow it. Without an Edit menu, such as {@link MenuItem#editMenu()}, a text field of a
+   *       page takes no Command-C, V, X, A, or Z. Before the first call, the bar holds the
+   *       application menu, File, Edit, and Window.
+   *   <li>Linux, GTK 3: A menu bar above the page of every window, which a window without a title
+   *       bar shows too.
+   *   <li>Linux, GTK 4: As on GTK 3.
+   * </ul>
+   *
+   * @throws IllegalArgumentException If an entry of the top level isn't a submenu.
+   * @throws IllegalStateException If the application is closed.
+   */
+  void menu(List<MenuItem> items);
+
+  /** The same as {@link #menu(List)}. */
+  default void menu(MenuItem... items) {
+    this.menu(List.of(items));
+  }
+
+  /** The menu bar of the application, empty for none. */
+  List<MenuItem> menu();
+
+  /**
+   * The store of the application: a database of SQLite, with all of its SQL, in {@code
+   * store.sqlite} of {@link ApplicationParameters#dataDirectory()}. It opens on the first call and
+   * closes with the application. A page reaches it as {@code lwjwae.store}:
+   *
+   * <pre>{@code
+   * const store = lwjwae.store;
+   * await store.executeScript("CREATE TABLE IF NOT EXISTS notes (id INTEGER PRIMARY KEY, title)");
+   * const { lastInsertRowId } = await store.execute("INSERT INTO notes (title) VALUES ('Milk')");
+   * const rows = await store.query("SELECT * FROM notes WHERE id = :id", { id: lastInsertRowId });
+   * }</pre>
+   *
+   * <p>Platforms:
+   *
+   * <ul>
+   *   <li>Windows: Through {@code winsqlite3.dll}, which Windows 10 and later have.
+   *   <li>macOS: Through the {@code libsqlite3.dylib} of the system.
+   *   <li>Linux, GTK 3: Through {@code libsqlite3.so.0}, which WebKitGTK depends on.
+   *   <li>Linux, GTK 4: As on GTK 3.
+   * </ul>
+   *
+   * @throws IllegalStateException If the application has no data directory, which it has when it
+   *     has a name, or is closed.
+   * @throws dev.ivchenko.lwjwae.exception.StoreFailedException If SQLite can't open the file.
+   */
+  Store store();
+
+  /**
+   * The updater of the application, which finds, downloads, and installs its new versions from the
+   * manifest of {@link ApplicationParameters#updates()}. A page reaches it as {@code
+   * lwjwae.updates}:
+   *
+   * <pre>{@code
+   * const update = await lwjwae.updates.check();
+   * if (update?.installable) {
+   *   await lwjwae.updates.install({ onProgress: (fraction) => bar.value = fraction });
+   * }
+   * }</pre>
+   *
+   * <p>Platforms:
+   *
+   * <ul>
+   *   <li>Windows: Installs the {@code .msi} of the new version with {@code msiexec /passive}.
+   *   <li>macOS: Replaces the {@code .app} bundle with the one of the new version, signed by the
+   *       same team.
+   *   <li>Linux, GTK 3: Replaces the AppImage; a Debian or Arch package updates through its package
+   *       manager, so the update is found but not installable.
+   *   <li>Linux, GTK 4: As on GTK 3.
+   * </ul>
+   *
+   * @throws IllegalStateException If the application has no update parameters, or is closed.
+   */
+  Updater updater();
+
+  /**
+   * Shows {@code progress} on the icon of the application in the taskbar or the Dock, until the
+   * next call; {@link TaskbarProgress#none()} takes it away. The progress belongs to the
+   * application, and every window of it shows it where the platform shows one per window.
+   *
+   * <p>Platforms:
+   *
+   * <ul>
+   *   <li>Windows: The button of every window in the taskbar, through {@code ITaskbarList3}, in
+   *       green, yellow for {@link dev.ivchenko.lwjwae.taskbar.ProgressState#PAUSED}, and red for
+   *       {@link dev.ivchenko.lwjwae.taskbar.ProgressState#ERROR}; a window opened later shows it
+   *       too.
+   *   <li>macOS: A bar over the icon in the Dock, the same in every state; an indeterminate one
+   *       stands still, since the Dock draws the icon only when it changes.
+   *   <li>Linux, GTK 3: The {@code com.canonical.Unity.LauncherEntry} signal over D-Bus, for the
+   *       desktop entry named after the program, {@code NAME.desktop}, as the Gradle plugin of
+   *       lwjwae installs it. The task manager of KDE Plasma and the dock of Ubuntu show it; an
+   *       indeterminate one shows no bar, and an error asks for attention.
+   *   <li>Linux, GTK 4: As on GTK 3.
+   * </ul>
+   *
+   * @throws IllegalStateException If the application is closed.
+   */
+  void progress(TaskbarProgress progress);
+
+  /** Shows the progress {@code value}, from 0 to 1, on the icon: {@link TaskbarProgress#of}. */
+  default void progress(double value) {
+    this.progress(TaskbarProgress.of(value));
+  }
+
+  /** The progress on the icon of the application. */
+  TaskbarProgress progress();
+
+  /**
+   * Shows {@code count} on the icon of the application in the taskbar or the Dock, such as the
+   * number of unread messages, until the next call; 0 takes it away.
+   *
+   * <p>Platforms:
+   *
+   * <ul>
+   *   <li>Windows: A red circle with the number over the button of every window in the taskbar,
+   *       through {@code SetOverlayIcon}; {@code 9+} from 10 on. The taskbar shows it only with its
+   *       small buttons off, which is the default.
+   *   <li>macOS: The badge of the icon in the Dock.
+   *   <li>Linux, GTK 3: The count of {@code com.canonical.Unity.LauncherEntry}, as for {@link
+   *       #progress(TaskbarProgress)}.
+   *   <li>Linux, GTK 4: As on GTK 3.
+   * </ul>
+   *
+   * @throws IllegalArgumentException If {@code count} is negative.
+   * @throws IllegalStateException If the application is closed.
+   */
+  void badgeCount(int count);
+
+  /** The count on the icon of the application, 0 for none. */
+  int badgeCount();
+
+  /**
    * Runs {@code handler} whenever the user presses {@code shortcut}, whichever application has the
    * keyboard, until the returned handle gives the shortcut back or the application closes.
    *
@@ -516,6 +677,24 @@ public interface Application extends AutoCloseable {
    * @throws IllegalStateException If the application is closed.
    */
   Clipboard clipboard();
+
+  /**
+   * The cookies of the engine, which every window of the application shares.
+   *
+   * <p>Platforms:
+   *
+   * <ul>
+   *   <li>Windows: The {@code ICoreWebView2CookieManager} of the profile of the application,
+   *       reached through a window, so a call needs one to be open.
+   *   <li>macOS: The {@code WKHTTPCookieStore} of the default data store.
+   *   <li>Linux, GTK 3: The {@code WebKitCookieManager} of the default web context.
+   *   <li>Linux, GTK 4: The {@code WebKitCookieManager} of the default network session.
+   * </ul>
+   *
+   * @throws UnsupportedOperationException If this backend has no cookies yet.
+   * @throws IllegalStateException If the application is closed.
+   */
+  Cookies cookies();
 
   /**
    * Shows a desktop notification and returns the handle that takes it back.

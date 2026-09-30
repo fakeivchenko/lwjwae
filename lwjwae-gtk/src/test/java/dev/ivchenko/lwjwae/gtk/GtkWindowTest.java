@@ -50,6 +50,16 @@ class GtkWindowTest extends WindowContractTest {
     return true;
   }
 
+  /** On X11, as {@link #pressKeys}: the arrow selects the first entry, and Return picks it. */
+  @Override
+  protected boolean pickFirstEntryOfOpenMenu() {
+    if (!this.canPlaceWindows()) {
+      return false;
+    }
+    XtestKeyboard.tap("Down", "Return");
+    return true;
+  }
+
   @Override
   protected Class<? extends Application> expectedApplicationType() {
     return GtkApplication.class;

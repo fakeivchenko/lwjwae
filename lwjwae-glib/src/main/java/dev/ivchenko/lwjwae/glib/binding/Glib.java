@@ -10,6 +10,7 @@ import java.lang.invoke.MethodHandle;
 import java.lang.invoke.VarHandle;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import lombok.SneakyThrows;
 import lombok.experimental.UtilityClass;
 
@@ -50,6 +51,8 @@ public class Glib {
       NativeLibraries.downcall(GLIB, "g_getenv", Signatures.POINTER_POINTER);
   private final MethodHandle SETENV =
       NativeLibraries.downcall(GLIB, "g_setenv", Signatures.INT_POINTER_POINTER_INT);
+  private final MethodHandle UNSETENV =
+      NativeLibraries.downcall(GLIB, "g_unsetenv", Signatures.VOID_POINTER);
   private final MethodHandle FREE =
       NativeLibraries.downcall(GLIB, "g_free", Signatures.VOID_POINTER);
   private final MethodHandle ERROR_FREE =
@@ -108,6 +111,14 @@ public class Glib {
   private final MethodHandle APP_INFO_LAUNCH_DEFAULT_FOR_URI =
       NativeLibraries.downcall(
           GIO, "g_app_info_launch_default_for_uri", Signatures.INT_POINTER_POINTER_POINTER);
+  private final MethodHandle APP_LAUNCH_CONTEXT_NEW =
+      NativeLibraries.downcall(GIO, "g_app_launch_context_new", Signatures.POINTER_VOID);
+  private final MethodHandle APP_LAUNCH_CONTEXT_SETENV =
+      NativeLibraries.downcall(
+          GIO, "g_app_launch_context_setenv", Signatures.VOID_POINTER_POINTER_POINTER);
+  private final MethodHandle APP_LAUNCH_CONTEXT_UNSETENV =
+      NativeLibraries.downcall(
+          GIO, "g_app_launch_context_unsetenv", Signatures.VOID_POINTER_POINTER);
   private final MethodHandle MEMORY_INPUT_STREAM_NEW_FROM_DATA =
       NativeLibraries.downcall(
           GIO, "g_memory_input_stream_new_from_data", Signatures.POINTER_POINTER_LONG_POINTER);
@@ -169,6 +180,14 @@ public class Glib {
   public void setEnvironment(String name, String value) {
     try (Arena arena = Arena.ofConfined()) {
       int _ = (int) SETENV.invokeExact(arena.allocateFrom(name), arena.allocateFrom(value), 1);
+    }
+  }
+
+  /** Calls {@code g_unsetenv}, with the same care as {@link #setEnvironment}. */
+  @SneakyThrows
+  public void unsetEnvironment(String name) {
+    try (Arena arena = Arena.ofConfined()) {
+      UNSETENV.invokeExact(arena.allocateFrom(name));
     }
   }
 
@@ -367,16 +386,28 @@ public class Glib {
    * Opens {@code uri} in the application that the desktop chose for its scheme, through {@code
    * g_app_info_launch_default_for_uri}, which goes through the OpenURI portal inside a sandbox.
    *
+   * @param environment Variables to give the application in place of those of this process: a
+   *     value, or {@code null} to leave the variable out.
    * @throws IllegalStateException If nothing opens it.
    */
   @SneakyThrows
-  public void launchDefaultForUri(String uri) {
+  public void launchDefaultForUri(String uri, Map<String, String> environment) {
+    MemorySegment context = (MemorySegment) APP_LAUNCH_CONTEXT_NEW.invokeExact();
     try (Arena arena = Arena.ofConfined()) {
+      for (Map.Entry<String, String> variable : environment.entrySet()) {
+        if (variable.getValue() == null) {
+          APP_LAUNCH_CONTEXT_UNSETENV.invokeExact(context, arena.allocateFrom(variable.getKey()));
+        } else {
+          APP_LAUNCH_CONTEXT_SETENV.invokeExact(
+              context,
+              arena.allocateFrom(variable.getKey()),
+              arena.allocateFrom(variable.getValue()));
+        }
+      }
       MemorySegment error = arena.allocate(Signatures.C_POINTER);
       int launched =
           (int)
-              APP_INFO_LAUNCH_DEFAULT_FOR_URI.invokeExact(
-                  arena.allocateFrom(uri), MemorySegment.NULL, error);
+              APP_INFO_LAUNCH_DEFAULT_FOR_URI.invokeExact(arena.allocateFrom(uri), context, error);
       if (launched == 0) {
         throw new IllegalStateException(
             "Could not open "
@@ -384,6 +415,8 @@ public class Glib {
                 + ": "
                 + Glib.takeErrorMessage(error.get(Signatures.C_POINTER, 0)));
       }
+    } finally {
+      Glib.unref(context);
     }
   }
 

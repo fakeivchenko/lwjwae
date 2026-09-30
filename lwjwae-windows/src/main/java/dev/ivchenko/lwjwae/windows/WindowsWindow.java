@@ -17,6 +17,10 @@ import dev.ivchenko.lwjwae.exception.ResourceNotFoundException;
 import dev.ivchenko.lwjwae.exception.ScriptEvaluationFailedException;
 import dev.ivchenko.lwjwae.foreign.CallbackRegistry;
 import dev.ivchenko.lwjwae.foreign.NativeLibraries;
+import dev.ivchenko.lwjwae.menu.CheckMenuItem;
+import dev.ivchenko.lwjwae.menu.MenuCommands;
+import dev.ivchenko.lwjwae.menu.MenuRole;
+import dev.ivchenko.lwjwae.shortcut.Shortcut;
 import dev.ivchenko.lwjwae.util.MimeTypeUtil;
 import dev.ivchenko.lwjwae.util.ResourceUtil;
 import dev.ivchenko.lwjwae.util.ScriptUtil;
@@ -92,6 +96,9 @@ public class WindowsWindow extends AbstractWindow {
 
   private static volatile boolean windowClassRegistered;
 
+  /** {@code TaskbarButtonCreated}: the taskbar has a button for the window, or has it again. */
+  private static volatile int taskbarButtonCreated;
+
   private final WindowsApplication application;
   private final long callbackId;
   private final CompletableFuture<Void> ready = new CompletableFuture<>();
@@ -99,6 +106,9 @@ public class WindowsWindow extends AbstractWindow {
   private volatile MemorySegment hwnd;
   private volatile MemorySegment controller;
   private volatile MemorySegment webView;
+
+  /** The menu bar that the window shows, which the window destroys with itself. */
+  private volatile MemorySegment menuBarHandle;
 
   /**
    * Creates the Win32 window and the WebView2 controller inside it, and returns when both exist.
@@ -420,6 +430,94 @@ public class WindowsWindow extends AbstractWindow {
     WindowsDialogs.message(this.window(), parameters, completion);
   }
 
+  /**
+   * A menu bar under the title bar. A window without a title bar shows none: the bar lives in the
+   * frame, which the window draws without. The keys of the entries work either way.
+   */
+  @Override
+  protected void presentMenuBar(MenuCommands commands) {
+    MemorySegment current = this.hwnd;
+    if (current == null || this.frame != WindowFrame.FULL) {
+      return;
+    }
+    MemorySegment previous = this.menuBarHandle;
+    MemorySegment bar = commands.isEmpty() ? MemorySegment.NULL : WindowsMenus.menuBar(commands);
+    User32.setMenu(current, bar);
+    this.menuBarHandle = commands.isEmpty() ? null : bar;
+    if (previous != null) {
+      User32.destroyMenu(previous);
+    }
+    if (this.controller != null) {
+      this.fitWebView();
+    }
+    this.windowChanged();
+  }
+
+  /** {@code TrackPopupMenu} at the place, in the pixels of the screen, which waits for the user. */
+  @Override
+  protected void presentContextMenu(
+      MenuCommands commands, WindowPosition place, DialogCompletion<Integer> picked) {
+    MemorySegment current = this.window();
+    MemorySegment menu = WindowsMenus.popupMenu(commands);
+    try {
+      picked.onCancel(User32::endMenu);
+      int id;
+      if (place == null) {
+        id = User32.trackPopupMenu(menu, current);
+      } else {
+        double scale = User32.scale(current);
+        id =
+            User32.trackPopupMenuAt(
+                menu,
+                current,
+                (int) Math.round(place.x() * scale),
+                (int) Math.round(place.y() * scale));
+      }
+      picked.complete(id);
+    } finally {
+      User32.destroyMenu(menu);
+    }
+  }
+
+  @Override
+  protected void performEditing(MenuRole role) {
+    MemorySegment current = this.controller;
+    if (current != null) {
+      // A menu gives the keyboard back to the window, not to the page inside it.
+      WebView2.moveFocus(current);
+      WindowsMenus.performEditing(role);
+    }
+  }
+
+  /**
+   * Picks the entry {@code id} of the menu bar, from the bar or from its keys, and puts its check
+   * mark where the pick left it. Runs on the UI thread.
+   */
+  private void menuBarPicked(int id) {
+    MenuCommands commands = this.menuBar();
+    this.menuItemPicked(commands, id);
+    MemorySegment bar = this.menuBarHandle;
+    if (bar != null && commands.item(id) instanceof CheckMenuItem) {
+      User32.checkMenuItem(bar, id, commands.isChecked(id));
+    }
+  }
+
+  /**
+   * Picks the entry of the menu bar that the keys of {@code virtualKey} and the modifiers down
+   * belong to, if any. Runs on the UI thread.
+   *
+   * @return Whether the keys picked an entry, and the page must not see them.
+   */
+  private boolean acceleratorPressed(int virtualKey) {
+    Shortcut shortcut = WindowsShortcuts.shortcutOf(virtualKey);
+    int id = shortcut == null ? 0 : this.menuBar().acceleratorId(shortcut);
+    if (id == 0) {
+      return false;
+    }
+    this.menuBarPicked(id);
+    return true;
+  }
+
   @Override
   protected void beginMove() {
     this.dispatcher().run(() -> User32.beginFrameDrag(this.window(), User32.HTCAPTION));
@@ -665,7 +763,12 @@ public class WindowsWindow extends AbstractWindow {
         WebView2.setTransparentBackground(createdController);
       }
       WebView2.setDevToolsEnabled(this.webView, false);
-      WebView2.changeUserAgent(this.webView, this::userAgent);
+      try {
+        WebView2.changeUserAgent(this.webView, this::userAgent);
+      } catch (RuntimeException e) {
+        // The engine's own user agent is a loss of a token, not of the window.
+        ThrowableUtil.report(e);
+      }
 
       this.subscribe(
           WebView2::onNavigationStarting,
@@ -701,6 +804,17 @@ public class WindowsWindow extends AbstractWindow {
           WebView2::onNewWindowRequested,
           WebView2.IID_NEW_WINDOW_REQUESTED,
           (_, arguments) -> this.newWindowRequested(WebView2.takeNewWindowRequest(arguments)));
+      MemorySegment keys =
+          ComCallback.event(
+              WebView2.IID_ACCELERATOR_KEY_PRESSED,
+              (_, arguments) -> {
+                int key = WebView2.pressedKey(arguments);
+                if (key != 0 && this.acceleratorPressed(key)) {
+                  WebView2.markHandled(arguments);
+                }
+              });
+      WebView2.onAcceleratorKeyPressed(createdController, keys);
+      Com.release(keys);
       WebView2.addWebResourceRequestedFilter(this.webView, RESOURCE_ORIGIN + "*");
       this.subscribe(
           WebView2::onWebResourceRequested,
@@ -905,6 +1019,16 @@ public class WindowsWindow extends AbstractWindow {
     return this.alive(this.hwnd);
   }
 
+  /** The native window, or {@code null} once it's gone. */
+  MemorySegment handle() {
+    return this.hwnd;
+  }
+
+  /** The {@code ICoreWebView2}, or {@code null} once it's gone. */
+  MemorySegment webView() {
+    return this.webView;
+  }
+
   private MemorySegment view() {
     return this.alive(this.webView);
   }
@@ -923,6 +1047,7 @@ public class WindowsWindow extends AbstractWindow {
     this.hwnd = null;
     this.webView = null;
     this.controller = null;
+    this.menuBarHandle = null;
     if (closingController != null) {
       try {
         WebView2.close(closingController);
@@ -948,6 +1073,7 @@ public class WindowsWindow extends AbstractWindow {
       return;
     }
     User32.registerClass(WINDOW_CLASS, WINDOW_PROC);
+    taskbarButtonCreated = User32.registerMessage("TaskbarButtonCreated");
     windowClassRegistered = true;
   }
 
@@ -980,6 +1106,17 @@ public class WindowsWindow extends AbstractWindow {
             && window.frame != WindowFrame.FULL
             && !window.fullscreen) {
           return User32.removeFrame(hwnd, wordParameter, longParameter, window.frame);
+        } else if (message == taskbarButtonCreated && taskbarButtonCreated != 0) {
+          window.application.decorateTaskbarButton(hwnd);
+          return 0;
+        } else if (message == User32.WM_COMMAND
+            && (wordParameter >>> 16) == 0
+            && longParameter == 0) {
+          window.menuBarPicked((int) (wordParameter & 0xFFFF));
+          return 0;
+        } else if ((message == User32.WM_KEYDOWN || message == User32.WM_SYSKEYDOWN)
+            && window.acceleratorPressed((int) wordParameter)) {
+          return 0;
         } else if (message == User32.WM_CLOSE && window.refusesCloseRequest()) {
           // Not passed on: DefWindowProc would destroy the window.
           return 0;

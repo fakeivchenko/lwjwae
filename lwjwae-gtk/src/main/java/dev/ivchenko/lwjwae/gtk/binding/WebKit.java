@@ -15,8 +15,10 @@ import lombok.experimental.UtilityClass;
 /** Bindings to WebKitGTK 4.1 (the GTK 3 variant) and to the JavaScriptCore value API. */
 @UtilityClass
 public class WebKit {
-  private final SymbolLookup WEBKIT =
-      NativeLibraries.load("libwebkit2gtk-4.1.so.0", "libwebkit2gtk-4.1.so");
+  /** The library of WebKitGTK that this backend loads. */
+  public final String LIBRARY = "libwebkit2gtk-4.1.so.0";
+
+  private final SymbolLookup WEBKIT = NativeLibraries.load(LIBRARY, "libwebkit2gtk-4.1.so");
   private final SymbolLookup JSC =
       NativeLibraries.load("libjavascriptcoregtk-4.1.so.0", "libjavascriptcoregtk-4.1.so");
 
@@ -44,6 +46,9 @@ public class WebKit {
   private final MethodHandle WEB_VIEW_SET_BACKGROUND_COLOR =
       NativeLibraries.downcall(
           WEBKIT, "webkit_web_view_set_background_color", Signatures.VOID_POINTER_POINTER);
+  private final MethodHandle WEB_VIEW_EXECUTE_EDITING_COMMAND =
+      NativeLibraries.downcall(
+          WEBKIT, "webkit_web_view_execute_editing_command", Signatures.VOID_POINTER_POINTER);
   private final MethodHandle WEB_VIEW_LOAD_URI =
       NativeLibraries.downcall(WEBKIT, "webkit_web_view_load_uri", Signatures.VOID_POINTER_POINTER);
   private final MethodHandle WEB_VIEW_LOAD_HTML =
@@ -84,6 +89,9 @@ public class WebKit {
           WEBKIT,
           "webkit_web_view_evaluate_javascript_finish",
           Signatures.POINTER_POINTER_POINTER_POINTER);
+  private final MethodHandle COOKIE_MANAGER =
+      NativeLibraries.downcall(
+          WEBKIT, "webkit_web_context_get_cookie_manager", Signatures.POINTER_POINTER);
   private final MethodHandle WEB_CONTEXT_GET_DEFAULT =
       NativeLibraries.downcall(WEBKIT, "webkit_web_context_get_default", Signatures.POINTER_VOID);
   private final MethodHandle USER_CONTENT_MANAGER_NEW =
@@ -316,6 +324,17 @@ public class WebKit {
     return NativeLibraries.string((MemorySegment) SETTINGS_GET_USER_AGENT.invokeExact(settings));
   }
 
+  /**
+   * Runs an editing command on the page, such as {@code Copy}, {@code Paste}, or {@code SelectAll},
+   * the names of the {@code WEBKIT_EDITING_COMMAND_*} constants.
+   */
+  @SneakyThrows
+  public void executeEditingCommand(MemorySegment webView, String command) {
+    try (Arena arena = Arena.ofConfined()) {
+      WEB_VIEW_EXECUTE_EDITING_COMMAND.invokeExact(webView, arena.allocateFrom(command));
+    }
+  }
+
   /** Sets the user agent that {@code webView} sends from its next request on. */
   @SneakyThrows
   public void setUserAgent(MemorySegment webView, String userAgent) {
@@ -469,5 +488,12 @@ public class WebKit {
       URI_SCHEME_REQUEST_FINISH_WITH_RESPONSE.invokeExact(request, response);
       Glib.unref(response);
     }
+  }
+
+  /** The {@code WebKitCookieManager} of the default web context, which it owns. */
+  @SneakyThrows
+  public MemorySegment cookieManager() {
+    return (MemorySegment)
+        COOKIE_MANAGER.invokeExact((MemorySegment) WEB_CONTEXT_GET_DEFAULT.invokeExact());
   }
 }

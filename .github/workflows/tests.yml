@@ -30,6 +30,8 @@ jobs:
   style:
     name: Style
     runs-on: ubuntu-24.04
+    # A test that hangs fails the job, rather than holding a runner for six hours.
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-java@v6
@@ -51,6 +53,8 @@ jobs:
     name: Tests (Linux ${{ matrix.arch }})
     needs: style
     runs-on: ${{ matrix.runner }}
+    # A test that hangs fails the job, rather than holding a runner for six hours.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -114,6 +118,8 @@ jobs:
     name: Tests (Windows)
     needs: style
     runs-on: windows-2025
+    # A test that hangs fails the job, rather than holding a runner for six hours.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-java@v6
@@ -152,6 +158,8 @@ jobs:
     name: Tests (macOS ${{ matrix.arch }})
     needs: style
     runs-on: ${{ matrix.runner }}
+    # A test that hangs fails the job, rather than holding a runner for six hours.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:

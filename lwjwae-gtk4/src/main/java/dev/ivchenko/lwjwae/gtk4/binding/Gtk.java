@@ -3,6 +3,7 @@ package dev.ivchenko.lwjwae.gtk4.binding;
 import dev.ivchenko.lwjwae.foreign.NativeLibraries;
 import dev.ivchenko.lwjwae.glib.binding.Glib;
 import java.lang.foreign.Arena;
+import java.lang.foreign.MemoryLayout;
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.SymbolLookup;
 import java.lang.invoke.MethodHandle;
@@ -223,8 +224,80 @@ public class Gtk {
       NativeLibraries.downcall(
           GTK, "gdk_toplevel_begin_resize", Signatures.GDK_TOPLEVEL_BEGIN_RESIZE);
 
+  // --- menus of a window ---
+  private final MethodHandle POPOVER_MENU_BAR_NEW_FROM_MODEL =
+      NativeLibraries.downcall(
+          GTK, "gtk_popover_menu_bar_new_from_model", Signatures.POINTER_POINTER);
+  private final MethodHandle POPOVER_MENU_NEW_FROM_MODEL =
+      NativeLibraries.downcall(GTK, "gtk_popover_menu_new_from_model", Signatures.POINTER_POINTER);
+  private final MethodHandle BOX_APPEND =
+      NativeLibraries.downcall(GTK, "gtk_box_append", Signatures.VOID_POINTER_POINTER);
+  private final MethodHandle BOX_PREPEND =
+      NativeLibraries.downcall(GTK, "gtk_box_prepend", Signatures.VOID_POINTER_POINTER);
+  private final MethodHandle BOX_REMOVE =
+      NativeLibraries.downcall(GTK, "gtk_box_remove", Signatures.VOID_POINTER_POINTER);
+  private final MethodHandle WIDGET_SET_VEXPAND =
+      NativeLibraries.downcall(GTK, "gtk_widget_set_vexpand", Signatures.VOID_POINTER_INT);
+  private final MethodHandle WIDGET_SET_HALIGN =
+      NativeLibraries.downcall(GTK, "gtk_widget_set_halign", Signatures.VOID_POINTER_INT);
+  private final MethodHandle WIDGET_INSERT_ACTION_GROUP =
+      NativeLibraries.downcall(
+          GTK, "gtk_widget_insert_action_group", Signatures.VOID_POINTER_POINTER_POINTER);
+  private final MethodHandle WIDGET_SET_PARENT =
+      NativeLibraries.downcall(GTK, "gtk_widget_set_parent", Signatures.VOID_POINTER_POINTER);
+  private final MethodHandle WIDGET_UNPARENT =
+      NativeLibraries.downcall(GTK, "gtk_widget_unparent", Signatures.VOID_POINTER);
+  private final MethodHandle WIDGET_TRANSLATE_COORDINATES =
+      NativeLibraries.downcall(
+          GTK, "gtk_widget_translate_coordinates", Signatures.GTK_WIDGET_TRANSLATE_COORDINATES);
+  private final MethodHandle NATIVE_GET_SURFACE_TRANSFORM =
+      NativeLibraries.downcall(
+          GTK, "gtk_native_get_surface_transform", Signatures.VOID_POINTER_POINTER_POINTER);
+  private final MethodHandle SHORTCUT_CONTROLLER_NEW =
+      NativeLibraries.downcall(GTK, "gtk_shortcut_controller_new", Signatures.POINTER_VOID);
+  private final MethodHandle SHORTCUT_CONTROLLER_ADD_SHORTCUT =
+      NativeLibraries.downcall(
+          GTK, "gtk_shortcut_controller_add_shortcut", Signatures.VOID_POINTER_POINTER);
+  private final MethodHandle EVENT_CONTROLLER_SET_PROPAGATION_PHASE =
+      NativeLibraries.downcall(
+          GTK, "gtk_event_controller_set_propagation_phase", Signatures.VOID_POINTER_INT);
+  private final MethodHandle WIDGET_ADD_CONTROLLER =
+      NativeLibraries.downcall(GTK, "gtk_widget_add_controller", Signatures.VOID_POINTER_POINTER);
+  private final MethodHandle WIDGET_REMOVE_CONTROLLER =
+      NativeLibraries.downcall(
+          GTK, "gtk_widget_remove_controller", Signatures.VOID_POINTER_POINTER);
+  private final MethodHandle SHORTCUT_TRIGGER_PARSE_STRING =
+      NativeLibraries.downcall(
+          GTK, "gtk_shortcut_trigger_parse_string", Signatures.POINTER_POINTER);
+  private final MethodHandle NAMED_ACTION_NEW =
+      NativeLibraries.downcall(GTK, "gtk_named_action_new", Signatures.POINTER_POINTER);
+  private final MethodHandle SHORTCUT_NEW =
+      NativeLibraries.downcall(GTK, "gtk_shortcut_new", Signatures.POINTER_POINTER_POINTER);
+  private final MethodHandle POPOVER_SET_POINTING_TO =
+      NativeLibraries.downcall(GTK, "gtk_popover_set_pointing_to", Signatures.VOID_POINTER_POINTER);
+  private final MethodHandle POPOVER_SET_HAS_ARROW =
+      NativeLibraries.downcall(GTK, "gtk_popover_set_has_arrow", Signatures.VOID_POINTER_INT);
+  private final MethodHandle POPOVER_POPUP =
+      NativeLibraries.downcall(GTK, "gtk_popover_popup", Signatures.VOID_POINTER);
+  private final MethodHandle POPOVER_POPDOWN =
+      NativeLibraries.downcall(GTK, "gtk_popover_popdown", Signatures.VOID_POINTER);
+
+  /** {@code GTK_PHASE_CAPTURE}: from the window down, before the widget with the focus. */
+  private final int PHASE_CAPTURE = 1;
+
+  /** {@code GTK_ALIGN_START}. */
+  private final int ALIGN_START = 1;
+
+  /** {@code GdkRectangle}: x, y, width, height, each an {@code int}. */
+  private final MemoryLayout RECTANGLE =
+      MemoryLayout.structLayout(
+          Signatures.C_INT, Signatures.C_INT, Signatures.C_INT, Signatures.C_INT);
+
   /** {@code GTK_ORIENTATION_HORIZONTAL}. */
   public final int ORIENTATION_HORIZONTAL = 0;
+
+  /** {@code GTK_ORIENTATION_VERTICAL}. */
+  public final int ORIENTATION_VERTICAL = 1;
 
   /** {@code GDK_SURFACE_EDGE_NORTH_WEST}; the other edges follow clockwise from the west ones. */
   public final int EDGE_NORTH_WEST = 0;
@@ -923,5 +996,152 @@ public class Gtk {
   public void connectXlibEvents(MemorySegment callback) {
     Glib.signalConnect(
         (MemorySegment) DISPLAY_GET_DEFAULT.invokeExact(), "xevent", callback, MemorySegment.NULL);
+  }
+
+  /** Calls {@code gtk_popover_menu_bar_new_from_model}. */
+  @SneakyThrows
+  public MemorySegment popoverMenuBarNewFromModel(MemorySegment model) {
+    return (MemorySegment) POPOVER_MENU_BAR_NEW_FROM_MODEL.invokeExact(model);
+  }
+
+  /** Calls {@code gtk_popover_menu_new_from_model}. */
+  @SneakyThrows
+  public MemorySegment popoverMenuNewFromModel(MemorySegment model) {
+    return (MemorySegment) POPOVER_MENU_NEW_FROM_MODEL.invokeExact(model);
+  }
+
+  /** Calls {@code gtk_box_append}. */
+  @SneakyThrows
+  public void boxAppend(MemorySegment box, MemorySegment child) {
+    BOX_APPEND.invokeExact(box, child);
+  }
+
+  /** Calls {@code gtk_box_prepend}. */
+  @SneakyThrows
+  public void boxPrepend(MemorySegment box, MemorySegment child) {
+    BOX_PREPEND.invokeExact(box, child);
+  }
+
+  /** Calls {@code gtk_box_remove}, which drops the reference of the box to {@code child}. */
+  @SneakyThrows
+  public void boxRemove(MemorySegment box, MemorySegment child) {
+    BOX_REMOVE.invokeExact(box, child);
+  }
+
+  /** Calls {@code gtk_widget_set_vexpand}. */
+  @SneakyThrows
+  public void widgetSetVexpand(MemorySegment widget, boolean expand) {
+    WIDGET_SET_VEXPAND.invokeExact(widget, expand ? 1 : 0);
+  }
+
+  /**
+   * Calls {@code gtk_widget_insert_action_group}: the actions of {@code group} go by {@code
+   * prefix.name} for the widget and everything in it. A {@code NULL} group removes the prefix.
+   */
+  @SneakyThrows
+  public void widgetInsertActionGroup(MemorySegment widget, String prefix, MemorySegment group) {
+    try (Arena arena = Arena.ofConfined()) {
+      WIDGET_INSERT_ACTION_GROUP.invokeExact(widget, arena.allocateFrom(prefix), group);
+    }
+  }
+
+  /**
+   * Adds a controller to {@code window} that runs the named actions of {@code shortcuts}, each a
+   * pair of an accelerator such as {@code <Control>s} and an action such as {@code menu.item3},
+   * before the widget with the focus sees the keys. The window owns the controller, which {@link
+   * #widgetRemoveController} takes away.
+   */
+  @SneakyThrows
+  public MemorySegment addShortcutController(MemorySegment window, List<String[]> shortcuts) {
+    MemorySegment controller = (MemorySegment) SHORTCUT_CONTROLLER_NEW.invokeExact();
+    EVENT_CONTROLLER_SET_PROPAGATION_PHASE.invokeExact(controller, PHASE_CAPTURE);
+    try (Arena arena = Arena.ofConfined()) {
+      for (String[] shortcut : shortcuts) {
+        MemorySegment trigger =
+            (MemorySegment)
+                SHORTCUT_TRIGGER_PARSE_STRING.invokeExact(arena.allocateFrom(shortcut[0]));
+        if (MemorySegment.NULL.equals(trigger)) {
+          continue;
+        }
+        MemorySegment action =
+            (MemorySegment) NAMED_ACTION_NEW.invokeExact(arena.allocateFrom(shortcut[1]));
+        SHORTCUT_CONTROLLER_ADD_SHORTCUT.invokeExact(
+            controller, (MemorySegment) SHORTCUT_NEW.invokeExact(trigger, action));
+      }
+    }
+    WIDGET_ADD_CONTROLLER.invokeExact(window, controller);
+    return controller;
+  }
+
+  /** Calls {@code gtk_widget_remove_controller}. */
+  @SneakyThrows
+  public void widgetRemoveController(MemorySegment widget, MemorySegment controller) {
+    WIDGET_REMOVE_CONTROLLER.invokeExact(widget, controller);
+  }
+
+  /**
+   * Opens {@code popover}, a menu, with its top left corner at {@code x}, {@code y} in {@code
+   * parent}, which it belongs to until {@link #widgetUnparent}.
+   */
+  @SneakyThrows
+  public void popupAt(MemorySegment popover, MemorySegment parent, int x, int y) {
+    WIDGET_SET_PARENT.invokeExact(popover, parent);
+    POPOVER_SET_HAS_ARROW.invokeExact(popover, 0);
+    WIDGET_SET_HALIGN.invokeExact(popover, ALIGN_START);
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment rectangle = arena.allocate(RECTANGLE);
+      rectangle.set(Signatures.C_INT, 0, x);
+      rectangle.set(Signatures.C_INT, 4, y);
+      rectangle.set(Signatures.C_INT, 8, 1);
+      rectangle.set(Signatures.C_INT, 12, 1);
+      POPOVER_SET_POINTING_TO.invokeExact(popover, rectangle);
+    }
+    POPOVER_POPUP.invokeExact(popover);
+  }
+
+  /** Calls {@code gtk_popover_popdown}. */
+  @SneakyThrows
+  public void popoverPopdown(MemorySegment popover) {
+    POPOVER_POPDOWN.invokeExact(popover);
+  }
+
+  /** Calls {@code gtk_widget_unparent}. */
+  @SneakyThrows
+  public void widgetUnparent(MemorySegment widget) {
+    WIDGET_UNPARENT.invokeExact(widget);
+  }
+
+  /**
+   * Where the pointer is in {@code widget}, a widget of {@code window}, as {@code {x, y}}. Wayland
+   * tells a client where the pointer is only over its own surfaces.
+   */
+  @SneakyThrows
+  public int[] pointerIn(MemorySegment window, MemorySegment widget) {
+    MemorySegment pointer = Gtk.defaultPointer();
+    MemorySegment surface = Gtk.windowSurface(window);
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment x = arena.allocate(Signatures.C_DOUBLE);
+      MemorySegment y = arena.allocate(Signatures.C_DOUBLE);
+      MemorySegment mask = arena.allocate(Signatures.C_INT);
+      int _ = (int) SURFACE_GET_DEVICE_POSITION.invokeExact(surface, pointer, x, y, mask);
+      // The surface holds the shadow of the window too; the window starts inside it.
+      MemorySegment offsetX = arena.allocate(Signatures.C_DOUBLE);
+      MemorySegment offsetY = arena.allocate(Signatures.C_DOUBLE);
+      NATIVE_GET_SURFACE_TRANSFORM.invokeExact(window, offsetX, offsetY);
+      MemorySegment widgetX = arena.allocate(Signatures.C_DOUBLE);
+      MemorySegment widgetY = arena.allocate(Signatures.C_DOUBLE);
+      int _ =
+          (int)
+              WIDGET_TRANSLATE_COORDINATES.invokeExact(
+                  window,
+                  widget,
+                  x.get(Signatures.C_DOUBLE, 0) - offsetX.get(Signatures.C_DOUBLE, 0),
+                  y.get(Signatures.C_DOUBLE, 0) - offsetY.get(Signatures.C_DOUBLE, 0),
+                  widgetX,
+                  widgetY);
+      return new int[] {
+        (int) widgetX.get(Signatures.C_DOUBLE, 0), (int) widgetY.get(Signatures.C_DOUBLE, 0)
+      };
+    }
   }
 }

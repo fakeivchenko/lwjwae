@@ -54,6 +54,13 @@ public class Signatures {
   public final FunctionDescriptor GDK_SURFACE_GET_DEVICE_POSITION =
       FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER);
 
+  /**
+   * {@code gboolean gtk_widget_translate_coordinates(GtkWidget*, GtkWidget*, double, double,
+   * double*, double*)}.
+   */
+  public final FunctionDescriptor GTK_WIDGET_TRANSLATE_COORDINATES =
+      FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_DOUBLE, C_DOUBLE, C_POINTER, C_POINTER);
+
   /** {@code double f(T*)}: {@code gdk_monitor_get_scale}. */
   public final FunctionDescriptor DOUBLE_POINTER = FunctionDescriptor.of(C_DOUBLE, C_POINTER);
 
@@ -266,6 +273,9 @@ public class Signatures {
   /** {@code void (*)(GdkSurface*, gint, gint, gpointer)}: {@code layout} of a surface. */
   public final FunctionDescriptor LAYOUT_CALLBACK =
       FunctionDescriptor.ofVoid(C_POINTER, C_INT, C_INT, C_POINTER);
+
+  /** {@code void (*)(GSimpleAction*, GVariant*, gpointer)}: {@code activate} of an action. */
+  public final FunctionDescriptor ACTION_ACTIVATE_CALLBACK = VOID_POINTER_POINTER_POINTER;
 
   /**
    * {@code void (*)(WebKitUserContentManager*, JSCValue*, gpointer)}: bridge messages. WebKitGTK

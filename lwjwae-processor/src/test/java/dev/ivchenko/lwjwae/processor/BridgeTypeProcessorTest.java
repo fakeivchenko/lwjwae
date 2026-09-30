@@ -18,8 +18,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 class BridgeTypeProcessorTest {
   private static final String DEFAULT_FILE =
-      "META-INF/native-image/dev.ivchenko.lwjwae/bridge-types/com.example.shapes/"
-          + "reachability-metadata.json";
+      "META-INF/native-image/dev.ivchenko.lwjwae/bridge-types/";
 
   @TempDir Path directory;
 
@@ -98,6 +97,67 @@ class BridgeTypeProcessorTest {
   }
 
   @Test
+  void boundsAndSealedSubtypesAreFollowed() throws IOException {
+    String metadata =
+        this.compile(
+            Map.of(
+                "com/example/shapes/Drawing.java",
+                """
+                package com.example.shapes;
+
+                import dev.ivchenko.lwjwae.bridge.codec.BridgeType;
+                import java.util.List;
+
+                @BridgeType
+                public record Drawing<T extends Layer & Comparable<T>>(
+                    List<? extends Point> points, List<? super Label> labels, T layer, Shape shape) {}
+                """,
+                "com/example/shapes/Point.java",
+                "package com.example.shapes; public record Point(int x, int y) {}",
+                "com/example/shapes/Label.java",
+                "package com.example.shapes; public record Label(String text) {}",
+                "com/example/shapes/Layer.java",
+                "package com.example.shapes; public class Layer { private Color color; }",
+                "com/example/shapes/Color.java",
+                "package com.example.shapes; public record Color(int rgb) {}",
+                "com/example/shapes/Shape.java",
+                "package com.example.shapes; public sealed interface Shape permits Circle, Square"
+                    + " {}",
+                "com/example/shapes/Circle.java",
+                "package com.example.shapes; public record Circle(double radius) implements Shape"
+                    + " {}",
+                "com/example/shapes/Square.java",
+                "package com.example.shapes; public record Square(double side) implements Shape"
+                    + " {}"),
+            List.of());
+
+    for (String type : List.of("Point", "Label", "Layer", "Color", "Shape", "Circle", "Square")) {
+      Assertions.assertTrue(metadata.contains("\"com.example.shapes." + type + "\""), metadata);
+    }
+  }
+
+  @Test
+  void modulesThatSharePackageWriteFilesOfTheirOwn() throws IOException {
+    this.compile(
+        Map.of(
+            "com/example/shapes/Point.java",
+            """
+            package com.example.shapes;
+
+            @dev.ivchenko.lwjwae.bridge.codec.BridgeType
+            public record Point(int x, int y) {}
+            """),
+        List.of());
+
+    Assertions.assertTrue(
+        Files.isRegularFile(
+            this.directory.resolve(
+                "classes/"
+                    + DEFAULT_FILE
+                    + "com.example.shapes.Point/reachability-metadata.json")));
+  }
+
+  @Test
   void optionNamesTheDirectory() throws IOException {
     this.compile(
         Map.of(
@@ -156,7 +216,13 @@ class BridgeTypeProcessorTest {
       task.setProcessors(List.of(new BridgeTypeProcessor()));
       Assertions.assertTrue(task.call(), "the sources compile");
     }
-    Path metadata = classes.resolve(DEFAULT_FILE);
-    return Files.exists(metadata) ? Files.readString(metadata, StandardCharsets.UTF_8) : "";
+    Path types = classes.resolve(DEFAULT_FILE);
+    if (!Files.isDirectory(types)) {
+      return "";
+    }
+    try (var directories = Files.list(types)) {
+      Path metadata = directories.findFirst().orElseThrow().resolve("reachability-metadata.json");
+      return Files.readString(metadata, StandardCharsets.UTF_8);
+    }
   }
 }

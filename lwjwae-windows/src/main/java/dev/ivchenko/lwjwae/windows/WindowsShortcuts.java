@@ -4,8 +4,11 @@ import dev.ivchenko.lwjwae.event.EventSubscription;
 import dev.ivchenko.lwjwae.exception.ShortcutUnavailableException;
 import dev.ivchenko.lwjwae.shortcut.Shortcut;
 import dev.ivchenko.lwjwae.shortcut.ShortcutKey;
+import dev.ivchenko.lwjwae.shortcut.ShortcutModifier;
 import dev.ivchenko.lwjwae.windows.binding.User32;
+import java.util.EnumSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import lombok.experimental.UtilityClass;
@@ -83,5 +86,42 @@ class WindowsShortcuts {
       case DOWN -> 0x28;
       default -> throw new IllegalArgumentException("No virtual key for " + key);
     };
+  }
+
+  /**
+   * The shortcut of {@code virtualKey} with the modifiers that are down while the message being
+   * handled was sent, or {@code null} for a key that no shortcut has.
+   */
+  Shortcut shortcutOf(int virtualKey) {
+    for (ShortcutKey key : ShortcutKey.values()) {
+      if (WindowsShortcuts.virtualKey(key) != virtualKey) {
+        continue;
+      }
+      Set<ShortcutModifier> modifiers = EnumSet.noneOf(ShortcutModifier.class);
+      if (User32.isKeyDown(User32.VK_CONTROL)) {
+        modifiers.add(ShortcutModifier.CONTROL);
+      }
+      if (User32.isKeyDown(User32.VK_MENU)) {
+        modifiers.add(ShortcutModifier.ALT);
+      }
+      if (User32.isKeyDown(User32.VK_SHIFT)) {
+        modifiers.add(ShortcutModifier.SHIFT);
+      }
+      if (User32.isKeyDown(User32.VK_LWIN) || User32.isKeyDown(User32.VK_RWIN)) {
+        modifiers.add(ShortcutModifier.META);
+      }
+      if (modifiers.isEmpty() && !key.isFunctionKey()) {
+        return null;
+      }
+      return new Shortcut(modifiers, key);
+    }
+    return null;
+  }
+
+  /**
+   * {@code shortcut} as a menu of Windows shows it after the label, such as {@code Ctrl+Shift+S}.
+   */
+  String label(Shortcut shortcut) {
+    return shortcut.toString().replace("Meta", "Win");
   }
 }

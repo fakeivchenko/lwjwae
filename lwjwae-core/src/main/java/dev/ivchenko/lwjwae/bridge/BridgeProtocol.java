@@ -10,14 +10,26 @@ import dev.ivchenko.lwjwae.dialog.MessageLevel;
 import dev.ivchenko.lwjwae.dialog.OpenDialogParameters;
 import dev.ivchenko.lwjwae.dialog.SaveDialogParameters;
 import dev.ivchenko.lwjwae.event.Event;
+import dev.ivchenko.lwjwae.menu.ActionMenuItem;
+import dev.ivchenko.lwjwae.menu.CheckMenuItem;
+import dev.ivchenko.lwjwae.menu.MenuItem;
+import dev.ivchenko.lwjwae.menu.MenuRole;
+import dev.ivchenko.lwjwae.menu.RoleMenuItem;
+import dev.ivchenko.lwjwae.menu.SeparatorMenuItem;
+import dev.ivchenko.lwjwae.menu.SubmenuItem;
+import dev.ivchenko.lwjwae.shortcut.Shortcut;
 import dev.ivchenko.lwjwae.util.ScriptUtil;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import lombok.experimental.UtilityClass;
@@ -101,6 +113,33 @@ public class BridgeProtocol {
    * text, or {@code 0} when there is none.
    */
   public final String CLIPBOARD_CALL = "lwjwae:clipboard";
+
+  /**
+   * The name under which a page opens a menu over its window. Reserved like {@link #EVENT_CALL}.
+   * The body is {@code context} or {@code popup}, the place of the menu in the page, two numbers
+   * that are empty for the pointer, and, for a popup, the entries, see {@link #parseMenu}. A
+   * context menu is the one of the window; a popup answers with the ID of the entry picked, empty
+   * for none.
+   */
+  public final String MENU_CALL = "lwjwae:menu";
+
+  /**
+   * The name under which a page uses the store of the application, through {@code
+   * window.lwjwae.store}. Reserved like {@link #EVENT_CALL}. The body is a command of {@link
+   * dev.ivchenko.lwjwae.store.StorePageCommands} as JSON, and the answer its result as JSON.
+   */
+  public final String STORE_CALL = "lwjwae:store";
+
+  /**
+   * The name under which a page uses the updater of the application, through {@code
+   * window.lwjwae.updates}. Reserved like {@link #EVENT_CALL}. The body is {@code check}, answered
+   * with the update as JSON or nothing, or {@code install}, which reports its progress as {@link
+   * #UPDATE_PROGRESS_EVENT} events to the window and ends with the application.
+   */
+  public final String UPDATE_CALL = "lwjwae:update";
+
+  /** The event whose payload is how much of an update the page asked for is downloaded, 0 to 1. */
+  public final String UPDATE_PROGRESS_EVENT = "lwjwae:update-progress";
 
   /**
    * The separator between the kinds of file of a dialog in a {@link #DIALOG_CALL}: the ASCII record
@@ -193,6 +232,10 @@ public class BridgeProtocol {
         .replace("${controlCall}", CONTROL_CALL)
         .replace("${dialogCall}", DIALOG_CALL)
         .replace("${clipboardCall}", CLIPBOARD_CALL)
+        .replace("${menuCall}", MENU_CALL)
+        .replace("${storeCall}", STORE_CALL)
+        .replace("${updateCall}", UPDATE_CALL)
+        .replace("${updateProgressEvent}", UPDATE_PROGRESS_EVENT)
         .replace("${resizeEdges}", edges)
         .replace("${separator}", "\u001f")
         .replace("${post}", postMessage)
@@ -349,6 +392,98 @@ public class BridgeProtocol {
         .map(type -> type.split(GROUP_SEPARATOR, -1))
         .map(parts -> new FileType(parts[0], List.of(parts).subList(1, parts.length)))
         .toList();
+  }
+
+  /**
+   * Parses the entries of a menu in a {@link #MENU_CALL}: one record per entry, separated by {@link
+   * #RECORD_SEPARATOR}, in the order of the menu, depth first. The fields of a record, separated by
+   * {@link #GROUP_SEPARATOR}, are the depth, the kind ({@code action}, {@code checkbox}, {@code
+   * submenu}, {@code separator}, or {@code role}), the ID, the label, {@code 0} for a disabled
+   * entry, {@code 1} for a check mark that is on, the accelerator, and the role in camel case, such
+   * as {@code selectAll}. An entry of a submenu is one deeper than the submenu.
+   *
+   * @return The menu, or {@code null} if a record doesn't have the shape, or names no kind, no
+   *     role, or no shortcut.
+   */
+  public PageMenu parseMenu(String text) {
+    Map<MenuItem, String> ids = new IdentityHashMap<>();
+    // The entries of each open level, and the labels of the submenus that hold them.
+    List<List<MenuItem>> levels = new ArrayList<>(List.of(new ArrayList<>()));
+    List<String[]> submenus = new ArrayList<>();
+    if (!text.isEmpty()) {
+      for (String record : text.split(RECORD_SEPARATOR, -1)) {
+        String[] fields = record.split(GROUP_SEPARATOR, -1);
+        if (fields.length != 8) {
+          return null;
+        }
+        int depth;
+        try {
+          depth = Integer.parseInt(fields[0]);
+        } catch (NumberFormatException _) {
+          return null;
+        }
+        if (depth < 0 || depth >= levels.size()) {
+          return null;
+        }
+        while (levels.size() > depth + 1) {
+          BridgeProtocol.closeSubmenu(levels, submenus);
+        }
+        boolean enabled = !fields[4].equals("0");
+        Shortcut accelerator;
+        try {
+          accelerator = fields[6].isEmpty() ? null : Shortcut.parse(fields[6]);
+        } catch (IllegalArgumentException _) {
+          return null;
+        }
+        MenuItem item;
+        switch (fields[1]) {
+          case "action" -> item = new ActionMenuItem(fields[3], accelerator, enabled, null);
+          case "checkbox" ->
+              item =
+                  new CheckMenuItem(fields[3], accelerator, enabled, fields[5].equals("1"), null);
+          case "separator" -> item = new SeparatorMenuItem();
+          case "role" -> {
+            MenuRole role = BridgeProtocol.role(fields[7]);
+            if (role == null) {
+              return null;
+            }
+            item = new RoleMenuItem(role, BridgeProtocol.text(fields[3]));
+          }
+          case "submenu" -> {
+            submenus.add(new String[] {fields[3], fields[4]});
+            levels.add(new ArrayList<>());
+            continue;
+          }
+          default -> {
+            return null;
+          }
+        }
+        if (!(item instanceof SeparatorMenuItem)) {
+          ids.put(item, fields[2]);
+        }
+        levels.getLast().add(item);
+      }
+    }
+    while (levels.size() > 1) {
+      BridgeProtocol.closeSubmenu(levels, submenus);
+    }
+    return new PageMenu(List.copyOf(levels.getFirst()), ids);
+  }
+
+  /** Ends the deepest open submenu and adds it to the level above. */
+  private void closeSubmenu(List<List<MenuItem>> levels, List<String[]> submenus) {
+    List<MenuItem> items = levels.removeLast();
+    String[] submenu = submenus.removeLast();
+    levels.getLast().add(new SubmenuItem(submenu[0], !submenu[1].equals("0"), items));
+  }
+
+  /** The role of a name in camel case, such as {@code selectAll}, or {@code null} for none. */
+  private MenuRole role(String name) {
+    String bare = name.replace("_", "").toLowerCase(Locale.ROOT);
+    return Arrays.stream(MenuRole.values())
+        .filter(role -> role.name().replace("_", "").toLowerCase(Locale.ROOT).equals(bare))
+        .findFirst()
+        .orElse(null);
   }
 
   private String text(String field) {

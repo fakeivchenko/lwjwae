@@ -23,6 +23,8 @@ import dev.ivchenko.lwjwae.macos.binding.MethodStub;
 import dev.ivchenko.lwjwae.macos.binding.ObjC;
 import dev.ivchenko.lwjwae.macos.binding.Signatures;
 import dev.ivchenko.lwjwae.macos.binding.WebKit;
+import dev.ivchenko.lwjwae.menu.MenuCommands;
+import dev.ivchenko.lwjwae.menu.MenuRole;
 import dev.ivchenko.lwjwae.rpc.RpcExchange;
 import dev.ivchenko.lwjwae.util.MimeTypeUtil;
 import dev.ivchenko.lwjwae.util.ResourceUtil;
@@ -77,6 +79,7 @@ public class MacWindow extends AbstractWindow {
       MacWindow.delegateStub("onWindowWillClose", 1);
   private static final MemorySegment ON_WINDOW_CHANGED =
       MacWindow.delegateStub("onWindowChanged", 1);
+  private static final MemorySegment ON_BECAME_KEY = MacWindow.delegateStub("onBecameKey", 1);
   private static final MemorySegment ON_FULL_SCREEN_STARTING =
       MacWindow.delegateStub("onFullScreenStarting", 1);
   private static final MemorySegment ON_FULL_SCREEN_SETTLED =
@@ -143,7 +146,7 @@ public class MacWindow extends AbstractWindow {
                   new MethodStub(ON_CREATE_WEB_VIEW, "@@:@@@@")),
               Map.entry("windowDidResize:", new MethodStub(ON_WINDOW_CHANGED, "v@:@")),
               Map.entry("windowDidMove:", new MethodStub(ON_WINDOW_CHANGED, "v@:@")),
-              Map.entry("windowDidBecomeKey:", new MethodStub(ON_WINDOW_CHANGED, "v@:@")),
+              Map.entry("windowDidBecomeKey:", new MethodStub(ON_BECAME_KEY, "v@:@")),
               Map.entry("windowDidResignKey:", new MethodStub(ON_WINDOW_CHANGED, "v@:@")),
               Map.entry("windowDidMiniaturize:", new MethodStub(ON_WINDOW_CHANGED, "v@:@")),
               Map.entry("windowDidDeminiaturize:", new MethodStub(ON_WINDOW_CHANGED, "v@:@")),
@@ -234,7 +237,9 @@ public class MacWindow extends AbstractWindow {
     this.injectOnDocumentStart(
         "document.addEventListener('contextmenu', event => { if (!window."
             + CONTEXT_MENU_FLAG
-            + ") event.preventDefault(); });");
+            + " && !window."
+            + BridgeProtocol.CHANNEL
+            + "?.contextMenu) event.preventDefault(); });");
     this.installBridge();
   }
 
@@ -332,6 +337,66 @@ public class MacWindow extends AbstractWindow {
   protected void presentMessageDialog(
       MessageDialogParameters parameters, DialogCompletion<Boolean> completion) {
     MacDialogs.message(this.window(), parameters, completion);
+  }
+
+  /** The menu bar at the top of the screen, while this window is the key window. */
+  @Override
+  protected void presentMenuBar(MenuCommands commands) {
+    MemorySegment current = this.window;
+    if (current != null && AppKit.isKeyWindow(current)) {
+      MacMainMenu.show(commands, id -> this.menuItemPicked(commands, id));
+    }
+  }
+
+  /**
+   * {@code popUpMenuPositioningItem:atLocation:inView:}, which tracks the menu until it closes. The
+   * item picked sends its action while it does; the answer waits for the next task, in case AppKit
+   * sends it after. A role goes along the responder chain, and answers as no pick.
+   *
+   * <p>A cancel goes to the main thread too, as everything that touches AppKit: {@code
+   * performSelectorOnMainThread:} runs in the tracking loop of the menu, and {@code cancelTracking}
+   * from another thread can end the tracking of the next menu instead of this one. It does nothing
+   * once the menu is closed, whose memory may be gone by then.
+   */
+  @Override
+  protected void presentContextMenu(
+      MenuCommands commands, WindowPosition place, DialogCompletion<Integer> picked) {
+    int[] chosen = {0};
+    boolean[] tracking = {true};
+    MemorySegment target = MacMenus.target(id -> chosen[0] = id);
+    MemorySegment menu = AppKit.menu();
+    try {
+      MacMenus.fill(menu, commands, commands.items(), target, new ConcurrentHashMap<>());
+      picked.onCancel(
+          () ->
+              this.dispatcher()
+                  .post(
+                      () -> {
+                        if (tracking[0]) {
+                          AppKit.cancelTracking(menu);
+                        }
+                      }));
+      // In screen coordinates, with no view: a menu that pops up in the web view closes at once.
+      double[] point =
+          place == null
+              ? AppKit.mouseLocation()
+              : AppKit.screenPointOfContent(this.window(), place.x(), place.y());
+      AppKit.popUpMenu(menu, MemorySegment.NULL, point[0], point[1]);
+    } finally {
+      tracking[0] = false;
+      this.dispatcher()
+          .post(
+              () -> {
+                picked.complete(chosen[0]);
+                MacMenus.release(target);
+                Foundation.release(menu);
+              });
+    }
+  }
+
+  @Override
+  protected void performEditing(MenuRole role) {
+    MacMenus.play(role);
   }
 
   @Override
@@ -875,10 +940,33 @@ public class MacWindow extends AbstractWindow {
   }
 
   /**
-   * {@code windowDidResize:}, {@code windowDidMove:}, {@code windowDidBecomeKey:}, {@code
-   * windowDidResignKey:}, {@code windowDidMiniaturize:}, and {@code windowDidDeminiaturize:}: the
-   * window may have changed. There's no notification of a zoom; the resize that comes with it
-   * reports it.
+   * {@code windowDidBecomeKey:}: the window may have changed, and the menu bar shows its menu.
+   *
+   * <p>Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
+   * binds it by name, so no Java code calls it and the compiler sees a dead private method. {@code
+   * resource}: the window is {@code AutoCloseable}, and a lookup that returns it looks like an
+   * unclosed resource. It is not: the application owns the window and closes it, this method only
+   * borrows it.
+   */
+  @SuppressWarnings({"unused", "resource"})
+  private static void onBecameKey(
+      MemorySegment self, MemorySegment command, MemorySegment notification) {
+    try {
+      MacWindow window = MacWindow.windowOf(self);
+      if (window != null) {
+        window.windowChanged();
+        MenuCommands commands = window.menuBar();
+        MacMainMenu.show(commands, id -> window.menuItemPicked(commands, id));
+      }
+    } catch (Throwable t) {
+      ThrowableUtil.report(t);
+    }
+  }
+
+  /**
+   * {@code windowDidResize:}, {@code windowDidMove:}, {@code windowDidResignKey:}, {@code
+   * windowDidMiniaturize:}, and {@code windowDidDeminiaturize:}: the window may have changed.
+   * There's no notification of a zoom; the resize that comes with it reports it.
    *
    * <p>Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
    * binds it by name, so no Java code calls it and the compiler sees a dead private method. {@code

@@ -21,8 +21,10 @@ import lombok.experimental.UtilityClass;
  */
 @UtilityClass
 public class WebKit {
-  private final SymbolLookup WEBKIT =
-      NativeLibraries.load("libwebkitgtk-6.0.so.4", "libwebkitgtk-6.0.so");
+  /** The library of WebKitGTK that this backend loads. */
+  public final String LIBRARY = "libwebkitgtk-6.0.so.4";
+
+  private final SymbolLookup WEBKIT = NativeLibraries.load(LIBRARY, "libwebkitgtk-6.0.so");
   private final SymbolLookup JSC =
       NativeLibraries.load("libjavascriptcoregtk-6.0.so.1", "libjavascriptcoregtk-6.0.so");
 
@@ -52,6 +54,9 @@ public class WebKit {
   private final MethodHandle WEB_VIEW_GET_USER_CONTENT_MANAGER =
       NativeLibraries.downcall(
           WEBKIT, "webkit_web_view_get_user_content_manager", Signatures.POINTER_POINTER);
+  private final MethodHandle WEB_VIEW_EXECUTE_EDITING_COMMAND =
+      NativeLibraries.downcall(
+          WEBKIT, "webkit_web_view_execute_editing_command", Signatures.VOID_POINTER_POINTER);
   private final MethodHandle WEB_VIEW_LOAD_URI =
       NativeLibraries.downcall(WEBKIT, "webkit_web_view_load_uri", Signatures.VOID_POINTER_POINTER);
   private final MethodHandle WEB_VIEW_LOAD_HTML =
@@ -92,6 +97,9 @@ public class WebKit {
           WEBKIT,
           "webkit_web_view_evaluate_javascript_finish",
           Signatures.POINTER_POINTER_POINTER_POINTER);
+  private final MethodHandle COOKIE_MANAGER =
+      NativeLibraries.downcall(
+          WEBKIT, "webkit_network_session_get_cookie_manager", Signatures.POINTER_POINTER);
   private final MethodHandle NETWORK_SESSION_GET_DEFAULT =
       NativeLibraries.downcall(
           WEBKIT, "webkit_network_session_get_default", Signatures.POINTER_VOID);
@@ -329,6 +337,17 @@ public class WebKit {
     return NativeLibraries.string((MemorySegment) SETTINGS_GET_USER_AGENT.invokeExact(settings));
   }
 
+  /**
+   * Runs an editing command on the page, such as {@code Copy}, {@code Paste}, or {@code SelectAll},
+   * the names of the {@code WEBKIT_EDITING_COMMAND_*} constants.
+   */
+  @SneakyThrows
+  public void executeEditingCommand(MemorySegment webView, String command) {
+    try (Arena arena = Arena.ofConfined()) {
+      WEB_VIEW_EXECUTE_EDITING_COMMAND.invokeExact(webView, arena.allocateFrom(command));
+    }
+  }
+
   /** Sets the user agent that {@code webView} sends from its next request on. */
   @SneakyThrows
   public void setUserAgent(MemorySegment webView, String userAgent) {
@@ -482,5 +501,12 @@ public class WebKit {
       URI_SCHEME_REQUEST_FINISH_WITH_RESPONSE.invokeExact(request, response);
       Glib.unref(response);
     }
+  }
+
+  /** The {@code WebKitCookieManager} of the default network session, which it owns. */
+  @SneakyThrows
+  public MemorySegment cookieManager() {
+    return (MemorySegment)
+        COOKIE_MANAGER.invokeExact((MemorySegment) NETWORK_SESSION_GET_DEFAULT.invokeExact());
   }
 }

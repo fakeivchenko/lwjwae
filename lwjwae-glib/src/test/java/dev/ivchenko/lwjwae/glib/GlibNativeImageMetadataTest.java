@@ -2,7 +2,9 @@ package dev.ivchenko.lwjwae.glib;
 
 import dev.ivchenko.lwjwae.glib.binding.Dbus;
 import dev.ivchenko.lwjwae.glib.binding.GdkPixbuf;
+import dev.ivchenko.lwjwae.glib.binding.GioMenus;
 import dev.ivchenko.lwjwae.glib.binding.Glib;
+import dev.ivchenko.lwjwae.glib.binding.Soup;
 import dev.ivchenko.lwjwae.glib.binding.Unix;
 import dev.ivchenko.lwjwae.glib.binding.X11;
 import dev.ivchenko.lwjwae.testing.contract.NativeImageMetadataContractTest;
@@ -27,12 +29,15 @@ class GlibNativeImageMetadataTest extends NativeImageMetadataContractTest {
     return List.of(
         Glib.class,
         Dbus.class,
+        GioMenus.class,
         GdkPixbuf.class,
         Unix.class,
         GlibDispatcher.class,
         FreedesktopNotifier.class,
         StatusNotifierTray.class,
         X11.class,
-        PortalShortcuts.class);
+        PortalShortcuts.class,
+        Soup.class,
+        WebKitCookies.class);
   }
 }

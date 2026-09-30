@@ -72,6 +72,16 @@ class Gtk4WindowTest extends WindowContractTest {
     return true;
   }
 
+  /** On X11, as {@link #pressKeys}: a popover menu opens with its first entry selected. */
+  @Override
+  protected boolean pickFirstEntryOfOpenMenu() {
+    if (!Gtk4WindowTest.isX11()) {
+      return false;
+    }
+    XtestKeyboard.tap("Return");
+    return true;
+  }
+
   @Override
   protected Class<? extends Application> expectedApplicationType() {
     return Gtk4Application.class;

@@ -6,12 +6,14 @@ import dev.ivchenko.lwjwae.ApplicationParameters;
 import dev.ivchenko.lwjwae.Screen;
 import dev.ivchenko.lwjwae.WindowParameters;
 import dev.ivchenko.lwjwae.clipboard.Clipboard;
+import dev.ivchenko.lwjwae.cookie.Cookies;
 import dev.ivchenko.lwjwae.event.EventSubscription;
 import dev.ivchenko.lwjwae.macos.binding.AppKit;
 import dev.ivchenko.lwjwae.macos.binding.WebKit;
 import dev.ivchenko.lwjwae.notification.Notification;
 import dev.ivchenko.lwjwae.notification.NotificationHandle;
 import dev.ivchenko.lwjwae.shortcut.Shortcut;
+import dev.ivchenko.lwjwae.taskbar.TaskbarProgress;
 import dev.ivchenko.lwjwae.tray.Tray;
 import dev.ivchenko.lwjwae.tray.TrayIcon;
 import java.util.List;
@@ -49,6 +51,11 @@ public class MacApplication extends AbstractApplication {
   @Override
   public String engine() {
     return this.dispatcher().call(() -> "WKWebView " + WebKit.version());
+  }
+
+  @Override
+  protected Cookies createCookies() {
+    return new MacCookies(this.dispatcher());
   }
 
   @Override
@@ -93,6 +100,16 @@ public class MacApplication extends AbstractApplication {
       this.notifier = new MacNotifier(this.dispatcher());
     }
     return this.notifier;
+  }
+
+  @Override
+  protected void showProgress(TaskbarProgress progress) {
+    MacDock.progress(progress);
+  }
+
+  @Override
+  protected void showBadgeCount(int count) {
+    MacDock.badge(count);
   }
 
   @Override

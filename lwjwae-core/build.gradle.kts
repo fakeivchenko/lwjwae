@@ -21,17 +21,10 @@ dependencies {
 
 // The version of the library, which the user agent of every web view names: a resource rather than the manifest,
 // which a native image doesn't keep.
-val generatedResources = layout.buildDirectory.dir("generated/resources/version")
-val writeVersion = tasks.register("writeVersion") {
-    val version = project.version.toString()
-    inputs.property("version", version)
-    outputs.dir(generatedResources)
-    doLast {
-        val file = generatedResources.get().file("dev/ivchenko/lwjwae/version.properties").asFile
-        file.parentFile.mkdirs()
-        file.writeText("version=$version\n")
-    }
+val writeVersion = tasks.register<WriteProperties>("writeVersion") {
+    destinationFile = layout.buildDirectory.file("generated/resources/version/dev/ivchenko/lwjwae/version.properties")
+    property("version", project.version.toString())
 }
 sourceSets.main {
-    resources.srcDir(writeVersion)
+    resources.srcDir(writeVersion.map { layout.buildDirectory.dir("generated/resources/version") })
 }

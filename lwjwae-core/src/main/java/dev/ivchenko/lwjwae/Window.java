@@ -10,6 +10,7 @@ import dev.ivchenko.lwjwae.event.Event;
 import dev.ivchenko.lwjwae.event.EventSubscription;
 import dev.ivchenko.lwjwae.event.LoadEvent;
 import dev.ivchenko.lwjwae.event.WindowEvent;
+import dev.ivchenko.lwjwae.menu.MenuItem;
 import dev.ivchenko.lwjwae.rpc.RpcHandler;
 import dev.ivchenko.lwjwae.util.ResourceUtil;
 import java.nio.file.Path;
@@ -636,6 +637,79 @@ public interface Window extends AutoCloseable {
   default CompletableFuture<Optional<Path>> pickSaveFile(String fileName, FileType... types) {
     return this.showSaveDialog(
         SaveDialogParameters.builder().fileName(fileName).fileTypes(List.of(types)).build());
+  }
+
+  /** The menu bar of the window: its own, or the one of the application. Empty for none. */
+  List<MenuItem> menu();
+
+  /**
+   * Gives the window a menu bar of its own, instead of the one of the application, see {@link
+   * Application#menu(List)}. An empty list takes the bar away from this window. {@link
+   * #useApplicationMenu()} goes back to the menu of the application.
+   *
+   * <p>Platforms:
+   *
+   * <ul>
+   *   <li>Windows: As described.
+   *   <li>macOS: The menu bar at the top of the screen shows it while the window is in front.
+   *   <li>Linux, GTK 3: As described.
+   *   <li>Linux, GTK 4: As described.
+   * </ul>
+   *
+   * @throws IllegalArgumentException If an entry of the top level isn't a submenu.
+   * @throws IllegalStateException If the window is closed.
+   */
+  void menu(List<MenuItem> items);
+
+  /** The same as {@link #menu(List)}. */
+  default void menu(MenuItem... items) {
+    this.menu(List.of(items));
+  }
+
+  /** Makes the window show the menu bar of the application again. */
+  void useApplicationMenu();
+
+  /**
+   * Sets the menu that a right click on the page opens, in place of the one of the engine. The page
+   * still decides first: one that handles {@code contextmenu} and calls {@code preventDefault()}
+   * keeps the click to itself. An empty list takes the menu away, which leaves the engine as {@link
+   * #devToolsEnabled(boolean)} says.
+   *
+   * <p>A check mark of the menu keeps its state from one opening to the next, until the menu is set
+   * again. The accelerators of the entries are only shown: a context menu has no keys.
+   *
+   * @throws IllegalStateException If the window is closed.
+   */
+  void contextMenu(List<MenuItem> items);
+
+  /** The same as {@link #contextMenu(List)}. */
+  default void contextMenu(MenuItem... items) {
+    this.contextMenu(List.of(items));
+  }
+
+  /**
+   * Opens {@code items} as a menu at the pointer, over this window, and completes once it closes
+   * and the entry picked, if any, has started. Canceling the future closes the menu, and so does
+   * closing the window.
+   *
+   * <p>Platforms:
+   *
+   * <ul>
+   *   <li>Windows: As described.
+   *   <li>macOS: A role goes along the responder chain, the way every Mac menu sends it, and the
+   *       page that opened the menu hears of it as of no pick.
+   *   <li>Linux, GTK 3: Wayland: the compositor opens the menu only near a click or a key press
+   *       that it saw last, which is where the pointer is for a menu opened from one.
+   *   <li>Linux, GTK 4: As on GTK 3.
+   * </ul>
+   *
+   * @throws IllegalStateException If the window is closed.
+   */
+  CompletableFuture<Void> showContextMenu(List<MenuItem> items);
+
+  /** The same as {@link #showContextMenu(List)}. */
+  default CompletableFuture<Void> showContextMenu(MenuItem... items) {
+    return this.showContextMenu(List.of(items));
   }
 
   /**

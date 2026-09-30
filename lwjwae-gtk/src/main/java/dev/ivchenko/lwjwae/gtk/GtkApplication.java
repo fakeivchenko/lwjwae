@@ -6,11 +6,14 @@ import dev.ivchenko.lwjwae.ApplicationParameters;
 import dev.ivchenko.lwjwae.Screen;
 import dev.ivchenko.lwjwae.WindowParameters;
 import dev.ivchenko.lwjwae.clipboard.Clipboard;
+import dev.ivchenko.lwjwae.cookie.Cookies;
 import dev.ivchenko.lwjwae.event.EventSubscription;
 import dev.ivchenko.lwjwae.exception.ResourceNotFoundException;
 import dev.ivchenko.lwjwae.foreign.NativeLibraries;
 import dev.ivchenko.lwjwae.glib.DesktopServices;
+import dev.ivchenko.lwjwae.glib.PortalDialogs;
 import dev.ivchenko.lwjwae.glib.StatusNotifierTray;
+import dev.ivchenko.lwjwae.glib.WebKitCookies;
 import dev.ivchenko.lwjwae.glib.X11Shortcuts;
 import dev.ivchenko.lwjwae.glib.binding.Glib;
 import dev.ivchenko.lwjwae.gtk.binding.AppIndicator;
@@ -21,6 +24,7 @@ import dev.ivchenko.lwjwae.notification.Notification;
 import dev.ivchenko.lwjwae.notification.NotificationHandle;
 import dev.ivchenko.lwjwae.rpc.RpcExchange;
 import dev.ivchenko.lwjwae.shortcut.Shortcut;
+import dev.ivchenko.lwjwae.taskbar.TaskbarProgress;
 import dev.ivchenko.lwjwae.tray.Tray;
 import dev.ivchenko.lwjwae.tray.TrayIcon;
 import dev.ivchenko.lwjwae.util.MimeTypeUtil;
@@ -102,6 +106,12 @@ public class GtkApplication extends AbstractApplication {
   }
 
   @Override
+  protected Cookies createCookies() {
+    return new WebKitCookies(
+        this.dispatcher(), WebKit.LIBRARY, this.dispatcher().call(WebKit::cookieManager));
+  }
+
+  @Override
   protected Clipboard createClipboard() {
     return new GtkClipboard(this.dispatcher());
   }
@@ -138,7 +148,7 @@ public class GtkApplication extends AbstractApplication {
 
   @Override
   protected void launchExternal(String url) {
-    this.dispatcher().run(() -> Glib.launchDefaultForUri(url));
+    this.dispatcher().run(() -> Glib.launchDefaultForUri(url, PortalDialogs.originalEnvironment()));
   }
 
   @Override
@@ -150,6 +160,16 @@ public class GtkApplication extends AbstractApplication {
   @Override
   protected EventSubscription bindGlobalShortcut(Shortcut shortcut, Runnable pressed) {
     return this.desktop.bindShortcut(shortcut, pressed);
+  }
+
+  @Override
+  protected void showProgress(TaskbarProgress progress) {
+    this.desktop.showProgress(progress);
+  }
+
+  @Override
+  protected void showBadgeCount(int count) {
+    this.desktop.showBadgeCount(count);
   }
 
   /**

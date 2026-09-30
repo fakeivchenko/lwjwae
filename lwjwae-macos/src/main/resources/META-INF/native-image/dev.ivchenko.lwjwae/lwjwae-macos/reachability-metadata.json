@@ -137,6 +137,14 @@
             "java.lang.foreign.MemorySegment",
             "java.lang.foreign.MemorySegment"
           ]
+        },
+        {
+          "name": "onBecameKey",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
         }
       ]
     },
@@ -237,6 +245,37 @@
           "parameterTypes": [
             "java.lang.foreign.MemorySegment",
             "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "dev.ivchenko.lwjwae.macos.MacMenus",
+      "methods": [
+        {
+          "name": "onItemClicked",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "dev.ivchenko.lwjwae.macos.MacCookies",
+      "methods": [
+        {
+          "name": "onListed",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
+        },
+        {
+          "name": "onChanged",
+          "parameterTypes": [
             "java.lang.foreign.MemorySegment"
           ]
         }
@@ -626,6 +665,31 @@
           "void*",
           "void*"
         ]
+      },
+      {
+        "returnType": "struct(jdouble,jdouble)",
+        "parameterTypes": [
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "returnType": "jboolean",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "void*",
+          "struct(jdouble,jdouble)",
+          "void*"
+        ]
+      },
+      {
+        "returnType": "void*",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "struct(jdouble,jdouble,jdouble,jdouble)"
+        ]
       }
     ],
     "directUpcalls": [
@@ -875,6 +939,43 @@
         "class": "dev.ivchenko.lwjwae.macos.MacShortcuts",
         "method": "onHotKey",
         "returnType": "jint",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.macos.MacMenus",
+        "method": "onItemClicked",
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.macos.MacCookies",
+        "method": "onListed",
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.macos.MacCookies",
+        "method": "onChanged",
+        "returnType": "void",
+        "parameterTypes": [
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.macos.MacWindow",
+        "method": "onBecameKey",
+        "returnType": "void",
         "parameterTypes": [
           "void*",
           "void*",

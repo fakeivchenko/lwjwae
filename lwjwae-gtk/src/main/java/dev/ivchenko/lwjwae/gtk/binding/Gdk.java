@@ -62,6 +62,9 @@ public class Gdk {
   private final MethodHandle DEVICE_GET_POSITION =
       NativeLibraries.downcall(
           GDK, "gdk_device_get_position", Signatures.VOID_POINTER_POINTER_POINTER_POINTER);
+  private final MethodHandle WINDOW_GET_DEVICE_POSITION =
+      NativeLibraries.downcall(
+          GDK, "gdk_window_get_device_position", Signatures.POINTER_POINTER_X5);
   private final MethodHandle DEVICE_GET_STATE =
       NativeLibraries.downcall(
           GDK, "gdk_device_get_state", Signatures.VOID_POINTER_POINTER_POINTER_POINTER);
@@ -179,6 +182,25 @@ public class Gdk {
       MemorySegment x = arena.allocate(Signatures.C_INT);
       MemorySegment y = arena.allocate(Signatures.C_INT);
       DEVICE_GET_POSITION.invokeExact(pointer, MemorySegment.NULL, x, y);
+      return new int[] {x.get(Signatures.C_INT, 0), y.get(Signatures.C_INT, 0)};
+    }
+  }
+
+  /**
+   * Returns {@code {x, y}} of the pointer in {@code gdkWindow}. Wayland doesn't tell a client where
+   * the pointer is outside its windows, and the answer there is what GDK last saw.
+   */
+  @SneakyThrows
+  public int[] pointerPosition(MemorySegment gdkWindow) {
+    MemorySegment display = (MemorySegment) DISPLAY_GET_DEFAULT.invokeExact();
+    MemorySegment seat = (MemorySegment) DISPLAY_GET_DEFAULT_SEAT.invokeExact(display);
+    MemorySegment pointer = (MemorySegment) SEAT_GET_POINTER.invokeExact(seat);
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment x = arena.allocate(Signatures.C_INT);
+      MemorySegment y = arena.allocate(Signatures.C_INT);
+      MemorySegment _ =
+          (MemorySegment)
+              WINDOW_GET_DEVICE_POSITION.invokeExact(gdkWindow, pointer, x, y, MemorySegment.NULL);
       return new int[] {x.get(Signatures.C_INT, 0), y.get(Signatures.C_INT, 0)};
     }
   }

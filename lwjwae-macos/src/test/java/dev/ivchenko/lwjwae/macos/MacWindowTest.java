@@ -20,4 +20,10 @@ class MacWindowTest extends WindowContractTest {
   protected Class<? extends Window> expectedWindowType() {
     return MacWindow.class;
   }
+
+  /** The menu bar is at the top of the screen, not in the window. */
+  @Override
+  protected boolean hasMenuBarInWindow() {
+    return false;
+  }
 }

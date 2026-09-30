@@ -38,6 +38,8 @@ public class WebView2 {
       Com.guid("d4c185fe-c81c-4989-97af-2d3fa7ab5651");
   public final MemorySegment IID_EXECUTE_SCRIPT_COMPLETED =
       Com.guid("49511172-cc67-4bca-9923-137112f4c4cc");
+  public final MemorySegment IID_ACCELERATOR_KEY_PRESSED =
+      Com.guid("b29c7e28-fa79-41a8-8e44-65811c76dcb2");
   public final MemorySegment IID_ADD_SCRIPT_COMPLETED =
       Com.guid("b99369f3-9b11-47b5-bc6f-8e7895fcea17");
 
@@ -70,6 +72,16 @@ public class WebView2 {
           "VALID_AUTHENTICATION_CREDENTIALS_REQUIRED",
           "VALID_PROXY_AUTHENTICATION_REQUIRED");
 
+  // ICoreWebView2AcceleratorKeyPressedEventArgs
+  private final int ACCELERATOR_KEY_GET_KEY_EVENT_KIND = 3;
+  private final int ACCELERATOR_KEY_GET_VIRTUAL_KEY = 4;
+  private final int ACCELERATOR_KEY_PUT_HANDLED = 8;
+
+  /** {@code COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN} and {@code _SYSTEM_KEY_DOWN}, with Alt. */
+  private final int KEY_EVENT_KIND_KEY_DOWN = 0;
+
+  private final int KEY_EVENT_KIND_SYSTEM_KEY_DOWN = 2;
+
   // ICoreWebView2Environment
   private final int ENVIRONMENT_CREATE_CONTROLLER = 3;
   private final int ENVIRONMENT_CREATE_RESPONSE = 4;
@@ -77,6 +89,8 @@ public class WebView2 {
   // ICoreWebView2Controller
   private final int CONTROLLER_PUT_IS_VISIBLE = 4;
   private final int CONTROLLER_PUT_BOUNDS = 6;
+  private final int CONTROLLER_MOVE_FOCUS = 12;
+  private final int CONTROLLER_ADD_ACCELERATOR_KEY_PRESSED = 19;
   private final int CONTROLLER_CLOSE = 24;
   private final int CONTROLLER_GET_CORE_WEBVIEW2 = 25;
   // ICoreWebView2Controller2
@@ -349,6 +363,40 @@ public class WebView2 {
   /** Calls {@code ICoreWebView2::add_NavigationStarting}. */
   public void onNavigationStarting(MemorySegment webView, MemorySegment handler) {
     WebView2.addEvent(webView, WEBVIEW_ADD_NAVIGATION_STARTING, handler, "add_NavigationStarting");
+  }
+
+  /**
+   * Calls {@code ICoreWebView2Controller::add_AcceleratorKeyPressed}: the keys that the page gets
+   * with a modifier, and the function keys, before the page does.
+   */
+  public void onAcceleratorKeyPressed(MemorySegment controller, MemorySegment handler) {
+    WebView2.addEvent(
+        controller, CONTROLLER_ADD_ACCELERATOR_KEY_PRESSED, handler, "add_AcceleratorKeyPressed");
+  }
+
+  /**
+   * The virtual key of a key pressed down, from the arguments of {@code AcceleratorKeyPressed}, or
+   * 0 for a key let go.
+   */
+  public int pressedKey(MemorySegment arguments) {
+    int kind = WebView2.integer(arguments, ACCELERATOR_KEY_GET_KEY_EVENT_KIND, "get_KeyEventKind");
+    if (kind != KEY_EVENT_KIND_KEY_DOWN && kind != KEY_EVENT_KIND_SYSTEM_KEY_DOWN) {
+      return 0;
+    }
+    return WebView2.integer(arguments, ACCELERATOR_KEY_GET_VIRTUAL_KEY, "get_VirtualKey");
+  }
+
+  /**
+   * Calls {@code ICoreWebView2Controller::MoveFocus} for {@code PROGRAMMATIC}: the page gets the
+   * keyboard, where it had it last.
+   */
+  public void moveFocus(MemorySegment controller) {
+    Com.check("MoveFocus", Com.call(controller, CONTROLLER_MOVE_FOCUS, 0));
+  }
+
+  /** Keeps a key of {@code AcceleratorKeyPressed} away from the page. */
+  public void markHandled(MemorySegment arguments) {
+    Com.check("put_Handled", Com.call(arguments, ACCELERATOR_KEY_PUT_HANDLED, 1));
   }
 
   /** Calls {@code ICoreWebView2::add_ContentLoading}. */

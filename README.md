@@ -100,6 +100,28 @@ events need a codec from [lwjwae-codecs](https://github.com/fakeivchenko/lwjwae-
 - **Native dialogs.** `showOpenDialog`, `showSaveDialog`, and `showMessageDialog` on a window, and
   `lwjwae.dialog` on the page: files and folders to open, a file to save, and a message, as the
   platform draws them; on Linux, through the desktop portal, so KDE Plasma shows its own dialog.
+- **Menus.** `application.menu(...)` sets the menu bar: the one at the top of the screen on macOS,
+  after the application menu, and a bar in every window on Windows and Linux, or one of a window's
+  own. Entries have submenus, check marks, and accelerators such as `CmdOrCtrl+S` that come before
+  the page, and roles such as Copy or Quit do what the platform does. `window.contextMenu(...)`
+  replaces the menu of a right click on the page; `window.showContextMenu(...)` and
+  `lwjwae.menu.popup([...])` open one at the pointer, and the page gets the ID of the entry picked.
+- **Progress and a badge on the icon.** `application.progress(0.4)` shows a bar on the icon of the
+  application, also indeterminate, paused, or failed, and `application.badgeCount(3)` a count, and
+  `lwjwae.taskbar` does both from the page: `ITaskbarList3` on Windows, the Dock on macOS, and the
+  `LauncherEntry` signal of KDE Plasma and the Ubuntu dock on Linux.
+- **A SQLite store.** `application.store()` and `lwjwae.store` on the page run the SQL of SQLite
+  on a file of the application: `query("SELECT * FROM notes WHERE id = ?", id)`, `execute`,
+  `executeScript` for a schema, and transactions, with parameters by position or by name. It is
+  the SQLite of the system, so there is no dependency, and a write is atomic and survives a crash.
+- **Cookies.** `application.cookies()` reads, sets, and deletes the cookies of the engine, which
+  every window shares, for a URL or all at once: `WebKitCookieManager` on Linux,
+  `ICoreWebView2CookieManager` on Windows, and `WKHTTPCookieStore` on macOS.
+- **Self-updates.** `application.updater()` and `lwjwae.updates` find a newer version in a
+  manifest at any URL, download it, and install it over the running one: the `.msi` on Windows,
+  the `.app` bundle on macOS, and the AppImage on Linux. The manifest is signed with Ed25519 and
+  every file checked by size and SHA-256, so only what your key signed runs. The Gradle plugin
+  writes and signs the manifest.
 - **Links go to the browser.** A link to another site, `target="_blank"`, and `window.open` open in
   the browser of the system rather than in the window, or wherever `externalLinkHandler` says;
   `Application.openExternal(url)` does the same from Java.
