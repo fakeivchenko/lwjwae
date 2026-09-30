@@ -964,6 +964,12 @@ public abstract class WindowContractTest extends DisplayContractTest {
 
       cookies.clear().get(10, TimeUnit.SECONDS);
       Assertions.assertEquals(Map.of(), WindowContractTest.cookieValues(cookies.getAll()));
+      // The page keeps a cache of its cookies, which the engine updates when its network process
+      // tells it: the page sees the change a moment later.
+      long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+      while (!Loads.eval(window, "document.cookie").isEmpty() && System.nanoTime() < deadline) {
+        Thread.sleep(100);
+      }
       Assertions.assertEquals("", Loads.eval(window, "document.cookie"));
     }
   }

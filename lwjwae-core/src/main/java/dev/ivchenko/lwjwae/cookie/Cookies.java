@@ -8,7 +8,9 @@ import java.util.concurrent.CompletableFuture;
  *
  * <p>The engine keeps them in a process of its own and answers later, so every method returns a
  * future. A cookie that the application sets goes with the next request of the page, and a cookie
- * that a site set is here once the response has come.
+ * that a site set is here once the response has come. The page may read its old cookies through
+ * {@code document.cookie} for a moment after a change: it keeps a cache of them, which the engine
+ * updates on its own time.
  */
 public interface Cookies {
   /**
