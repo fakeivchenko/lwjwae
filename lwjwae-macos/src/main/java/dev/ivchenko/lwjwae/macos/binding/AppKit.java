@@ -636,9 +636,13 @@ public class AppKit {
             menu, "popUpMenuPositioningItem:atLocation:inView:", MemorySegment.NULL, x, y, view);
   }
 
-  /** {@code -[NSMenu cancelTracking]}: closes the menu while it's open. */
+  /**
+   * {@code -[NSMenu cancelTrackingWithoutAnimation]}: closes the menu while it's open, at once.
+   * {@code cancelTracking} fades the menu out, and a menu that pops up while it fades closes at
+   * once.
+   */
   public void cancelTracking(MemorySegment menu) {
-    ObjC.sendVoid(menu, "cancelTracking");
+    ObjC.sendVoid(menu, "cancelTrackingWithoutAnimation");
   }
 
   /**
