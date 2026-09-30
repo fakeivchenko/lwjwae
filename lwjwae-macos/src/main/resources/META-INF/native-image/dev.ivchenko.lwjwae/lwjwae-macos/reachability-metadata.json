@@ -137,6 +137,14 @@
             "java.lang.foreign.MemorySegment",
             "java.lang.foreign.MemorySegment"
           ]
+        },
+        {
+          "name": "onBecameKey",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
         }
       ]
     },
@@ -961,6 +969,16 @@
         "method": "onChanged",
         "returnType": "void",
         "parameterTypes": [
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.macos.MacWindow",
+        "method": "onBecameKey",
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "void*",
           "void*"
         ]
       }
