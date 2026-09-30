@@ -6,12 +6,14 @@ import dev.ivchenko.lwjwae.ApplicationParameters;
 import dev.ivchenko.lwjwae.Screen;
 import dev.ivchenko.lwjwae.WindowParameters;
 import dev.ivchenko.lwjwae.clipboard.Clipboard;
+import dev.ivchenko.lwjwae.cookie.Cookies;
 import dev.ivchenko.lwjwae.event.EventSubscription;
 import dev.ivchenko.lwjwae.exception.ResourceNotFoundException;
 import dev.ivchenko.lwjwae.foreign.NativeLibraries;
 import dev.ivchenko.lwjwae.glib.DesktopServices;
 import dev.ivchenko.lwjwae.glib.PortalDialogs;
 import dev.ivchenko.lwjwae.glib.StatusNotifierTray;
+import dev.ivchenko.lwjwae.glib.WebKitCookies;
 import dev.ivchenko.lwjwae.glib.X11Shortcuts;
 import dev.ivchenko.lwjwae.glib.binding.Glib;
 import dev.ivchenko.lwjwae.gtk4.binding.Gtk;
@@ -100,6 +102,12 @@ public class Gtk4Application extends AbstractApplication {
   @Override
   public String engine() {
     return "WebKitGTK " + WebKit.version();
+  }
+
+  @Override
+  protected Cookies createCookies() {
+    return new WebKitCookies(
+        this.dispatcher(), WebKit.LIBRARY, this.dispatcher().call(WebKit::cookieManager));
   }
 
   @Override

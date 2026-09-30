@@ -74,6 +74,19 @@
           ]
         }
       ]
+    },
+    {
+      "type": "dev.ivchenko.lwjwae.glib.WebKitCookies",
+      "methods": [
+        {
+          "name": "onReady",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
+        }
+      ]
     }
   ],
   "foreign": {
@@ -385,6 +398,16 @@
         "parameterTypes": [
           "jdouble"
         ]
+      },
+      {
+        "returnType": "void*",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "void*",
+          "void*",
+          "jint"
+        ]
       }
     ],
     "directUpcalls": [
@@ -448,6 +471,16 @@
           "void*",
           "void*",
           "void*",
+          "void*",
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.glib.WebKitCookies",
+        "method": "onReady",
+        "returnType": "void",
+        "parameterTypes": [
           "void*",
           "void*",
           "void*"

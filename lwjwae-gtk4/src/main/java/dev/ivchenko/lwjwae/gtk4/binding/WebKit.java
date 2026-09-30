@@ -21,8 +21,10 @@ import lombok.experimental.UtilityClass;
  */
 @UtilityClass
 public class WebKit {
-  private final SymbolLookup WEBKIT =
-      NativeLibraries.load("libwebkitgtk-6.0.so.4", "libwebkitgtk-6.0.so");
+  /** The library of WebKitGTK that this backend loads. */
+  public final String LIBRARY = "libwebkitgtk-6.0.so.4";
+
+  private final SymbolLookup WEBKIT = NativeLibraries.load(LIBRARY, "libwebkitgtk-6.0.so");
   private final SymbolLookup JSC =
       NativeLibraries.load("libjavascriptcoregtk-6.0.so.1", "libjavascriptcoregtk-6.0.so");
 
@@ -95,6 +97,9 @@ public class WebKit {
           WEBKIT,
           "webkit_web_view_evaluate_javascript_finish",
           Signatures.POINTER_POINTER_POINTER_POINTER);
+  private final MethodHandle COOKIE_MANAGER =
+      NativeLibraries.downcall(
+          WEBKIT, "webkit_network_session_get_cookie_manager", Signatures.POINTER_POINTER);
   private final MethodHandle NETWORK_SESSION_GET_DEFAULT =
       NativeLibraries.downcall(
           WEBKIT, "webkit_network_session_get_default", Signatures.POINTER_VOID);
@@ -496,5 +501,12 @@ public class WebKit {
       URI_SCHEME_REQUEST_FINISH_WITH_RESPONSE.invokeExact(request, response);
       Glib.unref(response);
     }
+  }
+
+  /** The {@code WebKitCookieManager} of the default network session, which it owns. */
+  @SneakyThrows
+  public MemorySegment cookieManager() {
+    return (MemorySegment)
+        COOKIE_MANAGER.invokeExact((MemorySegment) NETWORK_SESSION_GET_DEFAULT.invokeExact());
   }
 }

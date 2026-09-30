@@ -114,6 +114,9 @@ events need a codec from [lwjwae-codecs](https://github.com/fakeivchenko/lwjwae-
   on a file of the application: `query("SELECT * FROM notes WHERE id = ?", id)`, `execute`,
   `executeScript` for a schema, and transactions, with parameters by position or by name. It is
   the SQLite of the system, so there is no dependency, and a write is atomic and survives a crash.
+- **Cookies.** `application.cookies()` reads, sets, and deletes the cookies of the engine, which
+  every window shares, for a URL or all at once: `WebKitCookieManager` on Linux,
+  `ICoreWebView2CookieManager` on Windows, and `WKHTTPCookieStore` on macOS.
 - **Links go to the browser.** A link to another site, `target="_blank"`, and `window.open` open in
   the browser of the system rather than in the window, or wherever `externalLinkHandler` says;
   `Application.openExternal(url)` does the same from Java.

@@ -334,6 +334,12 @@ public class Signatures {
   /** {@code void (^)(NSError* error)}. It receives the block itself first. */
   public final FunctionDescriptor ERROR_BLOCK = DELEGATE_0;
 
+  /** {@code void (^)(id result)}. It receives the block itself first. */
+  public final FunctionDescriptor RESULT_BLOCK = DELEGATE_0;
+
+  /** {@code void (^)(void)}. It receives the block itself. */
+  public final FunctionDescriptor DONE_BLOCK = VOID_POINTER;
+
   /** {@code void (^)(BOOL granted, NSError* error)}. It receives the block itself first. */
   public final FunctionDescriptor AUTHORIZATION_BLOCK =
       FunctionDescriptor.ofVoid(C_POINTER, C_BOOL, C_POINTER);

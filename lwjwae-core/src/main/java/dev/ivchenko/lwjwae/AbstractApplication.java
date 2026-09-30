@@ -3,6 +3,7 @@ package dev.ivchenko.lwjwae;
 import dev.ivchenko.lwjwae.bridge.BridgeProtocol;
 import dev.ivchenko.lwjwae.bridge.codec.BridgeCodec;
 import dev.ivchenko.lwjwae.clipboard.Clipboard;
+import dev.ivchenko.lwjwae.cookie.Cookies;
 import dev.ivchenko.lwjwae.event.Event;
 import dev.ivchenko.lwjwae.event.EventSubscription;
 import dev.ivchenko.lwjwae.event.SecondInstanceEvent;
@@ -108,6 +109,7 @@ public abstract class AbstractApplication implements Application {
   private final AtomicBoolean closed = new AtomicBoolean();
 
   private volatile Clipboard clipboard;
+  private volatile Cookies cookies;
   private volatile List<MenuItem> menu = List.of();
   private volatile TaskbarProgress progress = TaskbarProgress.none();
   private volatile int badgeCount;
@@ -543,6 +545,30 @@ public abstract class AbstractApplication implements Application {
   protected EventSubscription bindGlobalShortcut(Shortcut shortcut, Runnable pressed) {
     throw new UnsupportedOperationException(
         "The " + this.engine() + " backend has no global shortcuts yet");
+  }
+
+  @Override
+  public final Cookies cookies() {
+    this.checkOpen();
+    Cookies current = this.cookies;
+    if (current == null) {
+      synchronized (this) {
+        if (this.cookies == null) {
+          this.cookies = this.createCookies();
+        }
+        current = this.cookies;
+      }
+    }
+    return current;
+  }
+
+  /**
+   * Creates the cookies of the engine, once, on first use.
+   *
+   * @throws UnsupportedOperationException If this backend has no cookies yet, the default.
+   */
+  protected Cookies createCookies() {
+    throw new UnsupportedOperationException("No cookies on this backend yet");
   }
 
   @Override

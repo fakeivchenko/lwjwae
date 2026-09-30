@@ -254,6 +254,24 @@
           ]
         }
       ]
+    },
+    {
+      "type": "dev.ivchenko.lwjwae.macos.MacCookies",
+      "methods": [
+        {
+          "name": "onListed",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
+        },
+        {
+          "name": "onChanged",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment"
+          ]
+        }
+      ]
     }
   ],
   "resources": [
@@ -926,6 +944,23 @@
         "parameterTypes": [
           "void*",
           "void*",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.macos.MacCookies",
+        "method": "onListed",
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.macos.MacCookies",
+        "method": "onChanged",
+        "returnType": "void",
+        "parameterTypes": [
           "void*"
         ]
       }

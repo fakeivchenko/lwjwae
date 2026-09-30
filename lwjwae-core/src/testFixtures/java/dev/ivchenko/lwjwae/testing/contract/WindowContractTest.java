@@ -9,6 +9,8 @@ import dev.ivchenko.lwjwae.WindowParameters;
 import dev.ivchenko.lwjwae.WindowPosition;
 import dev.ivchenko.lwjwae.WindowSize;
 import dev.ivchenko.lwjwae.clipboard.Clipboard;
+import dev.ivchenko.lwjwae.cookie.Cookie;
+import dev.ivchenko.lwjwae.cookie.Cookies;
 import dev.ivchenko.lwjwae.dialog.FileType;
 import dev.ivchenko.lwjwae.dialog.MessageButtons;
 import dev.ivchenko.lwjwae.dialog.MessageDialogParameters;
@@ -40,6 +42,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
@@ -920,6 +923,56 @@ public abstract class WindowContractTest extends DisplayContractTest {
           application.store().query("SELECT count(*) AS n FROM tasks"),
           "one store");
     }
+  }
+
+  @Test
+  void cookiesGoBothWaysBetweenJavaAndThePage() throws Exception {
+    try (LocalPages pages = new LocalPages();
+        Application application = Application.create()) {
+      Window window =
+          application.open(
+              WindowParameters.builder().title("lwjwae :: cookies").size(400, 300).build());
+      window.show();
+      Cookies cookies = application.cookies();
+      cookies
+          .set(Cookie.builder().name("fromJava").value("1").domain("127.0.0.1").build())
+          .get(10, TimeUnit.SECONDS);
+      String url = pages.page("/cookies.html", "<!DOCTYPE html><html><body>cookies</body></html>");
+      final var loaded = Loads.expectFinished(window);
+      window.navigate(url);
+      loaded.get(30, TimeUnit.SECONDS);
+      Assertions.assertEquals(
+          "fromJava=1", Loads.eval(window, "document.cookie"), "the page reads the cookie of Java");
+
+      Loads.eval(window, "document.cookie = 'fromPage=2; path=/'; undefined;");
+      Map<String, String> seen = WindowContractTest.cookieValues(cookies.get(url));
+      Assertions.assertEquals(Map.of("fromJava", "1", "fromPage", "2"), seen);
+
+      Cookie fromJava =
+          cookies.get(url).get(10, TimeUnit.SECONDS).stream()
+              .filter(cookie -> cookie.name().equals("fromJava"))
+              .findFirst()
+              .orElseThrow();
+      Assertions.assertEquals("/", fromJava.path());
+      Assertions.assertTrue(fromJava.isSession());
+      cookies.delete(fromJava).get(10, TimeUnit.SECONDS);
+      Assertions.assertEquals(
+          Map.of("fromPage", "2"), WindowContractTest.cookieValues(cookies.get(url)));
+      Assertions.assertEquals(
+          Map.of("fromPage", "2"), WindowContractTest.cookieValues(cookies.getAll()));
+
+      cookies.clear().get(10, TimeUnit.SECONDS);
+      Assertions.assertEquals(Map.of(), WindowContractTest.cookieValues(cookies.getAll()));
+      Assertions.assertEquals("", Loads.eval(window, "document.cookie"));
+    }
+  }
+
+  /** The names and values of the cookies that {@code pending} lists. */
+  private static Map<String, String> cookieValues(CompletableFuture<List<Cookie>> pending)
+      throws Exception {
+    Map<String, String> values = new TreeMap<>();
+    pending.get(10, TimeUnit.SECONDS).forEach(cookie -> values.put(cookie.name(), cookie.value()));
+    return values;
   }
 
   /** Waits for an event of {@code type}, passing over the others, and returns it. */

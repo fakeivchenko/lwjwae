@@ -1024,6 +1024,11 @@ public class WindowsWindow extends AbstractWindow {
     return this.hwnd;
   }
 
+  /** The {@code ICoreWebView2}, or {@code null} once it's gone. */
+  MemorySegment webView() {
+    return this.webView;
+  }
+
   private MemorySegment view() {
     return this.alive(this.webView);
   }

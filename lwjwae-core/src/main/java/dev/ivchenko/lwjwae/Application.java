@@ -2,6 +2,7 @@ package dev.ivchenko.lwjwae;
 
 import dev.ivchenko.lwjwae.bridge.codec.BridgeCodec;
 import dev.ivchenko.lwjwae.clipboard.Clipboard;
+import dev.ivchenko.lwjwae.cookie.Cookies;
 import dev.ivchenko.lwjwae.event.Event;
 import dev.ivchenko.lwjwae.event.EventSubscription;
 import dev.ivchenko.lwjwae.event.SecondInstanceEvent;
@@ -648,6 +649,24 @@ public interface Application extends AutoCloseable {
    * @throws IllegalStateException If the application is closed.
    */
   Clipboard clipboard();
+
+  /**
+   * The cookies of the engine, which every window of the application shares.
+   *
+   * <p>Platforms:
+   *
+   * <ul>
+   *   <li>Windows: The {@code ICoreWebView2CookieManager} of the profile of the application,
+   *       reached through a window, so a call needs one to be open.
+   *   <li>macOS: The {@code WKHTTPCookieStore} of the default data store.
+   *   <li>Linux, GTK 3: The {@code WebKitCookieManager} of the default web context.
+   *   <li>Linux, GTK 4: The {@code WebKitCookieManager} of the default network session.
+   * </ul>
+   *
+   * @throws UnsupportedOperationException If this backend has no cookies yet.
+   * @throws IllegalStateException If the application is closed.
+   */
+  Cookies cookies();
 
   /**
    * Shows a desktop notification and returns the handle that takes it back.

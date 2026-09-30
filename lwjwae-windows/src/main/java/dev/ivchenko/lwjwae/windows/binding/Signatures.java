@@ -32,6 +32,9 @@ public class Signatures {
   /** {@code WORD}, {@code ATOM}. */
   public final ValueLayout.OfShort C_SHORT = Layouts.C_SHORT;
 
+  /** {@code double}. */
+  public final ValueLayout.OfDouble C_DOUBLE = Layouts.C_DOUBLE;
+
   /** C {@code bool}. */
   public final ValueLayout.OfBoolean C_BOOL = Layouts.C_BOOL;
 
@@ -151,6 +154,17 @@ public class Signatures {
   /** {@code HRESULT f(T*, U*, V*, W*)}: {@code SHCreateItemFromParsingName}. */
   public final FunctionDescriptor INT_POINTER_X4 =
       FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_POINTER, C_POINTER);
+
+  /**
+   * {@code HRESULT f(T*, U*, V*, W*, X*, Y*)}: {@code ICoreWebView2CookieManager::CreateCookie}.
+   */
+  public final FunctionDescriptor INT_POINTER_X6 =
+      FunctionDescriptor.of(
+          C_INT, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER);
+
+  /** {@code HRESULT f(T*, double)}: {@code ICoreWebView2Cookie::put_Expires}. */
+  public final FunctionDescriptor INT_POINTER_DOUBLE =
+      FunctionDescriptor.of(C_INT, C_POINTER, C_DOUBLE);
 
   /** {@code int f(T*, U*, V*, UINT)}: {@code MessageBoxW}. */
   public final FunctionDescriptor INT_POINTER_POINTER_POINTER_INT =

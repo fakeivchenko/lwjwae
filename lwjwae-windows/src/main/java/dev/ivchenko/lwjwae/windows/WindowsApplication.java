@@ -6,6 +6,7 @@ import dev.ivchenko.lwjwae.ApplicationParameters;
 import dev.ivchenko.lwjwae.Screen;
 import dev.ivchenko.lwjwae.WindowParameters;
 import dev.ivchenko.lwjwae.clipboard.Clipboard;
+import dev.ivchenko.lwjwae.cookie.Cookies;
 import dev.ivchenko.lwjwae.event.EventSubscription;
 import dev.ivchenko.lwjwae.notification.Notification;
 import dev.ivchenko.lwjwae.notification.NotificationHandle;
@@ -117,6 +118,11 @@ public class WindowsApplication extends AbstractApplication {
   }
 
   @Override
+  protected Cookies createCookies() {
+    return new WindowsCookies(WindowsDispatcher.instance(), this::anyWebView);
+  }
+
+  @Override
   protected Clipboard createClipboard() {
     return new WindowsClipboard(WindowsDispatcher.instance());
   }
@@ -195,6 +201,17 @@ public class WindowsApplication extends AbstractApplication {
         hwnd,
         this.badgeIcon == null ? MemorySegment.NULL : this.badgeIcon,
         count == 0 ? null : Integer.toString(count));
+  }
+
+  /** The view of an open window, which reaches the cookies of the profile. */
+  private MemorySegment anyWebView() {
+    return this.windows().stream()
+        .map(WindowsWindow.class::cast)
+        .map(WindowsWindow::webView)
+        .filter(Objects::nonNull)
+        .findFirst()
+        .orElseThrow(
+            () -> new IllegalStateException("The cookies of WebView2 need an open window"));
   }
 
   private List<MemorySegment> windowHandles() {

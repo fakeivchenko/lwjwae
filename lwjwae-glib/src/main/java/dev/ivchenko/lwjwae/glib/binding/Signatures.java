@@ -180,6 +180,18 @@ public class Signatures {
   public final FunctionDescriptor POINTER_POINTER_POINTER_LONG_LONG =
       FunctionDescriptor.of(C_POINTER, C_POINTER, C_POINTER, C_LONG, C_LONG);
 
+  /** {@code void f(T*, U*, V*, W*)}: {@code webkit_cookie_manager_get_all_cookies}. */
+  public final FunctionDescriptor VOID_POINTER_X4 =
+      FunctionDescriptor.ofVoid(C_POINTER, C_POINTER, C_POINTER, C_POINTER);
+
+  /** {@code void f(T*, U*, V*, W*, X*)}: {@code webkit_cookie_manager_get_cookies}. */
+  public final FunctionDescriptor VOID_POINTER_X5 =
+      FunctionDescriptor.ofVoid(C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER);
+
+  /** {@code T* f(U*, V*, W*, X*, gint)}: {@code soup_cookie_new}. */
+  public final FunctionDescriptor POINTER_POINTER_X4_INT =
+      FunctionDescriptor.of(C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_INT);
+
   // --- named signatures, too long to describe by shape ---
 
   /**
@@ -214,6 +226,9 @@ public class Signatures {
 
   /** {@code gboolean (*GSourceFunc)(gpointer)}. */
   public final FunctionDescriptor G_SOURCE_FUNC = INT_POINTER;
+
+  /** {@code void (*)(GObject*, GAsyncResult*, gpointer)}: {@code GAsyncReadyCallback}. */
+  public final FunctionDescriptor G_ASYNC_READY_CALLBACK = VOID_POINTER_POINTER_POINTER;
 
   /**
    * {@code void GDBusSignalCallback(GDBusConnection*, const gchar* sender_name, const gchar*

@@ -57,6 +57,15 @@ class AbstractApplicationTest {
   }
 
   @Test
+  void cookiesComeFromTheBackendOnceAndNotAfterClose() {
+    FakeApplication application = new FakeApplication();
+    try (application) {
+      Assertions.assertThrows(UnsupportedOperationException.class, application::cookies);
+    }
+    Assertions.assertThrows(IllegalStateException.class, application::cookies);
+  }
+
+  @Test
   void openNavigatesToTheUrlOrTheResource() {
     try (FakeApplication application = new FakeApplication()) {
       FakeWindow blank = application.openFake();

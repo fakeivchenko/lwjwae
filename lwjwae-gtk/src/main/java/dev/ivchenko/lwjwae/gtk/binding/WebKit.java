@@ -15,8 +15,10 @@ import lombok.experimental.UtilityClass;
 /** Bindings to WebKitGTK 4.1 (the GTK 3 variant) and to the JavaScriptCore value API. */
 @UtilityClass
 public class WebKit {
-  private final SymbolLookup WEBKIT =
-      NativeLibraries.load("libwebkit2gtk-4.1.so.0", "libwebkit2gtk-4.1.so");
+  /** The library of WebKitGTK that this backend loads. */
+  public final String LIBRARY = "libwebkit2gtk-4.1.so.0";
+
+  private final SymbolLookup WEBKIT = NativeLibraries.load(LIBRARY, "libwebkit2gtk-4.1.so");
   private final SymbolLookup JSC =
       NativeLibraries.load("libjavascriptcoregtk-4.1.so.0", "libjavascriptcoregtk-4.1.so");
 
@@ -87,6 +89,9 @@ public class WebKit {
           WEBKIT,
           "webkit_web_view_evaluate_javascript_finish",
           Signatures.POINTER_POINTER_POINTER_POINTER);
+  private final MethodHandle COOKIE_MANAGER =
+      NativeLibraries.downcall(
+          WEBKIT, "webkit_web_context_get_cookie_manager", Signatures.POINTER_POINTER);
   private final MethodHandle WEB_CONTEXT_GET_DEFAULT =
       NativeLibraries.downcall(WEBKIT, "webkit_web_context_get_default", Signatures.POINTER_VOID);
   private final MethodHandle USER_CONTENT_MANAGER_NEW =
@@ -483,5 +488,12 @@ public class WebKit {
       URI_SCHEME_REQUEST_FINISH_WITH_RESPONSE.invokeExact(request, response);
       Glib.unref(response);
     }
+  }
+
+  /** The {@code WebKitCookieManager} of the default web context, which it owns. */
+  @SneakyThrows
+  public MemorySegment cookieManager() {
+    return (MemorySegment)
+        COOKIE_MANAGER.invokeExact((MemorySegment) WEB_CONTEXT_GET_DEFAULT.invokeExact());
   }
 }
