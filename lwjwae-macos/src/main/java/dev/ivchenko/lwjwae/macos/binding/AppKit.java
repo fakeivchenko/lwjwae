@@ -506,6 +506,26 @@ public class AppKit {
     Foundation.release(image);
   }
 
+  /**
+   * Sets the icon of the application, which the Dock and the switcher show, from PNG bytes; {@code
+   * null} gives back the icon of the bundle, or of the system without one.
+   *
+   * @throws IllegalArgumentException If AppKit can't read the image.
+   */
+  public void setApplicationIcon(byte[] png) {
+    if (png == null) {
+      ObjC.sendVoid(AppKit.application(), "setApplicationIconImage:", MemorySegment.NULL);
+      return;
+    }
+    MemorySegment image =
+        ObjC.send(ObjC.send(ObjC.cls("NSImage"), "alloc"), "initWithData:", Foundation.data(png));
+    if (ObjC.isNull(image)) {
+      throw new IllegalArgumentException("The icon is not an image AppKit can read");
+    }
+    ObjC.sendVoid(AppKit.application(), "setApplicationIconImage:", image);
+    Foundation.release(image);
+  }
+
   /** {@code -[NSView setToolTip:]}; {@code null} removes the tooltip. */
   public void setToolTip(MemorySegment view, String tooltip) {
     ObjC.sendVoid(

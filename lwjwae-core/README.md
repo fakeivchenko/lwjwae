@@ -378,6 +378,21 @@ in `prefers-color-scheme` by themselves; the GTK backends make WebKitGTK follow 
 | macOS | The appearance of the system, with the notification of the system for a change. |
 | Linux, GTK 3 and GTK 4 | The `color-scheme` of the desktop portal, which the backend also writes into the dark preference of GTK, so that the page and the title bar match. Without a portal, the dark preference or the name of the GTK theme. |
 
+### The icon of a window
+
+`WindowParameters.builder().icon("app/icon.png")` gives a window an icon, from a PNG among the
+resources of the application or from PNG bytes, and `window.icon(...)` changes it later; `null`
+brings the icon of the platform back. Without it, a window has the icon that the packaging gives the
+application, and in a development run the generic one. A 256 pixel square is enough: the platform
+scales it down to every size it needs.
+
+| Platform | What the icon is |
+|---|---|
+| Windows | The icon of the title bar, the taskbar button, and Alt+Tab. |
+| macOS | The icon of the application in the Dock and the switcher, which every window shares: macOS has no icon of a single window. |
+| Linux, GTK 3 | On X11, the icon of the title bar and the taskbar; a window manager may keep the last one after `null`. On Wayland, the compositor takes it from the `.desktop` file. |
+| Linux, GTK 4 | None: GTK 4 has no call for it, and the desktop takes it from the `.desktop` file. |
+
 ### One instance
 
 `Application.createSingleInstance(parameters, args)` in place of `create` keeps one process of the

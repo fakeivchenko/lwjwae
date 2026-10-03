@@ -17,11 +17,13 @@ import dev.ivchenko.lwjwae.permission.PermissionKind;
 import dev.ivchenko.lwjwae.permission.PermissionRequest;
 import dev.ivchenko.lwjwae.testing.FakeApplication;
 import dev.ivchenko.lwjwae.testing.FakeWindow;
+import dev.ivchenko.lwjwae.testing.Icons;
 import dev.ivchenko.lwjwae.testing.Point;
 import dev.ivchenko.lwjwae.testing.PointCodec;
 import dev.ivchenko.lwjwae.testing.PresentedDialog;
 import dev.ivchenko.lwjwae.testing.RpcReply;
 import dev.ivchenko.lwjwae.theme.SystemTheme;
+import java.awt.Color;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -597,6 +599,33 @@ class AbstractWindowTest {
       application.changeTheme(SystemTheme.LIGHT);
       Assertions.assertNull(
           heard.poll(200, TimeUnit.MILLISECONDS), "a listener that left is quiet");
+    }
+  }
+
+  @Test
+  void iconIsAPngThatReachesTheBackendAndNullBringsTheDefaultBack() {
+    byte[] png = Icons.circle(64, Color.BLUE);
+    try (FakeApplication application = new FakeApplication()) {
+      FakeWindow window = application.openFake(WindowParameters.builder().icon(png).build());
+      Assertions.assertEquals(1, window.icons.size(), "the icon of the parameters is shown");
+      Assertions.assertArrayEquals(png, window.icons.getFirst());
+
+      byte[] other = Icons.circle(32, Color.RED);
+      window.icon(other);
+      Assertions.assertArrayEquals(other, window.icons.getLast());
+      window.icon((byte[]) null);
+      Assertions.assertNull(window.icons.getLast(), "null is the icon of the platform");
+
+      Assertions.assertThrows(
+          IllegalArgumentException.class, () -> window.icon("not an image".getBytes()));
+      Assertions.assertThrows(IllegalArgumentException.class, () -> window.icon(new byte[3]));
+      Assertions.assertEquals(3, window.icons.size(), "a refused icon reaches nobody");
+
+      Assertions.assertNull(
+          application.openFake().icons.stream().findFirst().orElse(null),
+          "without an icon the backend is told nothing");
+      window.close();
+      Assertions.assertThrows(IllegalStateException.class, () -> window.icon(png));
     }
   }
 

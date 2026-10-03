@@ -79,6 +79,9 @@ import lombok.Builder;
  *     frame too, the shadow and the border that would outline the rectangle around that shape, and
  *     the page takes the pointer along every edge of the window, not of the shape, to resize it. A
  *     decorated window keeps its title bar and its frame. Default: {@code false}.
+ * @param icon The PNG bytes of the icon of the window, or {@code null} for the one of the platform.
+ *     The builder also takes a PNG among the resources of the application. See {@link
+ *     Window#icon(byte[])}. Default: {@code null}.
  * @param menu The menu bar of the window, see {@link Window#menu(List)}, or {@code null} for the
  *     one of the application. Default: {@code null}.
  */
@@ -100,6 +103,7 @@ public record WindowParameters(
     Boolean minimizable,
     Boolean maximizable,
     boolean transparent,
+    byte[] icon,
     List<MenuItem> menu) {
   private static final String DEFAULT_TITLE = "Application";
   private static final WindowSize DEFAULT_SIZE = new WindowSize(1024, 768);
@@ -185,6 +189,22 @@ public record WindowParameters(
    * whose name is already here, so the ones that take a model are here too.
    */
   public static class WindowParametersBuilder {
+    /** The PNG bytes of the icon of the window, see {@link WindowParameters#icon()}. */
+    public WindowParametersBuilder icon(byte[] icon) {
+      this.icon = icon;
+      return this;
+    }
+
+    /**
+     * A PNG among the resources of the application as the icon, such as {@code "app/icon.png"}.
+     *
+     * @throws dev.ivchenko.lwjwae.exception.ResourceNotFoundException If the classpath has no such
+     *     resource.
+     */
+    public WindowParametersBuilder icon(String resource) {
+      return this.icon(ResourceUtil.read(resource));
+    }
+
     /** The initial size of the content area, see {@link WindowParameters#size()}. */
     public WindowParametersBuilder size(WindowSize size) {
       this.size = size;

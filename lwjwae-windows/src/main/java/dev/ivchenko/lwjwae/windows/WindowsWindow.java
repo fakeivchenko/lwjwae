@@ -207,6 +207,37 @@ public class WindowsWindow extends AbstractWindow {
     this.dispatcher().run(() -> User32.setTitle(this.window(), title));
   }
 
+  /** The icons that this window made and gave to Windows, to destroy when it replaces them. */
+  private MemorySegment smallIcon;
+
+  private MemorySegment largeIcon;
+
+  @Override
+  protected void presentIcon(byte[] png) {
+    MemorySegment window = this.window();
+    MemorySegment small = png == null ? null : User32.iconFromPng(png, false);
+    MemorySegment large = png == null ? null : User32.iconFromPng(png, true);
+    // The default icon is sent too, not a zero: the taskbar keeps the last icon it had on a zero.
+    MemorySegment fallback = User32.defaultIcon();
+    User32.send(
+        window, User32.WM_SETICON, User32.ICON_SMALL, (small == null ? fallback : small).address());
+    User32.send(
+        window, User32.WM_SETICON, User32.ICON_BIG, (large == null ? fallback : large).address());
+    this.destroyIcons();
+    this.smallIcon = small;
+    this.largeIcon = large;
+  }
+
+  private void destroyIcons() {
+    for (MemorySegment icon : new MemorySegment[] {this.smallIcon, this.largeIcon}) {
+      if (icon != null) {
+        User32.destroyIcon(icon);
+      }
+    }
+    this.smallIcon = null;
+    this.largeIcon = null;
+  }
+
   @Override
   public WindowSize size() {
     return this.dispatcher()
@@ -1062,6 +1093,7 @@ public class WindowsWindow extends AbstractWindow {
     final MemorySegment closingController = this.controller;
     final MemorySegment closingView = this.webView;
     this.hwnd = null;
+    this.destroyIcons();
     this.webView = null;
     this.controller = null;
     this.menuBarHandle = null;

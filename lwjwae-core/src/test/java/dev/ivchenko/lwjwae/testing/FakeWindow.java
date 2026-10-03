@@ -94,6 +94,14 @@ public class FakeWindow extends AbstractWindow {
     this.installBridge();
   }
 
+  /** What {@code presentIcon} was asked to show, in order; {@code null} is the default icon. */
+  public final List<byte[]> icons = new CopyOnWriteArrayList<>();
+
+  @Override
+  protected void presentIcon(byte[] png) {
+    this.icons.add(png);
+  }
+
   /** Plays the engine: the page asked for a new window of {@code url}. */
   public void requestNewWindow(String url) {
     this.newWindowRequested(url);

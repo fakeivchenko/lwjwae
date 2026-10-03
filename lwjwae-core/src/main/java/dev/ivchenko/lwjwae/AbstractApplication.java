@@ -177,6 +177,9 @@ public abstract class AbstractApplication implements Application {
     AbstractWindow window = this.createWindow(id, parameters);
     window.closeAction(parameters.closeAction());
     window.initializeMenu(parameters.menu());
+    if (parameters.icon() != null) {
+      window.icon(parameters.icon());
+    }
     AbstractApplication.applyLimits(window, parameters);
     this.restoreState(window, parameters);
     this.windows.put(id, window);

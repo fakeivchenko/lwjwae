@@ -50,6 +50,8 @@ public class Gtk {
   private final MethodHandle MAIN = NativeLibraries.downcall(GTK, "gtk_main", Signatures.VOID_VOID);
   private final MethodHandle WINDOW_NEW =
       NativeLibraries.downcall(GTK, "gtk_window_new", Signatures.POINTER_INT);
+  private final MethodHandle WINDOW_SET_ICON =
+      NativeLibraries.downcall(GTK, "gtk_window_set_icon", Signatures.VOID_POINTER_POINTER);
   private final MethodHandle WINDOW_SET_TITLE =
       NativeLibraries.downcall(GTK, "gtk_window_set_title", Signatures.VOID_POINTER_POINTER);
   private final MethodHandle WINDOW_GET_TITLE =
@@ -295,6 +297,15 @@ public class Gtk {
   @SneakyThrows
   public MemorySegment windowNew(int type) {
     return (MemorySegment) WINDOW_NEW.invokeExact(type);
+  }
+
+  /**
+   * Calls {@code gtk_window_set_icon}: the window keeps its own reference to {@code pixbuf}. {@code
+   * NULL} gives the window the default icon back.
+   */
+  @SneakyThrows
+  public void windowSetIcon(MemorySegment window, MemorySegment pixbuf) {
+    WINDOW_SET_ICON.invokeExact(window, pixbuf);
   }
 
   /** Calls {@code gtk_window_set_title}. {@code null} clears the title. */

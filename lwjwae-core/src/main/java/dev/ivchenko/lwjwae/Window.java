@@ -498,6 +498,41 @@ public interface Window extends AutoCloseable {
   EventSubscription onWindowEvent(Consumer<WindowEvent> listener);
 
   /**
+   * Sets the icon of the window: the one in its title bar, in the taskbar or the Dock, and in the
+   * switcher of the windows. The icon is a PNG image; a square of 256 pixels or more is scaled down
+   * to every size that the platform needs.
+   *
+   * <p>Platforms:
+   *
+   * <ul>
+   *   <li>Windows: The icon of the title bar, the taskbar button, and Alt+Tab.
+   *   <li>macOS: The icon that the Dock and the switcher show for the application, which every
+   *       window of it shares: macOS has no icon of a single window. The title bar has none.
+   *   <li>Linux, GTK 3: X11: as described, though a window manager may go on showing the last icon
+   *       after {@code null}. Wayland: the compositor takes the icon from the {@code .desktop} file
+   *       of the application and ignores this one.
+   *   <li>Linux, GTK 4: Does nothing, on X11 as on Wayland: GTK 4 has no call for it, and the
+   *       desktop takes the icon from the {@code .desktop} file of the application.
+   * </ul>
+   *
+   * @param png The bytes of a PNG image, or {@code null} for the icon of the platform.
+   * @throws IllegalArgumentException If {@code png} isn't a PNG image.
+   * @throws IllegalStateException If the window is closed.
+   */
+  void icon(byte[] png);
+
+  /**
+   * The same as {@link #icon(byte[])}, with a PNG among the resources of the application, such as
+   * {@code "app/icon.png"}.
+   *
+   * @throws dev.ivchenko.lwjwae.exception.ResourceNotFoundException If the classpath has no such
+   *     resource.
+   */
+  default void icon(String resource) {
+    this.icon(ResourceUtil.read(resource));
+  }
+
+  /**
    * Decides where a link that leaves the application goes: a click in a page of the application on
    * a link to another origin, a {@code mailto:} link, {@code window.open} of such a URL, a link
    * with {@code target="_blank"} or another request for a new window, and {@code

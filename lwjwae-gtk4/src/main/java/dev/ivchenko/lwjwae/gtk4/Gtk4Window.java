@@ -284,6 +284,13 @@ public class Gtk4Window extends AbstractWindow {
     return this.frameless ? List.of(WindowEdge.values()) : List.of();
   }
 
+  /**
+   * Does nothing: GTK 4 has no call that takes an image for a window, and the desktop takes the
+   * icon from the {@code .desktop} file of the application.
+   */
+  @Override
+  protected void presentIcon(byte[] png) {}
+
   @Override
   public String title() {
     return this.dispatcher().call(() -> Gtk.windowGetTitle(this.window()));

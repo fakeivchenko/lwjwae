@@ -16,6 +16,7 @@ import dev.ivchenko.lwjwae.event.LoadState;
 import dev.ivchenko.lwjwae.foreign.CallbackRegistry;
 import dev.ivchenko.lwjwae.foreign.NativeLibraries;
 import dev.ivchenko.lwjwae.glib.PortalShortcuts;
+import dev.ivchenko.lwjwae.glib.binding.GdkPixbuf;
 import dev.ivchenko.lwjwae.glib.binding.Glib;
 import dev.ivchenko.lwjwae.glib.util.DecorationLayoutUtil;
 import dev.ivchenko.lwjwae.glib.util.WebKitEditingUtil;
@@ -294,6 +295,24 @@ public class GtkWindow extends AbstractWindow {
   @Override
   protected List<WindowEdge> pageResizeEdges() {
     return this.frameless ? List.of(WindowEdge.values()) : List.of();
+  }
+
+  /**
+   * The icon of the title bar and the taskbar on X11; Wayland takes it from the {@code .desktop}.
+   */
+  @Override
+  protected void presentIcon(byte[] png) {
+    if (png == null) {
+      Gtk.windowSetIcon(this.window(), MemorySegment.NULL);
+      Gdk.clearWindowIcons(Gtk.widgetGetWindow(this.window()));
+      return;
+    }
+    MemorySegment pixbuf = GdkPixbuf.decode(png);
+    try {
+      Gtk.windowSetIcon(this.window(), pixbuf);
+    } finally {
+      Glib.unref(pixbuf);
+    }
   }
 
   @Override

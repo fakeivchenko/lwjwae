@@ -280,6 +280,12 @@ public class MacWindow extends AbstractWindow {
     return styleMask;
   }
 
+  /** The icon of the application: macOS has no icon of a single window. */
+  @Override
+  protected void presentIcon(byte[] png) {
+    AppKit.setApplicationIcon(png);
+  }
+
   @Override
   public String title() {
     return this.dispatcher().call(() -> AppKit.title(this.window()));

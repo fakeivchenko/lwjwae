@@ -54,6 +54,7 @@ import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.security.SecureRandom;
+import java.util.Arrays;
 import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -662,6 +663,28 @@ public abstract class AbstractWindow implements Window {
           throw RpcException.badRequest("malformed-clipboard", "No such action: " + parts[0]);
     }
   }
+
+  @Override
+  public final void icon(byte[] png) {
+    this.checkOpen();
+    if (png != null && !AbstractWindow.isPng(png)) {
+      throw new IllegalArgumentException("The icon of a window is a PNG image");
+    }
+    this.dispatcher().run(() -> this.presentIcon(png));
+  }
+
+  /** Whether {@code bytes} start with the signature of a PNG file. */
+  private static boolean isPng(byte[] bytes) {
+    byte[] signature = {(byte) 0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n'};
+    return bytes.length > signature.length
+        && Arrays.equals(bytes, 0, signature.length, signature, 0, signature.length);
+  }
+
+  /**
+   * Shows {@code png}, already checked, as the icon of the window, or the icon of the platform for
+   * {@code null}. Called on the UI thread.
+   */
+  protected abstract void presentIcon(byte[] png);
 
   @Override
   public final void externalLinkHandler(Consumer<String> handler) {

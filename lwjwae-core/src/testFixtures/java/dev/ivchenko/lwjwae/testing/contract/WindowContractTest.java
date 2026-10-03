@@ -738,6 +738,28 @@ public abstract class WindowContractTest extends DisplayContractTest {
   }
 
   @Test
+  void windowTakesItsIconFromTheParametersAndFromJava() throws Exception {
+    try (Application application = Application.create()) {
+      Window window =
+          application.open(
+              WindowParameters.builder()
+                  .title("lwjwae :: icon")
+                  .icon(Icons.circle(256, Color.ORANGE))
+                  .build());
+      window.show();
+      WindowContractTest.awaitTrue(window::isVisible, "the window must show");
+      Screenshots.capture("window-icon");
+
+      window.icon(Icons.circle(64, Color.GREEN));
+      window.icon((byte[]) null);
+      window.icon(Icons.circle(32, Color.BLUE));
+      Assertions.assertThrows(
+          IllegalArgumentException.class, () -> window.icon("not a PNG".getBytes()));
+      Assertions.assertTrue(window.isVisible(), "the window lives through its icons");
+    }
+  }
+
+  @Test
   void linksThatLeaveTheApplicationGoToTheHandler() throws Exception {
     try (Application application = Application.create()) {
       Window window = application.open(WindowParameters.builder().title("lwjwae :: links").build());
