@@ -27,6 +27,18 @@
           ]
         },
         {
+          "name": "onMediaCapture",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "long",
+            "java.lang.foreign.MemorySegment"
+          ]
+        },
+        {
           "name": "onDidCommitNavigation",
           "parameterTypes": [
             "java.lang.foreign.MemorySegment",
@@ -893,6 +905,20 @@
           "void*",
           "void*",
           "void*",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.macos.MacWindow",
+        "method": "onMediaCapture",
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "void*",
+          "void*",
+          "void*",
+          "jlong",
           "void*"
         ]
       },

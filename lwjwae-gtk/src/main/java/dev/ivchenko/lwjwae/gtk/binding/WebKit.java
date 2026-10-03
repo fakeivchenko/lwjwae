@@ -75,6 +75,28 @@ public class WebKit {
   private final MethodHandle SETTINGS_GET_ENABLE_DEVELOPER_EXTRAS =
       NativeLibraries.downcall(
           WEBKIT, "webkit_settings_get_enable_developer_extras", Signatures.INT_POINTER);
+  private final MethodHandle SETTINGS_SET_ENABLE_MEDIA_STREAM =
+      NativeLibraries.downcall(
+          WEBKIT, "webkit_settings_set_enable_media_stream", Signatures.VOID_POINTER_INT);
+  private final MethodHandle SETTINGS_SET_ENABLE_MOCK_CAPTURE_DEVICES =
+      NativeLibraries.downcall(
+          WEBKIT, "webkit_settings_set_enable_mock_capture_devices", Signatures.VOID_POINTER_INT);
+  private final MethodHandle USER_MEDIA_REQUEST_GET_TYPE =
+      NativeLibraries.downcall(
+          WEBKIT, "webkit_user_media_permission_request_get_type", Signatures.LONG_VOID);
+  private final MethodHandle USER_MEDIA_IS_FOR_AUDIO =
+      NativeLibraries.downcall(
+          WEBKIT, "webkit_user_media_permission_is_for_audio_device", Signatures.INT_POINTER);
+  private final MethodHandle USER_MEDIA_IS_FOR_VIDEO =
+      NativeLibraries.downcall(
+          WEBKIT, "webkit_user_media_permission_is_for_video_device", Signatures.INT_POINTER);
+  private final MethodHandle USER_MEDIA_IS_FOR_DISPLAY =
+      NativeLibraries.downcall(
+          WEBKIT, "webkit_user_media_permission_is_for_display_device", Signatures.INT_POINTER);
+  private final MethodHandle PERMISSION_REQUEST_ALLOW =
+      NativeLibraries.downcall(WEBKIT, "webkit_permission_request_allow", Signatures.VOID_POINTER);
+  private final MethodHandle PERMISSION_REQUEST_DENY =
+      NativeLibraries.downcall(WEBKIT, "webkit_permission_request_deny", Signatures.VOID_POINTER);
   private final MethodHandle GET_MAJOR_VERSION =
       NativeLibraries.downcall(WEBKIT, "webkit_get_major_version", Signatures.INT_VOID);
   private final MethodHandle GET_MINOR_VERSION =
@@ -315,6 +337,62 @@ public class WebKit {
   public void setDeveloperExtrasEnabled(MemorySegment webView, boolean enabled) {
     MemorySegment settings = (MemorySegment) WEB_VIEW_GET_SETTINGS.invokeExact(webView);
     SETTINGS_SET_ENABLE_DEVELOPER_EXTRAS.invokeExact(settings, enabled ? 1 : 0);
+  }
+
+  /**
+   * Sets {@code enable-media-stream} on the settings of {@code webView}: without it, a page has no
+   * {@code navigator.mediaDevices}, and the camera and the microphone never reach the permission
+   * request.
+   */
+  @SneakyThrows
+  public void setMediaStreamEnabled(MemorySegment webView, boolean enabled) {
+    MemorySegment settings = (MemorySegment) WEB_VIEW_GET_SETTINGS.invokeExact(webView);
+    SETTINGS_SET_ENABLE_MEDIA_STREAM.invokeExact(settings, enabled ? 1 : 0);
+  }
+
+  /**
+   * Sets {@code enable-mock-capture-devices}: a fake camera and a fake microphone, which let the
+   * tests of the library see a permission request on a machine without either.
+   */
+  @SneakyThrows
+  public void setMockCaptureDevicesEnabled(MemorySegment webView, boolean enabled) {
+    MemorySegment settings = (MemorySegment) WEB_VIEW_GET_SETTINGS.invokeExact(webView);
+    SETTINGS_SET_ENABLE_MOCK_CAPTURE_DEVICES.invokeExact(settings, enabled ? 1 : 0);
+  }
+
+  /** Whether {@code request} is a {@code WebKitUserMediaPermissionRequest}. */
+  @SneakyThrows
+  public boolean isUserMediaRequest(MemorySegment request) {
+    long type = (long) USER_MEDIA_REQUEST_GET_TYPE.invokeExact();
+    return Glib.typeCheckInstanceIsA(request, type);
+  }
+
+  /** Whether the user media request asks for a microphone. */
+  @SneakyThrows
+  public boolean isForAudioDevice(MemorySegment request) {
+    return (int) USER_MEDIA_IS_FOR_AUDIO.invokeExact(request) != 0;
+  }
+
+  /** Whether the user media request asks for a camera. */
+  @SneakyThrows
+  public boolean isForVideoDevice(MemorySegment request) {
+    return (int) USER_MEDIA_IS_FOR_VIDEO.invokeExact(request) != 0;
+  }
+
+  /** Whether the user media request asks to capture a screen or a window. */
+  @SneakyThrows
+  public boolean isForDisplayDevice(MemorySegment request) {
+    return (int) USER_MEDIA_IS_FOR_DISPLAY.invokeExact(request) != 0;
+  }
+
+  /** Answers a {@code WebKitPermissionRequest} with yes, or with no. */
+  @SneakyThrows
+  public void answerPermissionRequest(MemorySegment request, boolean granted) {
+    if (granted) {
+      PERMISSION_REQUEST_ALLOW.invokeExact(request);
+    } else {
+      PERMISSION_REQUEST_DENY.invokeExact(request);
+    }
   }
 
   /** The user agent that {@code webView} sends, the one of WebKit until it's set. */

@@ -1,6 +1,7 @@
 package dev.ivchenko.lwjwae.windows.binding;
 
 import dev.ivchenko.lwjwae.foreign.NativeLibraries;
+import dev.ivchenko.lwjwae.permission.PermissionKind;
 import java.lang.foreign.Arena;
 import java.lang.foreign.MemoryLayout;
 import java.lang.foreign.MemorySegment;
@@ -36,6 +37,8 @@ public class WebView2 {
       Com.guid("ab00b74c-15f1-4646-80e8-e76341d25d71");
   public final MemorySegment IID_NEW_WINDOW_REQUESTED =
       Com.guid("d4c185fe-c81c-4989-97af-2d3fa7ab5651");
+  public final MemorySegment IID_PERMISSION_REQUESTED =
+      Com.guid("15e1c6a3-c72a-4df3-91d7-d097fbec6bfd");
   public final MemorySegment IID_EXECUTE_SCRIPT_COMPLETED =
       Com.guid("49511172-cc67-4bca-9923-137112f4c4cc");
   public final MemorySegment IID_ACCELERATOR_KEY_PRESSED =
@@ -104,6 +107,7 @@ public class WebView2 {
   private final int WEBVIEW_ADD_NAVIGATION_STARTING = 7;
   private final int WEBVIEW_ADD_CONTENT_LOADING = 9;
   private final int WEBVIEW_ADD_NAVIGATION_COMPLETED = 15;
+  private final int WEBVIEW_ADD_PERMISSION_REQUESTED = 23;
   private final int WEBVIEW_ADD_SCRIPT_ON_DOCUMENT_CREATED = 27;
   private final int WEBVIEW_EXECUTE_SCRIPT = 29;
   private final int WEBVIEW_POST_WEB_MESSAGE_AS_STRING = 33;
@@ -126,6 +130,25 @@ public class WebView2 {
   private final int WEB_MESSAGE_TRY_GET_AS_STRING = 5;
   private final int NEW_WINDOW_GET_URI = 3;
   private final int NEW_WINDOW_PUT_HANDLED = 6;
+  private final int PERMISSION_GET_URI = 3;
+  private final int PERMISSION_GET_KIND = 4;
+  private final int PERMISSION_PUT_STATE = 7;
+  // ICoreWebView2PermissionRequestedEventArgs3
+  private final MemorySegment IID_PERMISSION_ARGS_3 =
+      Com.guid("e61670bc-3dce-4177-86d2-c629ae3cb6ac");
+  private final int PERMISSION_3_PUT_SAVES_IN_PROFILE = 12;
+
+  /** {@code COREWEBVIEW2_PERMISSION_STATE_ALLOW} and {@code _DENY}. */
+  private final int PERMISSION_STATE_ALLOW = 1;
+
+  private final int PERMISSION_STATE_DENY = 2;
+
+  /** {@code COREWEBVIEW2_PERMISSION_KIND_MICROPHONE}, {@code _CAMERA}, ... */
+  private final int PERMISSION_KIND_MICROPHONE = 1;
+
+  private final int PERMISSION_KIND_CAMERA = 2;
+  private final int PERMISSION_KIND_GEOLOCATION = 3;
+  private final int PERMISSION_KIND_NOTIFICATIONS = 4;
   private final int RESOURCE_REQUESTED_GET_REQUEST = 3;
   private final int RESOURCE_REQUESTED_PUT_RESPONSE = 5;
   private final int RESOURCE_REQUESTED_GET_DEFERRAL = 6;
@@ -418,6 +441,55 @@ public class WebView2 {
   /** Calls {@code ICoreWebView2::add_NewWindowRequested}. */
   public void onNewWindowRequested(MemorySegment webView, MemorySegment handler) {
     WebView2.addEvent(webView, WEBVIEW_ADD_NEW_WINDOW_REQUESTED, handler, "add_NewWindowRequested");
+  }
+
+  /** Calls {@code ICoreWebView2::add_PermissionRequested}. */
+  public void onPermissionRequested(MemorySegment webView, MemorySegment handler) {
+    WebView2.addEvent(
+        webView, WEBVIEW_ADD_PERMISSION_REQUESTED, handler, "add_PermissionRequested");
+  }
+
+  /** The origin that a {@code PermissionRequested} event comes from. */
+  public String permissionUri(MemorySegment arguments) {
+    return WebView2.uri(arguments, PERMISSION_GET_URI);
+  }
+
+  /**
+   * The kind that a {@code PermissionRequested} event asks for, or {@code null} for a kind that the
+   * library doesn't pass on, such as the clipboard or a sensor.
+   */
+  public PermissionKind permissionKind(MemorySegment arguments) {
+    return switch (WebView2.integer(arguments, PERMISSION_GET_KIND, "get_PermissionKind")) {
+      case PERMISSION_KIND_MICROPHONE -> PermissionKind.MICROPHONE;
+      case PERMISSION_KIND_CAMERA -> PermissionKind.CAMERA;
+      case PERMISSION_KIND_GEOLOCATION -> PermissionKind.GEOLOCATION;
+      case PERMISSION_KIND_NOTIFICATIONS -> PermissionKind.NOTIFICATIONS;
+      default -> null;
+    };
+  }
+
+  /**
+   * Answers a {@code PermissionRequested} event with {@code put_State}. Either answer keeps
+   * WebView2 from asking the user. The answer is not saved in the profile, or WebView2 would repeat
+   * the first one of an origin without asking the handler again.
+   */
+  public void answerPermission(MemorySegment arguments, boolean granted) {
+    MemorySegment arguments3 = null;
+    try {
+      arguments3 = WinRt.query(arguments, IID_PERMISSION_ARGS_3);
+      Com.check("put_SavesInProfile", Com.call(arguments3, PERMISSION_3_PUT_SAVES_IN_PROFILE, 0));
+    } catch (RuntimeException _) {
+      // A runtime without the setting keeps the answer for the session: a loss of the handler's
+      // second look, not of the answer.
+    } finally {
+      Com.release(arguments3);
+    }
+    Com.check(
+        "put_State",
+        Com.call(
+            arguments,
+            PERMISSION_PUT_STATE,
+            granted ? PERMISSION_STATE_ALLOW : PERMISSION_STATE_DENY));
   }
 
   /** Calls {@code ICoreWebView2::add_WebResourceRequested}. */

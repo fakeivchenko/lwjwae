@@ -24,12 +24,14 @@ import dev.ivchenko.lwjwae.gtk4.binding.Signatures;
 import dev.ivchenko.lwjwae.gtk4.binding.WebKit;
 import dev.ivchenko.lwjwae.menu.MenuCommands;
 import dev.ivchenko.lwjwae.menu.MenuRole;
+import dev.ivchenko.lwjwae.permission.PermissionKind;
 import dev.ivchenko.lwjwae.rpc.RpcExchange;
 import dev.ivchenko.lwjwae.util.ThrowableUtil;
 import java.lang.foreign.MemorySegment;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -120,6 +122,14 @@ public class Gtk4Window extends AbstractWindow {
           MethodType.methodType(
               MemorySegment.class, MemorySegment.class, MemorySegment.class, MemorySegment.class),
           Signatures.CREATE_CALLBACK);
+  private static final MemorySegment ON_PERMISSION_REQUEST =
+      NativeLibraries.upcall(
+          MethodHandles.lookup(),
+          Gtk4Window.class,
+          "onPermissionRequest",
+          MethodType.methodType(
+              int.class, MemorySegment.class, MemorySegment.class, MemorySegment.class),
+          Signatures.INT_POINTER_POINTER_POINTER);
   private static final MemorySegment ON_CONTEXT_MENU =
       NativeLibraries.upcall(
           MethodHandles.lookup(),
@@ -217,6 +227,11 @@ public class Gtk4Window extends AbstractWindow {
       WebKit.setTransparentBackground(newWebView);
     }
     WebKit.setUserAgent(newWebView, this.userAgent(WebKit.userAgent(newWebView)));
+    WebKit.setMediaStreamEnabled(newWebView, true);
+    // Set by the tests of the library only, which run where no camera is.
+    if (Boolean.getBoolean("lwjwae.mockCaptureDevices")) {
+      WebKit.setMockCaptureDevicesEnabled(newWebView, true);
+    }
     // Connect before registering, otherwise early messages race the signal handler.
     MemorySegment manager = WebKit.userContentManager(newWebView);
     Glib.signalConnect(
@@ -238,6 +253,7 @@ public class Gtk4Window extends AbstractWindow {
     Glib.signalConnect(newWebView, "load-failed", ON_LOAD_FAILED, userData);
     Glib.signalConnect(newWebView, "context-menu", ON_CONTEXT_MENU, userData);
     Glib.signalConnect(newWebView, "create", ON_CREATE, userData);
+    Glib.signalConnect(newWebView, "permission-request", ON_PERMISSION_REQUEST, userData);
 
     this.window = newWindow;
     this.webView = newWebView;
@@ -920,6 +936,47 @@ public class Gtk4Window extends AbstractWindow {
       ThrowableUtil.report(t);
     }
     return MemorySegment.NULL;
+  }
+
+  /**
+   * The page asks for a permission, and WebKit waits for the answer. Only the camera and the
+   * microphone reach the handler; the position, notifications, and a capture of the screen are
+   * denied here, so that the engine never shows a prompt of its own.
+   *
+   * <p>Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
+   * binds it by name, so no Java code calls it and the compiler sees a dead private method. {@code
+   * resource}: the window is {@code AutoCloseable}, and a lookup that returns it looks like an
+   * unclosed resource. It is not: the application owns the window and closes it, this method only
+   * borrows it.
+   */
+  @SuppressWarnings({"unused", "resource"})
+  private static int onPermissionRequest(
+      MemorySegment webView, MemorySegment request, MemorySegment userData) {
+    boolean granted = false;
+    try {
+      Gtk4Window window = WINDOWS.lookup(userData);
+      if (window != null
+          && WebKit.isUserMediaRequest(request)
+          && !WebKit.isForDisplayDevice(request)) {
+        List<PermissionKind> kinds = new ArrayList<>();
+        if (WebKit.isForVideoDevice(request)) {
+          kinds.add(PermissionKind.CAMERA);
+        }
+        if (WebKit.isForAudioDevice(request)) {
+          kinds.add(PermissionKind.MICROPHONE);
+        }
+        granted =
+            window.permissionRequested(WebKit.uri(webView), kinds.toArray(PermissionKind[]::new));
+      }
+    } catch (Throwable t) {
+      ThrowableUtil.report(t);
+    }
+    try {
+      WebKit.answerPermissionRequest(request, granted);
+    } catch (Throwable t) {
+      ThrowableUtil.report(t);
+    }
+    return 1;
   }
 
   /**

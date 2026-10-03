@@ -11,6 +11,8 @@ import dev.ivchenko.lwjwae.event.EventSubscription;
 import dev.ivchenko.lwjwae.event.LoadEvent;
 import dev.ivchenko.lwjwae.event.WindowEvent;
 import dev.ivchenko.lwjwae.menu.MenuItem;
+import dev.ivchenko.lwjwae.permission.PermissionDecision;
+import dev.ivchenko.lwjwae.permission.PermissionRequest;
 import dev.ivchenko.lwjwae.rpc.RpcHandler;
 import dev.ivchenko.lwjwae.util.ResourceUtil;
 import java.nio.file.Path;
@@ -510,6 +512,28 @@ public interface Window extends AutoCloseable {
    *     #navigate} to it, or drop it; {@code null} brings the default back.
    */
   void externalLinkHandler(Consumer<String> handler);
+
+  /**
+   * Decides what a page may use that needs the permission of the user: the camera, the microphone,
+   * the position, and notifications. By default, every request is denied, on every platform, so
+   * that the page fails the same way everywhere and no engine shows a prompt of its own.
+   *
+   * <p>Platforms:
+   *
+   * <ul>
+   *   <li>Windows: Every kind. The prompt of WebView2 never shows.
+   *   <li>macOS: The camera and the microphone. After the handler grants one, the system asks the
+   *       user for its own permission of the application, which needs the usage description of the
+   *       camera or the microphone in {@code Info.plist}. WKWebView has no hook for the position
+   *       and notifications, so the handler doesn't hear of them there.
+   *   <li>Linux, GTK 3 and GTK 4: The camera and the microphone. The position and notifications are
+   *       always denied, and the handler doesn't hear of them.
+   * </ul>
+   *
+   * @param handler Receives each request on the UI thread, so it must answer without waiting. A
+   *     handler that throws denies the request. {@code null} brings the default back.
+   */
+  void permissionHandler(Function<PermissionRequest, PermissionDecision> handler);
 
   /**
    * Shows the dialog of the platform that opens files, or folders, over this window, and returns

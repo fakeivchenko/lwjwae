@@ -347,6 +347,22 @@ whatever the system associates with it. It goes through `g_app_info_launch_defau
 Linux, the OpenURI portal inside a sandbox included, `ShellExecuteW` on Windows, and `NSWorkspace`
 on macOS.
 
+### Permissions of a page
+
+`window.permissionHandler(request -> ...)` decides what a page may use that needs the user's
+permission. By default every request is denied, on every platform, and no engine shows a prompt of
+its own: `getUserMedia` fails on the page with `NotAllowedError`. The handler gets a
+`PermissionRequest` with a `kind`, `CAMERA`, `MICROPHONE`, `GEOLOCATION`, or `NOTIFICATIONS`, and
+the `origin` of the page, and answers `PermissionDecision.GRANT` or `DENY`. It runs on the UI
+thread, so it must not wait; one that throws denies. A call for the camera and the microphone
+together arrives as two requests, and both must be granted.
+
+| Platform | What reaches the handler |
+|---|---|
+| Windows | Every kind. |
+| macOS | The camera and the microphone; a grant makes the system ask the user for its own permission, which needs the usage description in `Info.plist`. WKWebView has no hook for the position and notifications. |
+| Linux, GTK 3 and GTK 4 | The camera and the microphone. The position, notifications, and a capture of the screen are always denied. |
+
 ### One instance
 
 `Application.createSingleInstance(parameters, args)` in place of `create` keeps one process of the

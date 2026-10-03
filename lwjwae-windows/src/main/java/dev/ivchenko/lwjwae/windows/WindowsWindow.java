@@ -20,6 +20,7 @@ import dev.ivchenko.lwjwae.foreign.NativeLibraries;
 import dev.ivchenko.lwjwae.menu.CheckMenuItem;
 import dev.ivchenko.lwjwae.menu.MenuCommands;
 import dev.ivchenko.lwjwae.menu.MenuRole;
+import dev.ivchenko.lwjwae.permission.PermissionKind;
 import dev.ivchenko.lwjwae.shortcut.Shortcut;
 import dev.ivchenko.lwjwae.util.MimeTypeUtil;
 import dev.ivchenko.lwjwae.util.ResourceUtil;
@@ -804,6 +805,10 @@ public class WindowsWindow extends AbstractWindow {
           WebView2::onNewWindowRequested,
           WebView2.IID_NEW_WINDOW_REQUESTED,
           (_, arguments) -> this.newWindowRequested(WebView2.takeNewWindowRequest(arguments)));
+      this.subscribe(
+          WebView2::onPermissionRequested,
+          WebView2.IID_PERMISSION_REQUESTED,
+          (_, arguments) -> this.answerPermission(arguments));
       MemorySegment keys =
           ComCallback.event(
               WebView2.IID_ACCELERATOR_KEY_PRESSED,
@@ -826,6 +831,18 @@ public class WindowsWindow extends AbstractWindow {
     } catch (RuntimeException e) {
       this.ready.completeExceptionally(e);
     }
+  }
+
+  /** Answers a request of the page, always, so that WebView2 never shows its own prompt. */
+  private void answerPermission(MemorySegment arguments) {
+    boolean granted = false;
+    try {
+      PermissionKind kind = WebView2.permissionKind(arguments);
+      granted = kind != null && this.permissionRequested(WebView2.permissionUri(arguments), kind);
+    } catch (RuntimeException e) {
+      ThrowableUtil.report(e);
+    }
+    WebView2.answerPermission(arguments, granted);
   }
 
   private void subscribe(

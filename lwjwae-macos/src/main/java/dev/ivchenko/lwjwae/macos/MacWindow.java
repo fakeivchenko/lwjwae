@@ -25,6 +25,7 @@ import dev.ivchenko.lwjwae.macos.binding.Signatures;
 import dev.ivchenko.lwjwae.macos.binding.WebKit;
 import dev.ivchenko.lwjwae.menu.MenuCommands;
 import dev.ivchenko.lwjwae.menu.MenuRole;
+import dev.ivchenko.lwjwae.permission.PermissionKind;
 import dev.ivchenko.lwjwae.rpc.RpcExchange;
 import dev.ivchenko.lwjwae.util.MimeTypeUtil;
 import dev.ivchenko.lwjwae.util.ResourceUtil;
@@ -111,6 +112,21 @@ public class MacWindow extends AbstractWindow {
               MemorySegment.class,
               MemorySegment.class),
           Signatures.DELEGATE_4_ID);
+  private static final MemorySegment ON_MEDIA_CAPTURE =
+      NativeLibraries.upcall(
+          MethodHandles.lookup(),
+          MacWindow.class,
+          "onMediaCapture",
+          MethodType.methodType(
+              void.class,
+              MemorySegment.class,
+              MemorySegment.class,
+              MemorySegment.class,
+              MemorySegment.class,
+              MemorySegment.class,
+              long.class,
+              MemorySegment.class),
+          Signatures.DELEGATE_MEDIA_CAPTURE);
   private static final MemorySegment ON_EVALUATION_COMPLETE =
       NativeLibraries.upcall(
           MethodHandles.lookup(),
@@ -144,6 +160,9 @@ public class MacWindow extends AbstractWindow {
               Map.entry(
                   "webView:createWebViewWithConfiguration:forNavigationAction:windowFeatures:",
                   new MethodStub(ON_CREATE_WEB_VIEW, "@@:@@@@")),
+              Map.entry(
+                  "webView:requestMediaCapturePermissionForOrigin:initiatedByFrame:type:decisionHandler:",
+                  new MethodStub(ON_MEDIA_CAPTURE, "v@:@@@q@?")),
               Map.entry("windowDidResize:", new MethodStub(ON_WINDOW_CHANGED, "v@:@")),
               Map.entry("windowDidMove:", new MethodStub(ON_WINDOW_CHANGED, "v@:@")),
               Map.entry("windowDidBecomeKey:", new MethodStub(ON_BECAME_KEY, "v@:@")),
@@ -868,6 +887,48 @@ public class MacWindow extends AbstractWindow {
       ThrowableUtil.report(t);
     }
     return MemorySegment.NULL;
+  }
+
+  /**
+   * The page asks for the camera, the microphone, or both, and WebKit waits for the decision
+   * handler. Without this method WebKit asks the user itself; here the handler of the window
+   * decides, and a grant still makes the system ask for its own permission of the application.
+   *
+   * <p>Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
+   * binds it by name, so no Java code calls it and the compiler sees a dead private method. {@code
+   * resource}: the window is {@code AutoCloseable}, and a lookup that returns it looks like an
+   * unclosed resource. It is not: the application owns the window and closes it, this method only
+   * borrows it.
+   */
+  @SuppressWarnings({"unused", "resource"})
+  private static void onMediaCapture(
+      MemorySegment self,
+      MemorySegment command,
+      MemorySegment webView,
+      MemorySegment origin,
+      MemorySegment frame,
+      long type,
+      MemorySegment decisionHandler) {
+    boolean granted = false;
+    try {
+      MacWindow window = MacWindow.windowOf(self);
+      if (window != null) {
+        PermissionKind[] kinds =
+            switch ((int) type) {
+              case 0 -> new PermissionKind[] {PermissionKind.CAMERA};
+              case 1 -> new PermissionKind[] {PermissionKind.MICROPHONE};
+              default -> new PermissionKind[] {PermissionKind.CAMERA, PermissionKind.MICROPHONE};
+            };
+        granted = window.permissionRequested(WebKit.securityOrigin(origin), kinds);
+      }
+    } catch (Throwable t) {
+      ThrowableUtil.report(t);
+    }
+    try {
+      WebKit.answerMediaCapture(decisionHandler, granted);
+    } catch (Throwable t) {
+      ThrowableUtil.report(t);
+    }
   }
 
   /**

@@ -117,6 +117,30 @@ public class WebKit {
     ObjC.sendVoid(webView, "setUIDelegate:", delegate);
   }
 
+  /** {@code WKPermissionDecisionGrant} and {@code WKPermissionDecisionDeny}. */
+  private final long PERMISSION_DECISION_GRANT = 1;
+
+  private final long PERMISSION_DECISION_DENY = 2;
+
+  /**
+   * The origin of a {@code WKSecurityOrigin} as a browser writes it: {@code protocol://host}, with
+   * the port when it isn't the default one.
+   */
+  public String securityOrigin(MemorySegment origin) {
+    String protocol = Foundation.string(ObjC.send(origin, "protocol"));
+    String host = Foundation.string(ObjC.send(origin, "host"));
+    long port = ObjC.sendLong(origin, "port");
+    return protocol + "://" + host + (port > 0 ? ":" + port : "");
+  }
+
+  /**
+   * Answers the decision handler of a media capture request: grant lets the system ask the user for
+   * its own permission of the application, deny fails the request on the page.
+   */
+  public void answerMediaCapture(MemorySegment decisionHandler, boolean granted) {
+    ObjC.callBlock(decisionHandler, granted ? PERMISSION_DECISION_GRANT : PERMISSION_DECISION_DENY);
+  }
+
   /** The URL that a {@code WKNavigationAction} goes to. */
   public String navigationActionUrl(MemorySegment action) {
     return Foundation.urlString(ObjC.send(ObjC.send(action, "request"), "URL"));

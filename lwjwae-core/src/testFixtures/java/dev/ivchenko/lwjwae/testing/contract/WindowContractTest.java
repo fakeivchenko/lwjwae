@@ -25,6 +25,9 @@ import dev.ivchenko.lwjwae.event.WindowEventType;
 import dev.ivchenko.lwjwae.exception.ShortcutUnavailableException;
 import dev.ivchenko.lwjwae.menu.MenuItem;
 import dev.ivchenko.lwjwae.menu.MenuRole;
+import dev.ivchenko.lwjwae.permission.PermissionDecision;
+import dev.ivchenko.lwjwae.permission.PermissionKind;
+import dev.ivchenko.lwjwae.permission.PermissionRequest;
 import dev.ivchenko.lwjwae.shortcut.Shortcut;
 import dev.ivchenko.lwjwae.taskbar.TaskbarProgress;
 import dev.ivchenko.lwjwae.testing.Icons;
@@ -48,6 +51,7 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Assumptions;
@@ -617,6 +621,50 @@ public abstract class WindowContractTest extends DisplayContractTest {
 
       window.close();
       Assertions.assertTrue(window.isClosed(), "Java closes a window without a close button");
+    }
+  }
+
+  @Test
+  void aPageAsksForTheCameraAndTheHandlerDecides() throws Exception {
+    try (Application application = Application.create()) {
+      Window window =
+          application.open(WindowParameters.builder().title("lwjwae :: permissions").build());
+      BlockingQueue<PermissionRequest> asked = new LinkedBlockingQueue<>();
+      AtomicReference<PermissionDecision> answer = new AtomicReference<>(PermissionDecision.DENY);
+      window.permissionHandler(
+          request -> {
+            asked.add(request);
+            return answer.get();
+          });
+      final var loaded = Loads.expectFinished(window);
+      window.loadResource("test-app/index.html");
+      window.show();
+      loaded.get(30, TimeUnit.SECONDS);
+
+      String ask =
+          "navigator.mediaDevices.getUserMedia({ video: true })"
+              + ".then(() => window.__media = 'granted', e => window.__media = e.name); undefined;";
+      Loads.eval(window, ask);
+      PermissionRequest first = asked.poll(10, TimeUnit.SECONDS);
+      if (first == null) {
+        String failure = Loads.awaitValue(window, "window.__media");
+        Assumptions.assumeFalse(
+            failure.equals("NotFoundError") || failure.equals("OverconstrainedError"),
+            "no capture device here, so the engine fails before it asks: " + failure);
+        Assertions.fail("the handler is never asked; the page saw " + failure);
+      }
+      Assertions.assertEquals(PermissionKind.CAMERA, first.kind());
+      Assertions.assertEquals(
+          "NotAllowedError",
+          Loads.awaitValue(window, "window.__media"),
+          "a denial fails the call as a user's no does");
+
+      // No device behind the permission here, so a grant ends in "no device", never in a denial.
+      answer.set(PermissionDecision.GRANT);
+      Loads.eval(window, "window.__media = undefined; " + ask);
+      Assertions.assertEquals(PermissionKind.CAMERA, asked.poll(10, TimeUnit.SECONDS).kind());
+      Assertions.assertNotEquals(
+          "NotAllowedError", Loads.awaitValue(window, "window.__media"), "a grant passes");
     }
   }
 

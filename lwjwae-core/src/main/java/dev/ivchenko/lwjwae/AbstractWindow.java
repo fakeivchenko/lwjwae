@@ -29,6 +29,9 @@ import dev.ivchenko.lwjwae.menu.MenuItem;
 import dev.ivchenko.lwjwae.menu.MenuRole;
 import dev.ivchenko.lwjwae.menu.RoleMenuItem;
 import dev.ivchenko.lwjwae.menu.SubmenuItem;
+import dev.ivchenko.lwjwae.permission.PermissionDecision;
+import dev.ivchenko.lwjwae.permission.PermissionKind;
+import dev.ivchenko.lwjwae.permission.PermissionRequest;
 import dev.ivchenko.lwjwae.rpc.RpcCall;
 import dev.ivchenko.lwjwae.rpc.RpcException;
 import dev.ivchenko.lwjwae.rpc.RpcExchange;
@@ -125,6 +128,7 @@ public abstract class AbstractWindow implements Window {
   private volatile boolean closed;
   private volatile CloseAction closeAction = CloseAction.CLOSE;
   private volatile Consumer<String> externalLinkHandler;
+  private volatile Function<PermissionRequest, PermissionDecision> permissionHandler;
 
   /**
    * Records the owner and the ID. The subclass creates the native window afterwards.
@@ -419,6 +423,24 @@ public abstract class AbstractWindow implements Window {
         status, headers, ExchangeRpcCall.errorJson(code, message).getBytes(StandardCharsets.UTF_8));
   }
 
+  /**
+   * The origin of {@code url}, or an empty string for {@code null} and for a URL without one. The
+   * engines tell the page by its URL, or by an origin with a trailing slash.
+   */
+  private static String originOrEmpty(String url) {
+    if (url == null) {
+      return "";
+    }
+    try {
+      URI uri = URI.create(url);
+      return uri.getScheme() == null || uri.getRawAuthority() == null
+          ? ""
+          : uri.getScheme() + "://" + uri.getRawAuthority();
+    } catch (IllegalArgumentException _) {
+      return "";
+    }
+  }
+
   /** {@code scheme://authority} of {@code url}, the way a browser writes an origin. */
   private static String originOf(String url) {
     URI uri = URI.create(url);
@@ -664,6 +686,41 @@ public abstract class AbstractWindow implements Window {
       this.dispatcher().post(() -> this.navigate(url));
     } else if (scheme.equals("http") || scheme.equals("https") || scheme.equals("mailto")) {
       HANDLER_EXECUTOR.execute(() -> this.leaveReporting(url));
+    }
+  }
+
+  @Override
+  public final void permissionHandler(Function<PermissionRequest, PermissionDecision> handler) {
+    this.permissionHandler = handler;
+  }
+
+  /**
+   * The page asked for permissions, and the engine waits for the answer. A backend calls this from
+   * the callback of that request, on the UI thread, and answers the engine with the result.
+   *
+   * @param origin The URL or the origin of the page, or {@code null} where the engine doesn't tell;
+   *     the handler gets the origin of it, {@code scheme://authority}.
+   * @param kinds What the page asks for, all of it at once.
+   * @return {@code true} only if the handler granted every kind; with no handler, or one that
+   *     throws, {@code false}.
+   */
+  protected final boolean permissionRequested(String origin, PermissionKind... kinds) {
+    Function<PermissionRequest, PermissionDecision> handler = this.permissionHandler;
+    if (handler == null || kinds.length == 0) {
+      return false;
+    }
+    try {
+      for (PermissionKind kind : kinds) {
+        PermissionRequest request =
+            new PermissionRequest(kind, AbstractWindow.originOrEmpty(origin));
+        if (handler.apply(request) != PermissionDecision.GRANT) {
+          return false;
+        }
+      }
+      return true;
+    } catch (Throwable t) {
+      ThrowableUtil.report(t);
+      return false;
     }
   }
 

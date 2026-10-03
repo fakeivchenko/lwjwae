@@ -12,6 +12,9 @@ import dev.ivchenko.lwjwae.event.LoadEvent;
 import dev.ivchenko.lwjwae.event.LoadState;
 import dev.ivchenko.lwjwae.event.WindowEvent;
 import dev.ivchenko.lwjwae.event.WindowEventType;
+import dev.ivchenko.lwjwae.permission.PermissionDecision;
+import dev.ivchenko.lwjwae.permission.PermissionKind;
+import dev.ivchenko.lwjwae.permission.PermissionRequest;
 import dev.ivchenko.lwjwae.testing.FakeApplication;
 import dev.ivchenko.lwjwae.testing.FakeWindow;
 import dev.ivchenko.lwjwae.testing.Point;
@@ -24,6 +27,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -567,6 +571,66 @@ class AbstractWindowTest {
       window.awaitUiThread();
       Assertions.assertEquals(List.of("app://local/page.html"), window.navigated);
       Assertions.assertNull(handled.poll(200, TimeUnit.MILLISECONDS), "about:blank is dropped");
+    }
+  }
+
+  @Test
+  void permissionsAreDeniedUntilTheHandlerGrantsThem() {
+    try (FakeApplication application = new FakeApplication()) {
+      FakeWindow window = application.openFake();
+      Assertions.assertFalse(
+          window.requestPermission("https://example.com", PermissionKind.CAMERA),
+          "no handler, no permission");
+
+      List<PermissionRequest> seen = new CopyOnWriteArrayList<>();
+      window.permissionHandler(
+          request -> {
+            seen.add(request);
+            return request.kind() == PermissionKind.CAMERA
+                ? PermissionDecision.GRANT
+                : PermissionDecision.DENY;
+          });
+      Assertions.assertTrue(window.requestPermission("https://example.com", PermissionKind.CAMERA));
+      Assertions.assertFalse(
+          window.requestPermission(
+              "https://example.com", PermissionKind.CAMERA, PermissionKind.MICROPHONE),
+          "one denied kind of a pair denies both");
+      Assertions.assertEquals(
+          List.of(
+              new PermissionRequest(PermissionKind.CAMERA, "https://example.com"),
+              new PermissionRequest(PermissionKind.CAMERA, "https://example.com"),
+              new PermissionRequest(PermissionKind.MICROPHONE, "https://example.com")),
+          seen);
+
+      seen.clear();
+      window.permissionHandler(
+          request -> {
+            seen.add(request);
+            return PermissionDecision.DENY;
+          });
+      window.requestPermission("app://local/test-app/page.html?x=1", PermissionKind.CAMERA);
+      window.requestPermission("http://app.localhost/", PermissionKind.CAMERA);
+      window.requestPermission(null, PermissionKind.CAMERA);
+      Assertions.assertEquals(
+          List.of(
+              new PermissionRequest(PermissionKind.CAMERA, "app://local"),
+              new PermissionRequest(PermissionKind.CAMERA, "http://app.localhost"),
+              new PermissionRequest(PermissionKind.CAMERA, "")),
+          seen,
+          "the handler gets the origin of the page, whatever the engine reports");
+
+      window.permissionHandler(
+          _ -> {
+            throw new IllegalStateException("handler failed");
+          });
+      Assertions.assertFalse(
+          window.requestPermission("https://example.com", PermissionKind.CAMERA),
+          "a handler that throws denies");
+
+      window.permissionHandler(null);
+      Assertions.assertFalse(
+          window.requestPermission("https://example.com", PermissionKind.CAMERA),
+          "null brings the default back");
     }
   }
 
