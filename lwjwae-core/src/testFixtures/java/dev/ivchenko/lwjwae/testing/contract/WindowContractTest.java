@@ -35,6 +35,7 @@ import dev.ivchenko.lwjwae.testing.Loads;
 import dev.ivchenko.lwjwae.testing.LocalPages;
 import dev.ivchenko.lwjwae.testing.Screenshots;
 import dev.ivchenko.lwjwae.testing.Tags;
+import dev.ivchenko.lwjwae.theme.SystemTheme;
 import dev.ivchenko.lwjwae.tray.Tray;
 import dev.ivchenko.lwjwae.tray.TrayIcon;
 import dev.ivchenko.lwjwae.util.UserAgentUtil;
@@ -264,6 +265,22 @@ public abstract class WindowContractTest extends DisplayContractTest {
    *     back.
    */
   protected boolean pressKeys(Shortcut shortcut) throws Exception {
+    return false;
+  }
+
+  /**
+   * Switches the desktop to {@code theme}, the way the user does, and returns once the switch is
+   * made; the test then waits for the library to hear of it. A backend that can't switch the theme
+   * of the machine it runs on leaves the default, and the test is skipped.
+   *
+   * @return Whether the desktop was switched.
+   */
+  protected boolean switchSystemTheme(SystemTheme theme) throws Exception {
+    return false;
+  }
+
+  /** Whether the engine of the web view takes {@code prefers-color-scheme} from the desktop. */
+  protected boolean engineFollowsTheDesktop() {
     return false;
   }
 
@@ -665,6 +682,58 @@ public abstract class WindowContractTest extends DisplayContractTest {
       Assertions.assertEquals(PermissionKind.CAMERA, asked.poll(10, TimeUnit.SECONDS).kind());
       Assertions.assertNotEquals(
           "NotAllowedError", Loads.awaitValue(window, "window.__media"), "a grant passes");
+    }
+  }
+
+  @Test
+  void theThemeOfTheDesktopReachesJavaAndThePage() throws Exception {
+    try (Application application = Application.create()) {
+      Window window = application.open(WindowParameters.builder().title("lwjwae :: theme").build());
+      final var loaded = Loads.expectFinished(window);
+      window.loadResource("test-app/index.html");
+      window.show();
+      loaded.get(30, TimeUnit.SECONDS);
+
+      SystemTheme original = application.theme();
+      Loads.eval(
+          window,
+          "lwjwae.theme.current().then((t) => window.__current = t);"
+              + " lwjwae.theme.listen((t) => window.__heard = t); undefined;");
+      Assertions.assertEquals(
+          original.pageName(),
+          Loads.awaitValue(window, "window.__current"),
+          "the page reads the theme that Java reads");
+
+      SystemTheme other = original == SystemTheme.DARK ? SystemTheme.LIGHT : SystemTheme.DARK;
+      BlockingQueue<SystemTheme> heard = new LinkedBlockingQueue<>();
+      application.onThemeChange(heard::add);
+      boolean switched = this.switchSystemTheme(other);
+      try {
+        Assumptions.assumeTrue(switched, "this machine can't switch its theme in a test");
+        Assertions.assertEquals(other, heard.poll(10, TimeUnit.SECONDS), "Java hears the switch");
+        Assertions.assertEquals(other, application.theme());
+        Assertions.assertEquals(
+            other.pageName(), Loads.awaitValue(window, "window.__heard"), "and so does the page");
+        Loads.eval(window, "lwjwae.theme.current().then((t) => window.__after = t); undefined;");
+        Assertions.assertEquals(other.pageName(), Loads.awaitValue(window, "window.__after"));
+        if (this.engineFollowsTheDesktop()) {
+          WindowContractTest.awaitTrue(
+              () -> {
+                try {
+                  return Loads.eval(
+                          window, "String(matchMedia('(prefers-color-scheme: dark)').matches)")
+                      .equals(String.valueOf(other == SystemTheme.DARK));
+                } catch (Exception e) {
+                  throw new IllegalStateException(e);
+                }
+              },
+              "the engine matches the desktop");
+        }
+      } finally {
+        if (switched) {
+          this.switchSystemTheme(original);
+        }
+      }
     }
   }
 

@@ -363,6 +363,21 @@ together arrives as two requests, and both must be granted.
 | macOS | The camera and the microphone; a grant makes the system ask the user for its own permission, which needs the usage description in `Info.plist`. WKWebView has no hook for the position and notifications. |
 | Linux, GTK 3 and GTK 4 | The camera and the microphone. The position, notifications, and a capture of the screen are always denied. |
 
+### The theme of the desktop
+
+`application.theme()` is `SystemTheme.LIGHT` or `DARK`, as the user set it for the desktop, and
+`application.onThemeChange(theme -> ...)` runs on a virtual thread when the user switches, never
+with the theme that the application already has. A page reads the same through `await
+lwjwae.theme.current()`, which resolves to `"light"` or `"dark"`, and `lwjwae.theme.listen(handler)`,
+which resolves to the function that stops it. The engines of Windows and macOS follow the desktop
+in `prefers-color-scheme` by themselves; the GTK backends make WebKitGTK follow it too.
+
+| Platform | Where the choice comes from |
+|---|---|
+| Windows | `AppsUseLightTheme` of the user in the registry, the "app mode" of the settings, read once a second. |
+| macOS | The appearance of the system, with the notification of the system for a change. |
+| Linux, GTK 3 and GTK 4 | The `color-scheme` of the desktop portal, which the backend also writes into the dark preference of GTK, so that the page and the title bar match. Without a portal, the dark preference or the name of the GTK theme. |
+
 ### One instance
 
 `Application.createSingleInstance(parameters, args)` in place of `create` keeps one process of the

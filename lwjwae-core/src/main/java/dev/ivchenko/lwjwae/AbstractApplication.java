@@ -19,6 +19,7 @@ import dev.ivchenko.lwjwae.state.WindowStateStore;
 import dev.ivchenko.lwjwae.state.WindowStateTracker;
 import dev.ivchenko.lwjwae.store.Store;
 import dev.ivchenko.lwjwae.taskbar.TaskbarProgress;
+import dev.ivchenko.lwjwae.theme.SystemTheme;
 import dev.ivchenko.lwjwae.tray.Tray;
 import dev.ivchenko.lwjwae.tray.TrayIcon;
 import dev.ivchenko.lwjwae.ui.UiDispatcher;
@@ -40,6 +41,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -110,6 +112,13 @@ public abstract class AbstractApplication implements Application {
 
   private final AtomicBoolean closed = new AtomicBoolean();
 
+  private final List<Consumer<SystemTheme>> themeListeners = new CopyOnWriteArrayList<>();
+
+  /** Tells the listeners of a theme change one at a time and in order, off the UI thread. */
+  private final ExecutorService themeNotifier =
+      Executors.newSingleThreadExecutor(Thread.ofVirtual().name("lwjwae-theme").factory());
+
+  private volatile SystemTheme theme = SystemTheme.LIGHT;
   private volatile Clipboard clipboard;
   private volatile Cookies cookies;
   private volatile List<MenuItem> menu = List.of();
@@ -627,6 +636,47 @@ public abstract class AbstractApplication implements Application {
   }
 
   @Override
+  public final SystemTheme theme() {
+    this.checkOpen();
+    return this.theme;
+  }
+
+  @Override
+  public final EventSubscription onThemeChange(Consumer<SystemTheme> listener) {
+    Objects.requireNonNull(listener, "listener");
+    this.themeListeners.add(listener);
+    return () -> this.themeListeners.remove(listener);
+  }
+
+  /**
+   * The desktop is, or may be, in another theme. A backend calls this from the thread where it
+   * heard of it, with the theme that it read, once at startup before any window and again whenever
+   * the desktop reports a change. A theme that the application has already changes nothing.
+   */
+  protected final void themeChanged(SystemTheme newTheme) {
+    Objects.requireNonNull(newTheme, "newTheme");
+    SystemTheme old = this.theme;
+    if (old == newTheme) {
+      return;
+    }
+    this.theme = newTheme;
+    try {
+      this.themeNotifier.execute(
+          () -> {
+            for (Consumer<SystemTheme> listener : this.themeListeners) {
+              try {
+                listener.accept(newTheme);
+              } catch (Throwable t) {
+                ThrowableUtil.report(t);
+              }
+            }
+          });
+    } catch (RejectedExecutionException _) {
+      // The application is closed, and nobody is left to tell.
+    }
+  }
+
+  @Override
   public final EventSubscription onSecondInstance(Consumer<SecondInstanceEvent> listener) {
     Objects.requireNonNull(listener, "listener");
     List<SecondInstanceEvent> unheard;
@@ -829,6 +879,7 @@ public abstract class AbstractApplication implements Application {
       lock.close();
     }
     this.listeners.shutdown();
+    this.themeNotifier.shutdown();
     this.stateSaver.shutdown();
     try {
       if (!this.stateSaver.awaitTermination(STATE_SAVE_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {

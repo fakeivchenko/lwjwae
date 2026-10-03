@@ -73,6 +73,10 @@ public class Glib {
       NativeLibraries.downcall(GOBJECT, "g_value_unset", Signatures.VOID_POINTER);
   private final MethodHandle VALUE_SET_STRING =
       NativeLibraries.downcall(GOBJECT, "g_value_set_string", Signatures.VOID_POINTER_POINTER);
+  private final MethodHandle VALUE_GET_BOOLEAN =
+      NativeLibraries.downcall(GOBJECT, "g_value_get_boolean", Signatures.INT_POINTER);
+  private final MethodHandle VALUE_SET_BOOLEAN =
+      NativeLibraries.downcall(GOBJECT, "g_value_set_boolean", Signatures.VOID_POINTER_INT);
   private final MethodHandle VALUE_SET_ENUM =
       NativeLibraries.downcall(GOBJECT, "g_value_set_enum", Signatures.VOID_POINTER_INT);
   private final MethodHandle OBJECT_SET_PROPERTY =
@@ -229,6 +233,39 @@ public class Glib {
       try {
         OBJECT_GET_PROPERTY.invokeExact(object, arena.allocateFrom(name), value);
         return NativeLibraries.string((MemorySegment) VALUE_GET_STRING.invokeExact(value));
+      } finally {
+        VALUE_UNSET.invokeExact(value);
+      }
+    }
+  }
+
+  /** {@code G_TYPE_BOOLEAN}: fundamental type 5, shifted as GObject stores fundamentals. */
+  private final long TYPE_BOOLEAN = 5L << 2;
+
+  /** Reads a boolean property of a GObject, the way {@link #stringProperty} reads a string. */
+  @SneakyThrows
+  public boolean booleanProperty(MemorySegment object, String name) {
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment value = arena.allocate(VALUE_SIZE, 8);
+      MemorySegment _ = (MemorySegment) VALUE_INIT.invokeExact(value, TYPE_BOOLEAN);
+      try {
+        OBJECT_GET_PROPERTY.invokeExact(object, arena.allocateFrom(name), value);
+        return (int) VALUE_GET_BOOLEAN.invokeExact(value) != 0;
+      } finally {
+        VALUE_UNSET.invokeExact(value);
+      }
+    }
+  }
+
+  /** Sets a boolean property through {@code g_object_set_property}. */
+  @SneakyThrows
+  public void setBooleanProperty(MemorySegment object, String name, boolean flag) {
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment value = arena.allocate(VALUE_SIZE, 8);
+      MemorySegment _ = (MemorySegment) VALUE_INIT.invokeExact(value, TYPE_BOOLEAN);
+      try {
+        VALUE_SET_BOOLEAN.invokeExact(value, flag ? 1 : 0);
+        OBJECT_SET_PROPERTY.invokeExact(object, arena.allocateFrom(name), value);
       } finally {
         VALUE_UNSET.invokeExact(value);
       }

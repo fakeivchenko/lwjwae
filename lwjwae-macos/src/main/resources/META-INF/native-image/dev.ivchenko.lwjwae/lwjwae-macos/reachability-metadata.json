@@ -13,6 +13,19 @@
       ]
     },
     {
+      "type": "dev.ivchenko.lwjwae.macos.MacTheme",
+      "methods": [
+        {
+          "name": "onChanged",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
+        }
+      ]
+    },
+    {
       "type": "dev.ivchenko.lwjwae.macos.MacWindow",
       "methods": [
         {
@@ -919,6 +932,16 @@
           "void*",
           "void*",
           "jlong",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.macos.MacTheme",
+        "method": "onChanged",
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "void*",
           "void*"
         ]
       },

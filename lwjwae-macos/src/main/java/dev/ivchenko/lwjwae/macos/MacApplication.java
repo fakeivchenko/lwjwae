@@ -32,6 +32,7 @@ import java.util.function.Consumer;
 public class MacApplication extends AbstractApplication {
   private volatile boolean runningApplication;
   private MacNotifier notifier;
+  private volatile MacTheme themeWatcher;
 
   /** Creates an application with {@link ApplicationParameters#createDefault()}. */
   public MacApplication() {
@@ -45,7 +46,12 @@ public class MacApplication extends AbstractApplication {
   public MacApplication(ApplicationParameters parameters) {
     super(MacDispatcher.instance(), parameters);
     MacMainMenu.register(this);
-    this.dispatcher().run(() -> MacMainMenu.install(parameters.name()));
+    this.dispatcher()
+        .run(
+            () -> {
+              MacMainMenu.install(parameters.name());
+              this.themeWatcher = new MacTheme(this.dispatcher(), this::themeChanged);
+            });
   }
 
   @Override
@@ -115,6 +121,10 @@ public class MacApplication extends AbstractApplication {
   @Override
   protected void onClose() {
     MacMainMenu.unregister(this);
+    MacTheme watcher = this.themeWatcher;
+    if (watcher != null) {
+      this.dispatcher().run(watcher::close);
+    }
     MacNotifier current;
     synchronized (this) {
       current = this.notifier;

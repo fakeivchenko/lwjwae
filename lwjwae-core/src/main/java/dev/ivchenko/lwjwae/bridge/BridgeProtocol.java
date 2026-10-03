@@ -80,6 +80,13 @@ public class BridgeProtocol {
   public final String WINDOW_EVENT = "lwjwae:window";
 
   /**
+   * The event that tells a page the desktop switched theme: its payload is {@code light} or {@code
+   * dark}. The page reads the theme it has now through the {@code theme} action of {@link
+   * #CONTROL_CALL}.
+   */
+  public final String THEME_EVENT = "lwjwae:theme";
+
+  /**
    * The name under which a page asks for a new window, through {@code window.lwjwae.open(options)}.
    * Reserved like {@link #EVENT_CALL}. The payload is what {@link #parseWindowParameters} reads;
    * the promise resolves to the ID of the window.
@@ -227,6 +234,7 @@ public class BridgeProtocol {
         .replace("${eventCall}", EVENT_CALL)
         .replace("${eventsCall}", EVENTS_CALL)
         .replace("${windowEvent}", WINDOW_EVENT)
+        .replace("${themeEvent}", THEME_EVENT)
         .replace("${openCall}", OPEN_CALL)
         .replace("${closeCall}", CLOSE_CALL)
         .replace("${controlCall}", CONTROL_CALL)

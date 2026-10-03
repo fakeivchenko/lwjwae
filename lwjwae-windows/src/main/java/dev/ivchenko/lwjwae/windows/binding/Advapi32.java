@@ -6,6 +6,7 @@ import java.lang.foreign.MemorySegment;
 import java.lang.foreign.SymbolLookup;
 import java.lang.invoke.MethodHandle;
 import java.util.Optional;
+import java.util.OptionalInt;
 import lombok.SneakyThrows;
 import lombok.experimental.UtilityClass;
 
@@ -19,6 +20,9 @@ public class Advapi32 {
 
   /** {@code RRF_RT_REG_SZ}. */
   private final int REG_SZ_ONLY = 0x2;
+
+  /** {@code RRF_RT_REG_DWORD}. */
+  private final int REG_DWORD_ONLY = 0x10;
 
   /** {@code REG_SZ}. */
   private final int REG_SZ = 1;
@@ -50,6 +54,29 @@ public class Advapi32 {
                   buffer,
                   size);
       return status == ERROR_SUCCESS ? Optional.of(Wide.read(buffer)) : Optional.empty();
+    }
+  }
+
+  /** A {@code REG_DWORD} value, or empty if the key or the value doesn't exist. */
+  @SneakyThrows
+  public OptionalInt readDword(MemorySegment root, String subKey, String value) {
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment buffer = arena.allocate(Signatures.C_INT);
+      MemorySegment size = arena.allocate(Signatures.C_INT);
+      size.set(Signatures.C_INT, 0, Integer.BYTES);
+      int status =
+          (int)
+              REG_GET_VALUE.invokeExact(
+                  root,
+                  Wide.allocate(arena, subKey),
+                  Wide.allocate(arena, value),
+                  REG_DWORD_ONLY,
+                  MemorySegment.NULL,
+                  buffer,
+                  size);
+      return status == ERROR_SUCCESS
+          ? OptionalInt.of(buffer.get(Signatures.C_INT, 0))
+          : OptionalInt.empty();
     }
   }
 

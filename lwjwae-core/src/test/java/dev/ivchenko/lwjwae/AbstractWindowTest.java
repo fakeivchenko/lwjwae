@@ -21,6 +21,7 @@ import dev.ivchenko.lwjwae.testing.Point;
 import dev.ivchenko.lwjwae.testing.PointCodec;
 import dev.ivchenko.lwjwae.testing.PresentedDialog;
 import dev.ivchenko.lwjwae.testing.RpcReply;
+import dev.ivchenko.lwjwae.theme.SystemTheme;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -571,6 +572,31 @@ class AbstractWindowTest {
       window.awaitUiThread();
       Assertions.assertEquals(List.of("app://local/page.html"), window.navigated);
       Assertions.assertNull(handled.poll(200, TimeUnit.MILLISECONDS), "about:blank is dropped");
+    }
+  }
+
+  @Test
+  void themeStartsLightAndEveryChangeReachesJavaAndThePageOnce() throws Exception {
+    try (FakeApplication application = new FakeApplication()) {
+      FakeWindow window = application.openFake();
+      Assertions.assertEquals(SystemTheme.LIGHT, application.theme());
+
+      BlockingQueue<SystemTheme> heard = new LinkedBlockingQueue<>();
+      EventSubscription subscription = application.onThemeChange(heard::add);
+      application.changeTheme(SystemTheme.LIGHT);
+      application.changeTheme(SystemTheme.DARK);
+      application.changeTheme(SystemTheme.DARK);
+      Assertions.assertEquals(SystemTheme.DARK, heard.poll(5, TimeUnit.SECONDS));
+      Assertions.assertEquals(SystemTheme.DARK, application.theme());
+      Assertions.assertNull(
+          heard.poll(200, TimeUnit.MILLISECONDS), "a theme that it has already is no change");
+      window.call(1, BridgeProtocol.CONTROL_CALL, "theme");
+      Assertions.assertEquals("dark", window.awaitReply(1).body());
+
+      subscription.unlisten();
+      application.changeTheme(SystemTheme.LIGHT);
+      Assertions.assertNull(
+          heard.poll(200, TimeUnit.MILLISECONDS), "a listener that left is quiet");
     }
   }
 

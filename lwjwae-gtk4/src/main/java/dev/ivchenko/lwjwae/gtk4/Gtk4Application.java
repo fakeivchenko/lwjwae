@@ -11,6 +11,7 @@ import dev.ivchenko.lwjwae.event.EventSubscription;
 import dev.ivchenko.lwjwae.exception.ResourceNotFoundException;
 import dev.ivchenko.lwjwae.foreign.NativeLibraries;
 import dev.ivchenko.lwjwae.glib.DesktopServices;
+import dev.ivchenko.lwjwae.glib.DesktopTheme;
 import dev.ivchenko.lwjwae.glib.PortalDialogs;
 import dev.ivchenko.lwjwae.glib.StatusNotifierTray;
 import dev.ivchenko.lwjwae.glib.WebKitCookies;
@@ -70,6 +71,7 @@ public class Gtk4Application extends AbstractApplication {
   private static boolean hooked;
 
   private final DesktopServices desktop;
+  private volatile DesktopTheme themeWatcher;
 
   /** Creates an application with {@link ApplicationParameters#createDefault()}. */
   public Gtk4Application() {
@@ -96,6 +98,7 @@ public class Gtk4Application extends AbstractApplication {
             () -> {
               WebKit.retainDefaultWebContext();
               WebKit.registerUriScheme(ResourceUtil.SCHEME, ON_RESOURCE_REQUEST);
+              this.themeWatcher = new DesktopTheme(Gtk.settingsGetDefault(), this::themeChanged);
             });
   }
 
@@ -170,6 +173,10 @@ public class Gtk4Application extends AbstractApplication {
 
   @Override
   protected void onClose() {
+    DesktopTheme watcher = this.themeWatcher;
+    if (watcher != null) {
+      watcher.close();
+    }
     this.desktop.close();
   }
 

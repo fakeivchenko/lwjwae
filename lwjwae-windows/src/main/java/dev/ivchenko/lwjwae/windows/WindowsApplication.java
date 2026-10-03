@@ -14,6 +14,7 @@ import dev.ivchenko.lwjwae.shortcut.Shortcut;
 import dev.ivchenko.lwjwae.taskbar.TaskbarProgress;
 import dev.ivchenko.lwjwae.tray.Tray;
 import dev.ivchenko.lwjwae.tray.TrayIcon;
+import dev.ivchenko.lwjwae.util.ThrowableUtil;
 import dev.ivchenko.lwjwae.windows.binding.Com;
 import dev.ivchenko.lwjwae.windows.binding.ComCallback;
 import dev.ivchenko.lwjwae.windows.binding.Shell32;
@@ -46,6 +47,7 @@ import java.util.function.Consumer;
  */
 public class WindowsApplication extends AbstractApplication {
   private static final Duration CREATION_TIMEOUT = Duration.ofMinutes(1);
+  private static final long THEME_POLL_MILLIS = 1000;
 
   private final AtomicReference<MemorySegment> environment = new AtomicReference<>();
 
@@ -83,12 +85,28 @@ public class WindowsApplication extends AbstractApplication {
           WebView2.createEnvironment(WindowsApplication.userDataFolder().toString(), handler);
           Com.release(handler);
         });
+    this.themeChanged(WindowsTheme.read());
+    Thread.ofVirtual().name("lwjwae-theme-watch").start(this::watchTheme);
     try {
       this.environment.set(dispatcher.await(ready, CREATION_TIMEOUT));
     } catch (Exception e) {
       throw e.getCause() instanceof RuntimeException runtime
           ? runtime
           : new IllegalStateException("WebView2 environment creation failed", e);
+    }
+  }
+
+  /** Reads the theme once a second until the application closes, and reports a change. */
+  private void watchTheme() {
+    while (!this.isClosed()) {
+      try {
+        Thread.sleep(THEME_POLL_MILLIS);
+        this.themeChanged(WindowsTheme.read());
+      } catch (InterruptedException _) {
+        return;
+      } catch (RuntimeException e) {
+        ThrowableUtil.report(e);
+      }
     }
   }
 

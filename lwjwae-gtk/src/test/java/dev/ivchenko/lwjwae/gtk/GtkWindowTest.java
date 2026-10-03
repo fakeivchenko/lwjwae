@@ -3,8 +3,11 @@ package dev.ivchenko.lwjwae.gtk;
 import dev.ivchenko.lwjwae.Application;
 import dev.ivchenko.lwjwae.Window;
 import dev.ivchenko.lwjwae.glib.XtestKeyboard;
+import dev.ivchenko.lwjwae.glib.binding.Glib;
+import dev.ivchenko.lwjwae.gtk.binding.Gtk;
 import dev.ivchenko.lwjwae.shortcut.Shortcut;
 import dev.ivchenko.lwjwae.testing.contract.WindowContractTest;
+import dev.ivchenko.lwjwae.theme.SystemTheme;
 import dev.ivchenko.lwjwae.util.PlatformUtil;
 
 class GtkWindowTest extends WindowContractTest {
@@ -68,5 +71,24 @@ class GtkWindowTest extends WindowContractTest {
   @Override
   protected Class<? extends Window> expectedWindowType() {
     return GtkWindow.class;
+  }
+
+  /** GTK takes the choice from the dark preference of its settings, which a test sets here. */
+  @Override
+  protected boolean switchSystemTheme(SystemTheme theme) {
+    GtkDispatcher.instance()
+        .run(
+            () ->
+                Glib.setBooleanProperty(
+                    Gtk.settingsGetDefault(),
+                    "gtk-application-prefer-dark-theme",
+                    theme == SystemTheme.DARK));
+    return true;
+  }
+
+  /** WebKitGTK follows the dark preference of GTK. */
+  @Override
+  protected boolean engineFollowsTheDesktop() {
+    return true;
   }
 }

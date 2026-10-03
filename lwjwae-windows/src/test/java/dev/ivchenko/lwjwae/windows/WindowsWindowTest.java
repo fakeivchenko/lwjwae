@@ -4,6 +4,7 @@ import dev.ivchenko.lwjwae.Application;
 import dev.ivchenko.lwjwae.Window;
 import dev.ivchenko.lwjwae.shortcut.Shortcut;
 import dev.ivchenko.lwjwae.testing.contract.WindowContractTest;
+import dev.ivchenko.lwjwae.theme.SystemTheme;
 import dev.ivchenko.lwjwae.util.PlatformUtil;
 
 class WindowsWindowTest extends WindowContractTest {
@@ -36,5 +37,26 @@ class WindowsWindowTest extends WindowContractTest {
   protected boolean pickFirstEntryOfOpenMenu() {
     Keyboard.tap(DOWN, RETURN);
     return true;
+  }
+
+  /** The user switches the "app mode" in the settings, which is a value of the registry. */
+  @Override
+  protected boolean switchSystemTheme(SystemTheme theme) throws Exception {
+    Process process =
+        new ProcessBuilder(
+                "reg",
+                "add",
+                "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+                "/v",
+                "AppsUseLightTheme",
+                "/t",
+                "REG_DWORD",
+                "/d",
+                theme == SystemTheme.DARK ? "0" : "1",
+                "/f")
+            .redirectErrorStream(true)
+            .start();
+    process.getInputStream().readAllBytes();
+    return process.waitFor() == 0;
   }
 }

@@ -33,6 +33,7 @@ class MacNativeImageMetadataTest extends NativeImageMetadataContractTest {
         MacDispatcher.class,
         MacWindow.class,
         MacDialogs.class,
+        MacTheme.class,
         MacApplication.class,
         MacMainMenu.class,
         MacCookies.class,

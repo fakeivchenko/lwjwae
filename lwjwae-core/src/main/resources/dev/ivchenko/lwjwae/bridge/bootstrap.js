@@ -449,6 +449,13 @@
         });
     }
 
+    // The colors of the desktop: current resolves to "light" or "dark", and listen calls the handler
+    // with the new one when the user switches, and resolves to the function that stops it.
+    const theme = {
+        current: () => control("theme").then(({ text }) => text),
+        listen: (handler) => listen("${themeEvent}", (event) => handler(event.payload))
+    };
+
     // The clipboard of the desktop, without the permissions and the user gesture that
     // navigator.clipboard asks for: readText resolves to the text or null, writeText to nothing.
     const clipboard = {
@@ -536,5 +543,5 @@
         }
     };
 
-    window.${pageApi} = { listen, once, emit, open, close, openExternal, call: callRpc, invoke: rpcInvoke, RpcError, window: windowApi, dialog, clipboard, menu, taskbar, store, updates };
+    window.${pageApi} = { listen, once, emit, open, close, openExternal, call: callRpc, invoke: rpcInvoke, RpcError, window: windowApi, theme, dialog, clipboard, menu, taskbar, store, updates };
 })();

@@ -129,6 +129,7 @@ public abstract class AbstractWindow implements Window {
   private volatile CloseAction closeAction = CloseAction.CLOSE;
   private volatile Consumer<String> externalLinkHandler;
   private volatile Function<PermissionRequest, PermissionDecision> permissionHandler;
+  private volatile EventSubscription themeSubscription;
 
   /**
    * Records the owner and the ID. The subclass creates the native window afterwards.
@@ -453,6 +454,9 @@ public abstract class AbstractWindow implements Window {
    */
   protected final void installBridge() {
     this.messageCalls = new MessageRpcCalls(this, this.rpcMessageChannel(), this.token);
+    this.themeSubscription =
+        this.application.onThemeChange(
+            theme -> this.pageEvents.send(BridgeProtocol.THEME_EVENT, theme.pageName(), false));
     // Once the window is complete: what the first window event compares with.
     this.dispatcher().post(this.windowEvents::start);
     BridgeCodec codec = this.application.parameters().codec();
@@ -533,6 +537,7 @@ public abstract class AbstractWindow implements Window {
       case "title-bar-double-click" -> this.titleBarDoubleClicked();
       case "open-external" -> this.leave(argument);
       case "state" -> call.reply(this.dispatcher().call(this::stateJson));
+      case "theme" -> call.reply(this.application.theme().pageName());
       case "progress" -> this.application.progress(AbstractWindow.parseProgress(argument));
       case "badge" -> this.application.badgeCount(AbstractWindow.parseCount(argument));
       default -> throw RpcException.badRequest("malformed-control", "No such action: " + parts[0]);
@@ -1198,6 +1203,10 @@ public abstract class AbstractWindow implements Window {
     this.closed = true;
     // Straight after the flag: a thread that sees the window closed must not find it in the list.
     this.application.windowClosed(this);
+    EventSubscription themeSubscription = this.themeSubscription;
+    if (themeSubscription != null) {
+      themeSubscription.unlisten();
+    }
     this.pageEvents.close();
     this.windowEvents.shutdown();
     this.dialogs.forEach(dialog -> dialog.future().cancel(false));

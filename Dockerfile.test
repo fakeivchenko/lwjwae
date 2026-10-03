@@ -9,7 +9,13 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         libgtk-3-0t64 libwebkit2gtk-4.1-0 libgtk-4-1 libwebkitgtk-6.0-4 \
         imagemagick xvfb openbox dbus-daemon dunst rsync \
+        xdg-desktop-portal xdg-desktop-portal-gtk gsettings-desktop-schemas libglib2.0-bin dconf-gsettings-backend \
     && rm -rf /var/lib/apt/lists/*
+
+# Without a desktop to name, the portal picks no backend and serves no settings: this file picks the
+# one for GTK, which has the color scheme of the user.
+RUN mkdir -p /etc/xdg-desktop-portal \
+    && printf '[preferred]\ndefault=gtk\n' > /etc/xdg-desktop-portal/portals.conf
 
 # The environment of the CI job: GTK on X11 for Xvfb, WebKit and GTK 4 on the software path.
 ENV GDK_BACKEND=x11 \
