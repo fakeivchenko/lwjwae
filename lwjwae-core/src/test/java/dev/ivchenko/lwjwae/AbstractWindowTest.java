@@ -603,6 +603,38 @@ class AbstractWindowTest {
   }
 
   @Test
+  void zoomIsCheckedAndReachesTheBackend() {
+    try (FakeApplication application = new FakeApplication()) {
+      FakeWindow window = application.openFake();
+      Assertions.assertEquals(1.0, window.zoom(), "a page starts at 100%");
+
+      window.zoom(1.5);
+      Assertions.assertEquals(1.5, window.zoom());
+      window.zoom(Window.MINIMUM_ZOOM);
+      window.zoom(Window.MAXIMUM_ZOOM);
+      Assertions.assertEquals(List.of(1.5, 0.25, 5.0), window.zooms);
+
+      for (double wrong :
+          new double[] {
+            0,
+            -1,
+            Window.MINIMUM_ZOOM - 0.01,
+            Window.MAXIMUM_ZOOM + 0.01,
+            Double.NaN,
+            Double.POSITIVE_INFINITY
+          }) {
+        Assertions.assertThrows(
+            IllegalArgumentException.class, () -> window.zoom(wrong), "zoom " + wrong);
+      }
+      Assertions.assertEquals(3, window.zooms.size(), "a refused zoom reaches nobody");
+
+      window.close();
+      Assertions.assertThrows(IllegalStateException.class, () -> window.zoom(2));
+      Assertions.assertThrows(IllegalStateException.class, window::zoom);
+    }
+  }
+
+  @Test
   void iconIsAPngThatReachesTheBackendAndNullBringsTheDefaultBack() {
     byte[] png = Icons.circle(64, Color.BLUE);
     try (FakeApplication application = new FakeApplication()) {

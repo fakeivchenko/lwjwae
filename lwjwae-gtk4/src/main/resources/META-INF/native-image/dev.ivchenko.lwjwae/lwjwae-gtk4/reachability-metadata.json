@@ -185,6 +185,13 @@
   "foreign": {
     "downcalls": [
       {
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "jdouble"
+        ]
+      },
+      {
         "returnType": "jint",
         "parameterTypes": []
       },

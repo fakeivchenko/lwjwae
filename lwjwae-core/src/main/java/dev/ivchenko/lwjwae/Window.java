@@ -497,6 +497,41 @@ public interface Window extends AutoCloseable {
    */
   EventSubscription onWindowEvent(Consumer<WindowEvent> listener);
 
+  /** The smallest zoom of a page, 25%. */
+  double MINIMUM_ZOOM = 0.25;
+
+  /** The largest zoom of a page, 500%. */
+  double MAXIMUM_ZOOM = 5.0;
+
+  /**
+   * The zoom of the page: 1 is 100%, 1.5 is 150%, and 0.5 is 50%. A page starts at 1, and the
+   * answer is what the engine shows now, which is what {@link #zoom(double)} set last.
+   *
+   * @throws IllegalStateException If the window is closed.
+   */
+  double zoom();
+
+  /**
+   * Zooms the page, the whole of its content, as the zoom of a browser does: text, images, and
+   * layout grow together, and the page sees a narrower viewport in CSS pixels. The user can't zoom
+   * the page with the keyboard or the wheel; only Java does. The zoom belongs to the window and
+   * stays through navigations.
+   *
+   * <p>Platforms:
+   *
+   * <ul>
+   *   <li>Windows: The zoom factor of the web view.
+   *   <li>macOS: The page zoom of the web view, which needs macOS 11 or later.
+   *   <li>Linux, GTK 3: The zoom level of the web view.
+   *   <li>Linux, GTK 4: As on GTK 3.
+   * </ul>
+   *
+   * @param factor The zoom, from {@link #MINIMUM_ZOOM} to {@link #MAXIMUM_ZOOM}.
+   * @throws IllegalArgumentException If {@code factor} is outside that range, or isn't a number.
+   * @throws IllegalStateException If the window is closed.
+   */
+  void zoom(double factor);
+
   /**
    * Sets the icon of the window: the one in its title bar, in the taskbar or the Dock, and in the
    * switcher of the windows. The icon is a PNG image; a square of 256 pixels or more is scaled down

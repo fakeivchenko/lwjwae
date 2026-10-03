@@ -105,6 +105,11 @@ public class WebKit {
       NativeLibraries.downcall(WEBKIT, "webkit_permission_request_allow", Signatures.VOID_POINTER);
   private final MethodHandle PERMISSION_REQUEST_DENY =
       NativeLibraries.downcall(WEBKIT, "webkit_permission_request_deny", Signatures.VOID_POINTER);
+  private final MethodHandle WEB_VIEW_SET_ZOOM_LEVEL =
+      NativeLibraries.downcall(
+          WEBKIT, "webkit_web_view_set_zoom_level", Signatures.VOID_POINTER_DOUBLE);
+  private final MethodHandle WEB_VIEW_GET_ZOOM_LEVEL =
+      NativeLibraries.downcall(WEBKIT, "webkit_web_view_get_zoom_level", Signatures.DOUBLE_POINTER);
   private final MethodHandle GET_MAJOR_VERSION =
       NativeLibraries.downcall(WEBKIT, "webkit_get_major_version", Signatures.INT_VOID);
   private final MethodHandle GET_MINOR_VERSION =
@@ -406,6 +411,18 @@ public class WebKit {
     } else {
       PERMISSION_REQUEST_DENY.invokeExact(request);
     }
+  }
+
+  /** Calls {@code webkit_web_view_set_zoom_level}: the page at {@code factor}, 1 for 100%. */
+  @SneakyThrows
+  public void setZoomLevel(MemorySegment webView, double factor) {
+    WEB_VIEW_SET_ZOOM_LEVEL.invokeExact(webView, factor);
+  }
+
+  /** Calls {@code webkit_web_view_get_zoom_level}. */
+  @SneakyThrows
+  public double zoomLevel(MemorySegment webView) {
+    return (double) WEB_VIEW_GET_ZOOM_LEVEL.invokeExact(webView);
   }
 
   /** The user agent that {@code webView} sends, the one of WebKit until it's set. */

@@ -94,6 +94,19 @@ public class FakeWindow extends AbstractWindow {
     this.installBridge();
   }
 
+  /** What {@code presentZoom} was asked for, in order. */
+  public final List<Double> zooms = new CopyOnWriteArrayList<>();
+
+  @Override
+  protected void presentZoom(double factor) {
+    this.zooms.add(factor);
+  }
+
+  @Override
+  protected double currentZoom() {
+    return this.zooms.isEmpty() ? 1.0 : this.zooms.getLast();
+  }
+
   /** What {@code presentIcon} was asked to show, in order; {@code null} is the default icon. */
   public final List<byte[]> icons = new CopyOnWriteArrayList<>();
 

@@ -760,6 +760,55 @@ public abstract class WindowContractTest extends DisplayContractTest {
   }
 
   @Test
+  void pageZoomScalesThePageAndStaysThroughNavigations() throws Exception {
+    try (LocalPages pages = new LocalPages();
+        Application application = Application.create()) {
+      Window window =
+          application.open(
+              WindowParameters.builder().title("lwjwae :: zoom").size(800, 600).build());
+      final var loaded = Loads.expectFinished(window);
+      window.loadResource("test-app/index.html");
+      window.show();
+      loaded.get(30, TimeUnit.SECONDS);
+      Assertions.assertEquals(1.0, window.zoom(), 0.001);
+      int width = WindowContractTest.viewportWidth(window);
+
+      window.zoom(2.0);
+      Assertions.assertEquals(2.0, window.zoom(), 0.001);
+      WindowContractTest.awaitTrue(
+          () -> Math.abs(WindowContractTest.viewportWidth(window) - width / 2) <= 2,
+          "at 200% the page has half the width in CSS pixels");
+
+      // Another page, and another origin: the zoom belongs to the window, not to the page.
+      String url = pages.page("/zoom.html", "<!DOCTYPE html><html><body>zoom</body></html>");
+      final var next = Loads.expectFinished(window);
+      window.navigate(url);
+      next.get(30, TimeUnit.SECONDS);
+      Assertions.assertEquals(2.0, window.zoom(), 0.001);
+      WindowContractTest.awaitTrue(
+          () -> Math.abs(WindowContractTest.viewportWidth(window) - width / 2) <= 2,
+          "the zoom stays through the navigation");
+
+      window.zoom(0.5);
+      WindowContractTest.awaitTrue(
+          () -> Math.abs(WindowContractTest.viewportWidth(window) - width * 2) <= 4,
+          "at 50% the page has twice the width");
+      window.zoom(1.0);
+      WindowContractTest.awaitTrue(
+          () -> Math.abs(WindowContractTest.viewportWidth(window) - width) <= 2, "and back");
+      Assertions.assertThrows(IllegalArgumentException.class, () -> window.zoom(10));
+    }
+  }
+
+  private static int viewportWidth(Window window) {
+    try {
+      return Integer.parseInt(Loads.eval(window, "String(window.innerWidth)"));
+    } catch (Exception e) {
+      throw new IllegalStateException(e);
+    }
+  }
+
+  @Test
   void linksThatLeaveTheApplicationGoToTheHandler() throws Exception {
     try (Application application = Application.create()) {
       Window window = application.open(WindowParameters.builder().title("lwjwae :: links").build());

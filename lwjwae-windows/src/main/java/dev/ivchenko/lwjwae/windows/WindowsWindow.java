@@ -239,6 +239,16 @@ public class WindowsWindow extends AbstractWindow {
   }
 
   @Override
+  protected void presentZoom(double factor) {
+    WebView2.setZoomFactor(this.controller, factor);
+  }
+
+  @Override
+  protected double currentZoom() {
+    return WebView2.zoomFactor(this.controller);
+  }
+
+  @Override
   public WindowSize size() {
     return this.dispatcher()
         .call(
@@ -795,6 +805,8 @@ public class WindowsWindow extends AbstractWindow {
         WebView2.setTransparentBackground(createdController);
       }
       WebView2.setDevToolsEnabled(this.webView, false);
+      // Only Java zooms the page, as on the other backends.
+      WebView2.setZoomControlEnabled(this.webView, false);
       try {
         WebView2.changeUserAgent(this.webView, this::userAgent);
       } catch (RuntimeException e) {

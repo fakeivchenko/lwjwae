@@ -292,6 +292,16 @@ public class Gtk4Window extends AbstractWindow {
   protected void presentIcon(byte[] png) {}
 
   @Override
+  protected void presentZoom(double factor) {
+    WebKit.setZoomLevel(this.webView, factor);
+  }
+
+  @Override
+  protected double currentZoom() {
+    return WebKit.zoomLevel(this.webView);
+  }
+
+  @Override
   public String title() {
     return this.dispatcher().call(() -> Gtk.windowGetTitle(this.window()));
   }

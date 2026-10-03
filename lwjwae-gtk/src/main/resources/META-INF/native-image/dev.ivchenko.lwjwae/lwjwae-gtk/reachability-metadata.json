@@ -163,6 +163,19 @@
   "foreign": {
     "downcalls": [
       {
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "jdouble"
+        ]
+      },
+      {
+        "returnType": "jdouble",
+        "parameterTypes": [
+          "void*"
+        ]
+      },
+      {
         "returnType": "void*",
         "parameterTypes": []
       },

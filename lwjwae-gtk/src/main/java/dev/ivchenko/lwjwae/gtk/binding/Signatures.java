@@ -95,6 +95,14 @@ public class Signatures {
   public final FunctionDescriptor VOID_POINTER_POINTER_POINTER =
       FunctionDescriptor.ofVoid(C_POINTER, C_POINTER, C_POINTER);
 
+  /** {@code void f(T*, gdouble)}: {@code webkit_web_view_set_zoom_level}. */
+  public final FunctionDescriptor VOID_POINTER_DOUBLE =
+      FunctionDescriptor.ofVoid(C_POINTER, ValueLayout.JAVA_DOUBLE);
+
+  /** {@code gdouble f(T*)}: {@code webkit_web_view_get_zoom_level}. */
+  public final FunctionDescriptor DOUBLE_POINTER =
+      FunctionDescriptor.of(ValueLayout.JAVA_DOUBLE, C_POINTER);
+
   /** {@code void f(T*, gint)}. */
   public final FunctionDescriptor VOID_POINTER_INT = FunctionDescriptor.ofVoid(C_POINTER, C_INT);
 

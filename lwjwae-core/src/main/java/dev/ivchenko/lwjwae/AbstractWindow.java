@@ -665,6 +665,28 @@ public abstract class AbstractWindow implements Window {
   }
 
   @Override
+  public final double zoom() {
+    this.checkOpen();
+    return this.dispatcher().call(this::currentZoom);
+  }
+
+  @Override
+  public final void zoom(double factor) {
+    this.checkOpen();
+    if (!(factor >= MINIMUM_ZOOM && factor <= MAXIMUM_ZOOM)) {
+      throw new IllegalArgumentException(
+          "The zoom is from " + MINIMUM_ZOOM + " to " + MAXIMUM_ZOOM + ": " + factor);
+    }
+    this.dispatcher().run(() -> this.presentZoom(factor));
+  }
+
+  /** Zooms the page of the web view to {@code factor}, already checked. Called on the UI thread. */
+  protected abstract void presentZoom(double factor);
+
+  /** The zoom that the web view shows now. Called on the UI thread. */
+  protected abstract double currentZoom();
+
+  @Override
   public final void icon(byte[] png) {
     this.checkOpen();
     if (png != null && !AbstractWindow.isPng(png)) {

@@ -92,6 +92,8 @@ public class WebView2 {
   // ICoreWebView2Controller
   private final int CONTROLLER_PUT_IS_VISIBLE = 4;
   private final int CONTROLLER_PUT_BOUNDS = 6;
+  private final int CONTROLLER_GET_ZOOM_FACTOR = 7;
+  private final int CONTROLLER_PUT_ZOOM_FACTOR = 8;
   private final int CONTROLLER_MOVE_FOCUS = 12;
   private final int CONTROLLER_ADD_ACCELERATOR_KEY_PRESSED = 19;
   private final int CONTROLLER_CLOSE = 24;
@@ -119,6 +121,7 @@ public class WebView2 {
   private final int SETTINGS_GET_DEV_TOOLS_ENABLED = 11;
   private final int SETTINGS_PUT_DEV_TOOLS_ENABLED = 12;
   private final int SETTINGS_PUT_DEFAULT_CONTEXT_MENUS_ENABLED = 14;
+  private final int SETTINGS_PUT_IS_ZOOM_CONTROL_ENABLED = 18;
   // ICoreWebView2Settings2
   private final MemorySegment IID_SETTINGS_2 = Com.guid("ee9a0f68-f46c-4e32-ac23-ef8cac224d2a");
   private final int SETTINGS_2_GET_USER_AGENT = 21;
@@ -296,6 +299,35 @@ public class WebView2 {
           Com.call(settings, SETTINGS_PUT_DEFAULT_CONTEXT_MENUS_ENABLED, enabled ? 1 : 0));
     } finally {
       Com.release(settings);
+    }
+  }
+
+  /**
+   * Sets {@code IsZoomControlEnabled}: whether the user zooms the page with Ctrl and the wheel or
+   * with Ctrl and the plus and minus keys. Off, only {@link #setZoomFactor} zooms.
+   */
+  public void setZoomControlEnabled(MemorySegment webView, boolean enabled) {
+    MemorySegment settings = WebView2.settings(webView);
+    try {
+      Com.check(
+          "put_IsZoomControlEnabled",
+          Com.call(settings, SETTINGS_PUT_IS_ZOOM_CONTROL_ENABLED, enabled ? 1 : 0));
+    } finally {
+      Com.release(settings);
+    }
+  }
+
+  /** Calls {@code ICoreWebView2Controller::put_ZoomFactor}. */
+  public void setZoomFactor(MemorySegment controller, double factor) {
+    Com.check("put_ZoomFactor", Com.call(controller, CONTROLLER_PUT_ZOOM_FACTOR, factor));
+  }
+
+  /** Calls {@code ICoreWebView2Controller::get_ZoomFactor}. */
+  public double zoomFactor(MemorySegment controller) {
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment out = arena.allocate(Signatures.C_DOUBLE);
+      Com.check("get_ZoomFactor", Com.call(controller, CONTROLLER_GET_ZOOM_FACTOR, out));
+      return out.get(Signatures.C_DOUBLE, 0);
     }
   }
 

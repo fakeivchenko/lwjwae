@@ -61,7 +61,9 @@ public class Signatures {
   public final FunctionDescriptor GTK_WIDGET_TRANSLATE_COORDINATES =
       FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_DOUBLE, C_DOUBLE, C_POINTER, C_POINTER);
 
-  /** {@code double f(T*)}: {@code gdk_monitor_get_scale}. */
+  /**
+   * {@code double f(T*)}: {@code gdk_monitor_get_scale}, {@code webkit_web_view_get_zoom_level}.
+   */
   public final FunctionDescriptor DOUBLE_POINTER = FunctionDescriptor.of(C_DOUBLE, C_POINTER);
 
   /** {@code T* f(void)}. */
@@ -97,6 +99,10 @@ public class Signatures {
   /** {@code void f(T*, U*, V*)}. */
   public final FunctionDescriptor VOID_POINTER_POINTER_POINTER =
       FunctionDescriptor.ofVoid(C_POINTER, C_POINTER, C_POINTER);
+
+  /** {@code void f(T*, gdouble)}: {@code webkit_web_view_set_zoom_level}. */
+  public final FunctionDescriptor VOID_POINTER_DOUBLE =
+      FunctionDescriptor.ofVoid(C_POINTER, ValueLayout.JAVA_DOUBLE);
 
   /** {@code void f(T*, gint)}. */
   public final FunctionDescriptor VOID_POINTER_INT = FunctionDescriptor.ofVoid(C_POINTER, C_INT);

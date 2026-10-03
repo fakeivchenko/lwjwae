@@ -393,6 +393,15 @@ scales it down to every size it needs.
 | Linux, GTK 3 | On X11, the icon of the title bar and the taskbar; a window manager may keep the last one after `null`. On Wayland, the compositor takes it from the `.desktop` file. |
 | Linux, GTK 4 | None: GTK 4 has no call for it, and the desktop takes it from the `.desktop` file. |
 
+### Zooming a page
+
+`window.zoom(1.5)` shows the page at 150%, and `window.zoom()` reads the zoom: 1 is 100%, from
+`Window.MINIMUM_ZOOM` (0.25) to `Window.MAXIMUM_ZOOM` (5). The whole page zooms, as in a browser: its
+text, images, and layout grow together, and the page sees a narrower viewport in CSS pixels. The
+zoom belongs to the window and stays through navigations, including to another origin. The user
+can't zoom with Ctrl and the wheel or the keys, on any backend, so only Java sets it. There is no
+call for it on the page.
+
 ### One instance
 
 `Application.createSingleInstance(parameters, args)` in place of `create` keeps one process of the

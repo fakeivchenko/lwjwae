@@ -141,6 +141,16 @@ public class WebKit {
     ObjC.callBlock(decisionHandler, granted ? PERMISSION_DECISION_GRANT : PERMISSION_DECISION_DENY);
   }
 
+  /** Calls {@code -[WKWebView setPageZoom:]}, which macOS 11 and later have. */
+  public void setPageZoom(MemorySegment webView, double factor) {
+    MemorySegment _ = ObjC.send(webView, "setPageZoom:", factor);
+  }
+
+  /** {@code -[WKWebView pageZoom]}. */
+  public double pageZoom(MemorySegment webView) {
+    return Foundation.doubleValue(webView, "pageZoom");
+  }
+
   /** The URL that a {@code WKNavigationAction} goes to. */
   public String navigationActionUrl(MemorySegment action) {
     return Foundation.urlString(ObjC.send(ObjC.send(action, "request"), "URL"));

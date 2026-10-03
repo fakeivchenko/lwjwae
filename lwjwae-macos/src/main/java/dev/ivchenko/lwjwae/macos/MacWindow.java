@@ -287,6 +287,16 @@ public class MacWindow extends AbstractWindow {
   }
 
   @Override
+  protected void presentZoom(double factor) {
+    WebKit.setPageZoom(this.webView, factor);
+  }
+
+  @Override
+  protected double currentZoom() {
+    return WebKit.pageZoom(this.webView);
+  }
+
+  @Override
   public String title() {
     return this.dispatcher().call(() -> AppKit.title(this.window()));
   }

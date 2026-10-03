@@ -316,6 +316,16 @@ public class GtkWindow extends AbstractWindow {
   }
 
   @Override
+  protected void presentZoom(double factor) {
+    WebKit.setZoomLevel(this.webView, factor);
+  }
+
+  @Override
+  protected double currentZoom() {
+    return WebKit.zoomLevel(this.webView);
+  }
+
+  @Override
   public String title() {
     return this.dispatcher().call(() -> Gtk.windowGetTitle(this.window()));
   }
