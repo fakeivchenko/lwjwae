@@ -277,7 +277,10 @@ public final class InstanceLock implements AutoCloseable {
     if (length < 0 || length > TEXT_LIMIT) {
       throw new IOException("A second instance sent a text of " + length + " bytes");
     }
-    return new String(input.readNBytes(length), StandardCharsets.UTF_8);
+    // readFully, not readNBytes: a connection that ends early is a broken start, not a short text.
+    byte[] bytes = new byte[length];
+    input.readFully(bytes);
+    return new String(bytes, StandardCharsets.UTF_8);
   }
 
   /**
