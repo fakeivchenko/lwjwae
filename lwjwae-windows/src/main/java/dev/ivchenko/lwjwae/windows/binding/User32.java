@@ -171,6 +171,9 @@ public class User32 {
   /** {@code GW_ENABLEDPOPUP}: the enabled window that a window owns, a dialog over it. */
   private final int GW_ENABLEDPOPUP = 6;
 
+  /** {@code GW_OWNER}: the window that owns a window. */
+  private final int GW_OWNER = 4;
+
   /** {@code HWND_MESSAGE}: the parent that makes a window message-only. */
   private final MemorySegment HWND_MESSAGE = MemorySegment.ofAddress(-3);
 
@@ -260,6 +263,10 @@ public class User32 {
       NativeLibraries.downcall(USER32, "MessageBoxW", Signatures.INT_POINTER_POINTER_POINTER_INT);
   private final MethodHandle GET_WINDOW =
       NativeLibraries.downcall(USER32, "GetWindow", Signatures.POINTER_POINTER_INT);
+  private final MethodHandle ENABLE_WINDOW =
+      NativeLibraries.downcall(USER32, "EnableWindow", Signatures.INT_POINTER_INT);
+  private final MethodHandle IS_WINDOW_ENABLED =
+      NativeLibraries.downcall(USER32, "IsWindowEnabled", Signatures.INT_POINTER);
   private final MethodHandle END_DIALOG =
       NativeLibraries.downcall(USER32, "EndDialog", Signatures.INT_POINTER_LONG);
   private final MethodHandle GET_SYSTEM_METRICS =
@@ -375,7 +382,9 @@ public class User32 {
    * {@code CW_USEDEFAULT} for both lets Windows choose. {@code topmost} creates it above the
    * windows that aren't, with {@code WS_EX_TOPMOST}: later, {@link #topmost(MemorySegment,
    * boolean)} works only for the process in the foreground. A {@code transparent} window has no
-   * surface of its own, so where its web view draws nothing, the desktop shows through.
+   * surface of its own, so where its web view draws nothing, the desktop shows through. An {@code
+   * owner} makes it an owned window: it stays above the owner, minimizes with it, and goes when the
+   * owner goes.
    */
   @SneakyThrows
   public MemorySegment createWindow(
@@ -387,7 +396,10 @@ public class User32 {
       int height,
       int style,
       boolean topmost,
-      boolean transparent) {
+      boolean transparent,
+      MemorySegment owner) {
+    // A local, not a conditional in the call: the target of invokeExact would type it Object.
+    MemorySegment ownerHandle = owner == null ? MemorySegment.NULL : owner;
     try (Arena arena = Arena.ofConfined()) {
       MemorySegment hwnd =
           (MemorySegment)
@@ -401,7 +413,7 @@ public class User32 {
                   y,
                   width,
                   height,
-                  MemorySegment.NULL,
+                  ownerHandle,
                   MemorySegment.NULL,
                   Kernel32.moduleHandle(),
                   MemorySegment.NULL);
@@ -573,6 +585,26 @@ public class User32 {
     if (!dialog.equals(MemorySegment.NULL) && !dialog.equals(owner)) {
       int _ = (int) END_DIALOG.invokeExact(dialog, (long) result);
     }
+  }
+
+  /** Calls {@code EnableWindow}: a disabled window takes neither the mouse nor the keyboard. */
+  @SneakyThrows
+  public void enable(MemorySegment hwnd, boolean enabled) {
+    int _ = (int) ENABLE_WINDOW.invokeExact(hwnd, enabled ? 1 : 0);
+  }
+
+  /** Calls {@code IsWindowEnabled}. */
+  @SneakyThrows
+  public boolean isEnabled(MemorySegment hwnd) {
+    return (int) IS_WINDOW_ENABLED.invokeExact(hwnd) != 0;
+  }
+
+  /**
+   * The window that owns {@code hwnd}, or {@code NULL}: {@code GetWindow} with {@code GW_OWNER}.
+   */
+  @SneakyThrows
+  public MemorySegment owner(MemorySegment hwnd) {
+    return (MemorySegment) GET_WINDOW.invokeExact(hwnd, GW_OWNER);
   }
 
   /** Calls {@code CreatePopupMenu}: an empty menu, which {@link #destroyMenu} frees. */

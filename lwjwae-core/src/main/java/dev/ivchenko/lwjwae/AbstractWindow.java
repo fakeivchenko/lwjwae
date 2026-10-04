@@ -118,6 +118,8 @@ public abstract class AbstractWindow implements Window {
   private final Set<DialogCompletion<?>> dialogs = ConcurrentHashMap.newKeySet();
   private final boolean closable;
   private final boolean maximizable;
+  private final Window parent;
+  private final Set<AbstractWindow> children = ConcurrentHashMap.newKeySet();
 
   private volatile MessageRpcCalls messageCalls;
 
@@ -147,6 +149,7 @@ public abstract class AbstractWindow implements Window {
     this.id = id;
     this.closable = parameters.closable();
     this.maximizable = parameters.maximizable();
+    this.parent = parameters.parent();
   }
 
   /** The UI thread of the toolkit, the one of the application. */
@@ -162,6 +165,20 @@ public abstract class AbstractWindow implements Window {
   @Override
   public final Application application() {
     return this.application;
+  }
+
+  @Override
+  public final Optional<Window> parent() {
+    return Optional.ofNullable(this.parent);
+  }
+
+  /** Records {@code child}, which closes with this window. The application calls this. */
+  final void adoptChild(AbstractWindow child) {
+    this.children.add(child);
+    // Closed meanwhile: markClosed went through the children before this one was among them.
+    if (this.closed) {
+      child.close();
+    }
   }
 
   @Override
@@ -502,9 +519,12 @@ public abstract class AbstractWindow implements Window {
     this.application.deliver(event.name(), event.payload(), event.typed(), this);
   }
 
-  /** {@code window.lwjwae.open}: answers with the ID of the new window. */
+  /**
+   * {@code window.lwjwae.open}: answers with the ID of the new window, a child of this one when the
+   * page asks for a child or a modal window.
+   */
   private void openFromPage(RpcCall call) {
-    WindowParameters parameters = BridgeProtocol.parseWindowParameters(call.text());
+    WindowParameters parameters = BridgeProtocol.parseWindowParameters(call.text(), this);
     if (parameters == null) {
       throw RpcException.badRequest("malformed-window", "Malformed window parameters");
     }
@@ -1287,6 +1307,18 @@ public abstract class AbstractWindow implements Window {
     this.closed = true;
     // Straight after the flag: a thread that sees the window closed must not find it in the list.
     this.application.windowClosed(this);
+    if (this.parent instanceof AbstractWindow owner) {
+      owner.children.remove(this);
+    }
+    // A child closes with its parent, whatever the platform does with it on its own.
+    for (AbstractWindow child : List.copyOf(this.children)) {
+      try {
+        child.close();
+      } catch (Throwable t) {
+        ThrowableUtil.report(t);
+      }
+    }
+    this.children.clear();
     EventSubscription themeSubscription = this.themeSubscription;
     if (themeSubscription != null) {
       themeSubscription.unlisten();

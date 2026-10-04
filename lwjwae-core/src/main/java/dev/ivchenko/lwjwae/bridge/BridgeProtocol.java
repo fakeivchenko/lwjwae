@@ -1,5 +1,6 @@
 package dev.ivchenko.lwjwae.bridge;
 
+import dev.ivchenko.lwjwae.Window;
 import dev.ivchenko.lwjwae.WindowEdge;
 import dev.ivchenko.lwjwae.WindowParameters;
 import dev.ivchenko.lwjwae.WindowPosition;
@@ -295,20 +296,30 @@ public class BridgeProtocol {
     return new Event(parts[1], 0, parts[2], parts[0].equals("1"), null);
   }
 
+  /** The same as {@link #parseWindowParameters(String, Window)} for a window of its own. */
+  public WindowParameters parseWindowParameters(String payload) {
+    return BridgeProtocol.parseWindowParameters(payload, null);
+  }
+
   /**
    * Parses the payload of an {@link #OPEN_CALL}: the title, the size, the position, {@code
-   * centered}, the URL, the resource, the four flags of the frame, and {@code transparent},
-   * separated by {@link #SEPARATOR}, an empty field for one that the page left unset, {@code 1} for
-   * a set flag, and {@code 0} for a flag of the frame that the page turned off.
+   * centered}, the URL, the resource, the four flags of the frame, {@code transparent}, {@code
+   * child}, and {@code modal}, separated by {@link #SEPARATOR}, an empty field for one that the
+   * page left unset, {@code 1} for a set flag, and {@code 0} for a flag of the frame that the page
+   * turned off. A payload of an older page, without the last two, opens a window of its own.
    *
+   * @param parent The window of the page, which a child or a modal window belongs to, or {@code
+   *     null} to open a window of its own whatever the page asks.
    * @return The parameters, defaults applied, or {@code null} if the text doesn't have the shape or
    *     a number doesn't parse.
    */
-  public WindowParameters parseWindowParameters(String payload) {
+  public WindowParameters parseWindowParameters(String payload, Window parent) {
     String[] parts = payload.split(SEPARATOR, -1);
-    if (parts.length != 13) {
+    if (parts.length != 13 && parts.length != 15) {
       return null;
     }
+    boolean modal = parts.length == 15 && parts[14].equals("1") && parent != null;
+    boolean child = modal || (parts.length == 15 && parts[13].equals("1") && parent != null);
     try {
       return WindowParameters.builder()
           .title(parts[0])
@@ -325,6 +336,8 @@ public class BridgeProtocol {
           .minimizable(BridgeProtocol.flag(parts[10]))
           .maximizable(BridgeProtocol.flag(parts[11]))
           .transparent(parts[12].equals("1"))
+          .parent(child ? parent : null)
+          .modal(modal)
           .build();
     } catch (NumberFormatException _) {
       return null;

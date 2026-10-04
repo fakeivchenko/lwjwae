@@ -312,6 +312,25 @@ public abstract class WindowContractTest extends DisplayContractTest {
     return false;
   }
 
+  /**
+   * Whether the native window of {@code child} belongs to the one of {@code parent}, as the toolkit
+   * says: owned, transient, or a child window.
+   *
+   * @return The answer, or {@code null} when the backend test can't tell, which skips the check.
+   */
+  protected Boolean isOwnedBy(Window child, Window parent) {
+    return null;
+  }
+
+  /**
+   * Whether the toolkit keeps the user from {@code parent} now, because a modal window of it is up.
+   *
+   * @return The answer, or {@code null} when the backend test can't tell, which skips the check.
+   */
+  protected Boolean isBlockedByModal(Window parent) {
+    return null;
+  }
+
   /** Whether the toolkit can keep a window above the others. GTK 4 can't. */
   protected boolean canKeepOnTop() {
     return true;
@@ -1240,6 +1259,65 @@ public abstract class WindowContractTest extends DisplayContractTest {
       }
     }
     throw new AssertionError("No " + type + " event");
+  }
+
+  @Test
+  void childWindowBelongsToItsParentAndClosesWithIt() throws Exception {
+    try (Application application = Application.create()) {
+      Window parent =
+          application.open(WindowParameters.builder().title("lwjwae :: parent").build());
+      parent.show();
+      Window child =
+          application.open(
+              WindowParameters.builder()
+                  .title("lwjwae :: child")
+                  .size(320, 240)
+                  .parent(parent)
+                  .build());
+      child.show();
+      WindowContractTest.awaitTrue(child::isVisible, "the child must show");
+      Assertions.assertEquals(Optional.of(parent), child.parent());
+      Boolean owned = this.isOwnedBy(child, parent);
+      if (owned != null) {
+        Assertions.assertTrue(owned, "the toolkit knows the child belongs to its parent");
+      }
+
+      parent.close();
+
+      WindowContractTest.awaitTrue(child::isClosed, "a child closes with its parent");
+    }
+  }
+
+  @Test
+  void modalWindowKeepsTheUserFromItsParentWhileItIsUp() throws Exception {
+    try (Application application = Application.create()) {
+      Window parent =
+          application.open(WindowParameters.builder().title("lwjwae :: parent").build());
+      parent.show();
+      WindowContractTest.awaitTrue(parent::isVisible, "the parent must show");
+      Window modal =
+          application.open(
+              WindowParameters.builder()
+                  .title("lwjwae :: modal")
+                  .size(320, 240)
+                  .parent(parent)
+                  .modal(true)
+                  .build());
+      modal.show();
+      WindowContractTest.awaitTrue(modal::isVisible, "the modal window must show");
+      Boolean blocked = this.isBlockedByModal(parent);
+      Assumptions.assumeTrue(blocked != null, "this backend test can't tell a blocked window");
+      WindowContractTest.awaitTrue(
+          () -> Boolean.TRUE.equals(this.isBlockedByModal(parent)),
+          "the modal window keeps the user from its parent");
+
+      modal.close();
+
+      WindowContractTest.awaitTrue(
+          () -> Boolean.FALSE.equals(this.isBlockedByModal(parent)),
+          "the parent takes the user again once the modal window is gone");
+      Assertions.assertFalse(parent.isClosed());
+    }
   }
 
   @Test

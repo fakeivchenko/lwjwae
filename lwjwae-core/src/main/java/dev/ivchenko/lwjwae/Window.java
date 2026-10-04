@@ -142,6 +142,12 @@ public interface Window extends AutoCloseable {
   Screen screen();
 
   /**
+   * The window that this one belongs to, see {@link WindowParameters#parent()}, or empty for a
+   * window of its own.
+   */
+  Optional<Window> parent();
+
+  /**
    * Moves the window to the middle of the screen it's on.
    *
    * <p>Platforms:

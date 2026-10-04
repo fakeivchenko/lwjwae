@@ -233,6 +233,13 @@ public class GtkWindow extends AbstractWindow {
       Gtk.windowSetPosition(newWindow, Gtk.WIN_POS_CENTER);
     } else if (parameters.hasPosition()) {
       Gtk.windowMove(newWindow, parameters.position().x(), parameters.position().y());
+    } else if (parameters.parent() != null) {
+      Gtk.windowSetPosition(newWindow, Gtk.WIN_POS_CENTER_ON_PARENT);
+    }
+    if (parameters.parent() instanceof GtkWindow parent) {
+      Gtk.windowSetTransientFor(newWindow, parent.window());
+      Gtk.windowJoinGroupOf(newWindow, parent.window());
+      Gtk.windowSetModal(newWindow, parameters.modal());
     }
 
     if (!parameters.decorated()) {
@@ -791,7 +798,8 @@ public class GtkWindow extends AbstractWindow {
     this.serveRpc(exchange);
   }
 
-  private MemorySegment window() {
+  /** The native {@code GtkWindow}. Call on the GTK thread. */
+  MemorySegment window() {
     return this.alive(this.window);
   }
 

@@ -314,6 +314,8 @@ public interface Application extends AutoCloseable {
    * anything appears on screen. When {@code parameters} carry a URL or a resource, the window
    * navigates there before this method returns.
    *
+   * @throws IllegalArgumentException If the parent of {@code parameters} isn't an open window of
+   *     this application.
    * @throws IllegalStateException If the application is closed.
    */
   Window open(WindowParameters parameters);

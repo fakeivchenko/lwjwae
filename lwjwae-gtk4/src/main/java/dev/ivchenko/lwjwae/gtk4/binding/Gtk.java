@@ -124,6 +124,20 @@ public class Gtk {
           GTK, "gtk_window_set_transient_for", Signatures.VOID_POINTER_POINTER);
   private final MethodHandle WINDOW_SET_MODAL =
       NativeLibraries.downcall(GTK, "gtk_window_set_modal", Signatures.VOID_POINTER_INT);
+  private final MethodHandle WINDOW_GET_TRANSIENT_FOR =
+      NativeLibraries.downcall(GTK, "gtk_window_get_transient_for", Signatures.POINTER_POINTER);
+  private final MethodHandle WINDOW_GET_MODAL =
+      NativeLibraries.downcall(GTK, "gtk_window_get_modal", Signatures.INT_POINTER);
+  private final MethodHandle WINDOW_HAS_GROUP =
+      NativeLibraries.downcall(GTK, "gtk_window_has_group", Signatures.INT_POINTER);
+  private final MethodHandle WINDOW_GET_GROUP =
+      NativeLibraries.downcall(GTK, "gtk_window_get_group", Signatures.POINTER_POINTER);
+  private final MethodHandle WINDOW_GROUP_NEW =
+      NativeLibraries.downcall(GTK, "gtk_window_group_new", Signatures.POINTER_VOID);
+  private final MethodHandle WINDOW_GROUP_ADD_WINDOW =
+      NativeLibraries.downcall(GTK, "gtk_window_group_add_window", Signatures.VOID_POINTER_POINTER);
+  private final MethodHandle WINDOW_GROUP_LIST_WINDOWS =
+      NativeLibraries.downcall(GTK, "gtk_window_group_list_windows", Signatures.POINTER_POINTER);
   private final MethodHandle WINDOW_SET_TITLEBAR =
       NativeLibraries.downcall(GTK, "gtk_window_set_titlebar", Signatures.VOID_POINTER_POINTER);
   private final MethodHandle WINDOW_SET_DECORATED =
@@ -980,6 +994,52 @@ public class Gtk {
   @SneakyThrows
   public void windowSetModal(MemorySegment window, boolean modal) {
     WINDOW_SET_MODAL.invokeExact(window, modal ? 1 : 0);
+  }
+
+  /** Calls {@code gtk_window_get_transient_for}: the parent, or {@code NULL}. */
+  @SneakyThrows
+  public MemorySegment windowTransientFor(MemorySegment window) {
+    return (MemorySegment) WINDOW_GET_TRANSIENT_FOR.invokeExact(window);
+  }
+
+  /**
+   * Puts {@code child} into the window group of {@code parent}, which gets a group of its own first
+   * if it's still in the default one: a modal window keeps the user from the windows of its group
+   * alone, and the default group holds every window of the process.
+   */
+  @SneakyThrows
+  public void windowJoinGroupOf(MemorySegment child, MemorySegment parent) {
+    MemorySegment group;
+    if ((int) WINDOW_HAS_GROUP.invokeExact(parent) != 0) {
+      group = (MemorySegment) WINDOW_GET_GROUP.invokeExact(parent);
+    } else {
+      group = (MemorySegment) WINDOW_GROUP_NEW.invokeExact();
+      WINDOW_GROUP_ADD_WINDOW.invokeExact(group, parent);
+      // The windows hold the group from now on.
+      Glib.unref(group);
+    }
+    WINDOW_GROUP_ADD_WINDOW.invokeExact(group, child);
+  }
+
+  /**
+   * Whether a modal window that is transient for {@code parent} is up in its window group, and so
+   * keeps the user from it.
+   */
+  @SneakyThrows
+  public boolean hasModalChild(MemorySegment parent) {
+    if ((int) WINDOW_HAS_GROUP.invokeExact(parent) == 0) {
+      return false;
+    }
+    MemorySegment group = (MemorySegment) WINDOW_GET_GROUP.invokeExact(parent);
+    for (MemorySegment window :
+        Glib.takeListItems((MemorySegment) WINDOW_GROUP_LIST_WINDOWS.invokeExact(group))) {
+      if (Gtk.windowTransientFor(window).equals(parent)
+          && (int) WINDOW_GET_MODAL.invokeExact(window) != 0
+          && Gtk.isWidgetVisible(window)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /** Whether the default display is one of X11, where a client grabs keys itself. */

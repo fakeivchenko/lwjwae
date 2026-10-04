@@ -85,7 +85,30 @@ window, releases every thread blocked in `run()`, and refuses every `open` from 
 A page opens and closes windows too. `window.lwjwae.open(options)` takes the same options as
 `WindowParameters` (`title`, `width`, `height`, `x`, `y`, `centered`, `url`, `resource`,
 `decorated`, `closable`, `minimizable`, `maximizable`, `transparent`), shows
-the window, and resolves to its ID. `window.lwjwae.close()` closes the window of the page.
+the window, and resolves to its ID. With `child: true` or `modal: true`, the new window belongs to
+the window of the page. `window.lwjwae.close()` closes the window of the page.
+
+### Child and modal windows
+
+A window can belong to another one, the way a settings window belongs to the main window:
+
+```java
+Window settings =
+    application.open(
+        WindowParameters.builder().title("Settings").size(480, 360).parent(main).modal(true).build());
+settings.loadResource("app/settings.html");
+settings.show();
+```
+
+A child window stays above its parent, opens centered over it unless it has a position, and closes
+with it; `window.parent()` tells which window it belongs to. A modal one also keeps the user from
+its parent while it's shown, as a dialog does, and other windows of the application stay usable.
+
+| Platform | Child window | Modal window |
+|---|---|---|
+| Windows | An owned window: it minimizes with its owner and goes with it. | `EnableWindow` turns the owner off while the window is shown. |
+| macOS | A child window of AppKit, which moves with its parent. | A sheet, which slides out of the title bar of the parent and has no title bar of its own. |
+| GTK 3 and 4 | A transient window, which the window manager keeps above its parent. | A modal window in a window group of the family, so it blocks its parent and leaves the other windows alone. |
 
 ### Placing the window
 

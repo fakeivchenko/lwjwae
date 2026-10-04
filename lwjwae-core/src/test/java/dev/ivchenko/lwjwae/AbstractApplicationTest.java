@@ -23,6 +23,7 @@ import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -441,6 +442,61 @@ class AbstractApplicationTest {
       RpcReply refused = opener.awaitReply(8);
       Assertions.assertEquals(400, refused.status());
       Assertions.assertTrue(refused.body().contains("Malformed window parameters"), refused.body());
+    }
+  }
+
+  @Test
+  void childWindowBelongsToItsParentAndClosesWithIt() {
+    try (FakeApplication application = new FakeApplication()) {
+      FakeWindow parent = application.openFake();
+      FakeWindow child = application.openFake(WindowParameters.builder().parent(parent).build());
+      FakeWindow modal =
+          application.openFake(WindowParameters.builder().parent(child).modal(true).build());
+      FakeWindow alone = application.openFake();
+      Assertions.assertEquals(Optional.of(parent), child.parent());
+      Assertions.assertEquals(Optional.of(child), modal.parent());
+      Assertions.assertEquals(Optional.empty(), alone.parent());
+
+      parent.close();
+
+      Assertions.assertTrue(child.isClosed(), "a child closes with its parent");
+      Assertions.assertTrue(modal.isClosed(), "and so does a child of the child");
+      Assertions.assertFalse(alone.isClosed());
+    }
+  }
+
+  @Test
+  void childWindowNeedsAnOpenParentOfTheSameApplication() {
+    try (FakeApplication application = new FakeApplication();
+        FakeApplication other = new FakeApplication()) {
+      FakeWindow closed = application.openFake();
+      closed.close();
+      FakeWindow stranger = other.openFake();
+      Assertions.assertThrows(
+          IllegalArgumentException.class,
+          () -> application.open(WindowParameters.builder().parent(closed).build()));
+      Assertions.assertThrows(
+          IllegalArgumentException.class,
+          () -> application.open(WindowParameters.builder().parent(stranger).build()));
+      Assertions.assertThrows(
+          IllegalArgumentException.class, () -> WindowParameters.builder().modal(true).build());
+    }
+  }
+
+  @Test
+  void pageOpensChildAndModalWindowsOfItsOwnWindow() throws Exception {
+    try (FakeApplication application = new FakeApplication()) {
+      FakeWindow opener = application.openFake();
+      String plain = SEP.repeat(12);
+      opener.call(1, BridgeProtocol.OPEN_CALL, plain + SEP + "1" + SEP);
+      opener.call(2, BridgeProtocol.OPEN_CALL, plain + SEP + SEP + "1");
+      opener.call(3, BridgeProtocol.OPEN_CALL, plain + SEP + SEP);
+      Window child = application.window(Long.parseLong(opener.awaitReply(1).body())).orElseThrow();
+      Window modal = application.window(Long.parseLong(opener.awaitReply(2).body())).orElseThrow();
+      Window alone = application.window(Long.parseLong(opener.awaitReply(3).body())).orElseThrow();
+      Assertions.assertEquals(Optional.of(opener), child.parent());
+      Assertions.assertEquals(Optional.of(opener), modal.parent());
+      Assertions.assertEquals(Optional.empty(), alone.parent());
     }
   }
 

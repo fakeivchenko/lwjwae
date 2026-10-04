@@ -2,6 +2,7 @@ package dev.ivchenko.lwjwae.macos;
 
 import dev.ivchenko.lwjwae.Application;
 import dev.ivchenko.lwjwae.Window;
+import dev.ivchenko.lwjwae.macos.binding.AppKit;
 import dev.ivchenko.lwjwae.testing.contract.WindowContractTest;
 import dev.ivchenko.lwjwae.theme.SystemTheme;
 import dev.ivchenko.lwjwae.util.PlatformUtil;
@@ -46,5 +47,22 @@ class MacWindowTest extends WindowContractTest {
             .start();
     process.getInputStream().readAllBytes();
     return process.waitFor() == 0;
+  }
+
+  /** The parent window, or the sheet parent of a sheet. */
+  @Override
+  protected Boolean isOwnedBy(Window child, Window parent) {
+    return MacDispatcher.instance()
+        .call(
+            () ->
+                AppKit.parentOf(((MacWindow) child).window())
+                    .equals(((MacWindow) parent).window()));
+  }
+
+  /** A sheet attached to the parent, which takes no input while it is up. */
+  @Override
+  protected Boolean isBlockedByModal(Window parent) {
+    return MacDispatcher.instance()
+        .call(() -> AppKit.hasAttachedSheet(((MacWindow) parent).window()));
   }
 }

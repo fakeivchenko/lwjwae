@@ -89,6 +89,8 @@ public class Glib {
           GOBJECT, "g_object_new_with_properties", Signatures.POINTER_LONG_INT_POINTER_POINTER);
   private final MethodHandle DGETTEXT =
       NativeLibraries.downcall(GLIB, "g_dgettext", Signatures.POINTER_POINTER_POINTER);
+  private final MethodHandle LIST_FREE =
+      NativeLibraries.downcall(GLIB, "g_list_free", Signatures.VOID_POINTER);
   private final MethodHandle SLIST_FREE =
       NativeLibraries.downcall(GLIB, "g_slist_free", Signatures.VOID_POINTER);
   private final MethodHandle FILE_NEW_FOR_PATH =
@@ -195,6 +197,23 @@ public class Glib {
     try (Arena arena = Arena.ofConfined()) {
       UNSETENV.invokeExact(arena.allocateFrom(name));
     }
+  }
+
+  /**
+   * The items of a {@code GList} whose list the caller owns and whose items it doesn't, as {@code
+   * gtk_window_list_toplevels} returns: the list is freed, the items stay.
+   */
+  @SneakyThrows
+  public List<MemorySegment> takeListItems(MemorySegment list) {
+    List<MemorySegment> items = new ArrayList<>();
+    MemorySegment node = list;
+    while (!node.equals(MemorySegment.NULL)) {
+      MemorySegment cell = node.reinterpret(3 * Signatures.C_POINTER.byteSize());
+      items.add(cell.get(Signatures.C_POINTER, 0));
+      node = cell.get(Signatures.C_POINTER, Signatures.C_POINTER.byteSize());
+    }
+    LIST_FREE.invokeExact(list);
+    return items;
   }
 
   /** Calls {@code g_free}. */

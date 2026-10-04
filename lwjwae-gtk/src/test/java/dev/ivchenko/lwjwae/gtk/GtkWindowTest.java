@@ -100,4 +100,20 @@ class GtkWindowTest extends WindowContractTest {
   protected boolean dropFiles(String title, List<Path> files) throws Exception {
     return XdndFileDrag.isX11Session() && XdndFileDrag.dragOnto(title, files);
   }
+
+  /** The transient parent of the child. */
+  @Override
+  protected Boolean isOwnedBy(Window child, Window parent) {
+    return GtkDispatcher.instance()
+        .call(
+            () ->
+                Gtk.windowTransientFor(((GtkWindow) child).window())
+                    .equals(((GtkWindow) parent).window()));
+  }
+
+  /** A visible modal window transient for the parent. */
+  @Override
+  protected Boolean isBlockedByModal(Window parent) {
+    return GtkDispatcher.instance().call(() -> Gtk.hasModalChild(((GtkWindow) parent).window()));
+  }
 }

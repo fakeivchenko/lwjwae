@@ -6,6 +6,7 @@ import dev.ivchenko.lwjwae.shortcut.Shortcut;
 import dev.ivchenko.lwjwae.testing.contract.WindowContractTest;
 import dev.ivchenko.lwjwae.theme.SystemTheme;
 import dev.ivchenko.lwjwae.util.PlatformUtil;
+import dev.ivchenko.lwjwae.windows.binding.User32;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -169,5 +170,22 @@ class WindowsWindowTest extends WindowContractTest {
       }
       Files.deleteIfExists(script);
     }
+  }
+
+  /** {@code GetWindow} with {@code GW_OWNER}. */
+  @Override
+  protected Boolean isOwnedBy(Window child, Window parent) {
+    return WindowsDispatcher.instance()
+        .call(
+            () ->
+                User32.owner(((WindowsWindow) child).handle())
+                    .equals(((WindowsWindow) parent).handle()));
+  }
+
+  /** A disabled window takes no input, which is what a modal window does to its owner. */
+  @Override
+  protected Boolean isBlockedByModal(Window parent) {
+    return WindowsDispatcher.instance()
+        .call(() -> !User32.isEnabled(((WindowsWindow) parent).handle()));
   }
 }

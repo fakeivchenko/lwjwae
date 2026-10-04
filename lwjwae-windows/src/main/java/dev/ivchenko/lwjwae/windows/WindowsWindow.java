@@ -126,6 +126,16 @@ public class WindowsWindow extends AbstractWindow {
   private final CompletableFuture<Void> ready = new CompletableFuture<>();
 
   private volatile MemorySegment hwnd;
+
+  /** The window that owns this one, or {@code null}. */
+  private final WindowsWindow owner;
+
+  /** Whether this window disables its owner while it's shown. */
+  private final boolean modal;
+
+  /** Whether this window disabled its owner and still has to enable it. UI thread only. */
+  private boolean ownerDisabled;
+
   private volatile MemorySegment controller;
   private volatile MemorySegment webView;
 
@@ -154,6 +164,8 @@ public class WindowsWindow extends AbstractWindow {
             : parameters.transparent() ? WindowFrame.NONE : WindowFrame.NO_TITLE_BAR;
     this.maximizable = parameters.maximizable();
     this.transparent = parameters.transparent();
+    this.owner = (WindowsWindow) parameters.parent();
+    this.modal = parameters.modal();
     this.callbackId = WINDOWS.register(this);
     try {
       this.dispatcher().run(() -> this.createWindow(parameters));
@@ -181,7 +193,8 @@ public class WindowsWindow extends AbstractWindow {
             parameters.size().height(),
             WindowsWindow.windowStyle(parameters),
             parameters.alwaysOnTop(),
-            parameters.transparent());
+            parameters.transparent(),
+            this.owner == null ? null : this.owner.window());
     User32.userData(window, this.callbackId);
     this.hwnd = window;
     if (this.frame != WindowFrame.FULL) {
@@ -194,6 +207,8 @@ public class WindowsWindow extends AbstractWindow {
     User32.resizeClient(window, parameters.size().width(), parameters.size().height(), this.frame);
     if (parameters.centered()) {
       WindowsWindow.centerWindow(window);
+    } else if (!placed && this.owner != null) {
+      WindowsWindow.centerOver(window, this.owner.window());
     }
 
     MemorySegment handler =
@@ -307,6 +322,33 @@ public class WindowsWindow extends AbstractWindow {
   @Override
   public void center() {
     this.dispatcher().run(() -> WindowsWindow.centerWindow(this.window()));
+  }
+
+  /** Puts the frame over the middle of the frame of {@code owner}. */
+  private static void centerOver(MemorySegment hwnd, MemorySegment owner) {
+    int[] around = User32.windowRect(owner);
+    int[] frame = User32.windowRect(hwnd);
+    int width = frame[2] - frame[0];
+    int height = frame[3] - frame[1];
+    User32.move(
+        hwnd,
+        around[0] + (around[2] - around[0] - width) / 2,
+        around[1] + (around[3] - around[1] - height) / 2);
+  }
+
+  /**
+   * Gives the owner of a modal window the mouse and the keyboard back. Windows activates the next
+   * enabled window when one goes, so this happens before the modal window hides or goes, or the
+   * focus would land in another application. Runs on the UI thread; does nothing twice.
+   */
+  private void releaseOwner() {
+    if (this.ownerDisabled) {
+      this.ownerDisabled = false;
+      MemorySegment current = this.owner.hwnd;
+      if (current != null && !this.owner.isClosed()) {
+        User32.enable(current, true);
+      }
+    }
   }
 
   /** Puts the frame in the middle of the work area of the monitor that holds the window. */
@@ -745,6 +787,10 @@ public class WindowsWindow extends AbstractWindow {
         .run(
             () -> {
               MemorySegment current = this.window();
+              if (this.modal && !this.ownerDisabled && !this.owner.isClosed()) {
+                this.ownerDisabled = true;
+                User32.enable(this.owner.window(), false);
+              }
               User32.showWindow(
                   current, User32.isVisible(current) ? User32.SW_SHOW : this.showCommand);
               this.showCommand = User32.SW_SHOW;
@@ -773,6 +819,7 @@ public class WindowsWindow extends AbstractWindow {
    * Runs on the UI thread.
    */
   private void hideNow() {
+    this.releaseOwner();
     WebView2.setVisible(this.controller, false);
     User32.hide(this.window());
   }
@@ -788,6 +835,7 @@ public class WindowsWindow extends AbstractWindow {
             () -> {
               MemorySegment current = this.hwnd;
               if (!this.isClosed() && current != null) {
+                this.releaseOwner();
                 User32.destroy(current);
               }
             });
@@ -1225,8 +1273,12 @@ public class WindowsWindow extends AbstractWindow {
           // Not passed on: DefWindowProc would destroy the window.
           window.hideNow();
           return 0;
+        } else if (message == User32.WM_CLOSE) {
+          // DefWindowProc destroys the window: its owner takes the focus first.
+          window.releaseOwner();
         } else if (message == User32.WM_DESTROY) {
           WINDOWS.unregister(window.callbackId);
+          window.releaseOwner();
           window.handleDestroyed();
         }
       }

@@ -249,6 +249,17 @@ public class MacWindow extends AbstractWindow {
   private Boolean fullScreenWanted;
   private final boolean minimizable;
 
+  /** The window that this one belongs to, or {@code null}. */
+  private final MacWindow parentWindow;
+
+  /** Whether this window is a sheet of its parent rather than a child window of it. */
+  private final boolean modal;
+
+  /**
+   * Whether this window is attached to its parent now, as a child window or a sheet. Main thread.
+   */
+  private boolean attached;
+
   /**
    * Creates the window and the web view on the main thread and returns when they exist. The window
    * is hidden until {@link #show()}.
@@ -256,6 +267,8 @@ public class MacWindow extends AbstractWindow {
   MacWindow(MacApplication application, long id, WindowParameters parameters) {
     super(application, id, parameters);
     this.minimizable = parameters.minimizable();
+    this.parentWindow = (MacWindow) parameters.parent();
+    this.modal = parameters.modal();
     this.dispatcher().run(() -> this.createWindow(parameters));
   }
 
@@ -767,9 +780,42 @@ public class MacWindow extends AbstractWindow {
     this.dispatcher()
         .run(
             () -> {
-              AppKit.show(this.window());
+              MemorySegment current = this.window();
+              if (this.parentWindow != null && !this.attached && !this.parentWindow.isClosed()) {
+                this.attached = true;
+                if (this.modal) {
+                  // The sheet slides out of the title bar of its parent, which takes no input
+                  // until the sheet ends.
+                  AppKit.beginSheet(this.parentWindow.window(), current);
+                  AppKit.activate();
+                  return;
+                }
+                AppKit.addChildWindow(this.parentWindow.window(), current);
+              }
+              AppKit.show(current);
               AppKit.activate();
             });
+  }
+
+  /**
+   * Takes the window off its parent: ends the sheet, or removes the child window, so that the
+   * parent doesn't keep a window that is gone or hidden. Runs on the main thread.
+   */
+  private void detach() {
+    if (!this.attached) {
+      return;
+    }
+    this.attached = false;
+    MemorySegment parent = this.parentWindow.window;
+    MemorySegment current = this.window;
+    if (parent == null || current == null) {
+      return;
+    }
+    if (this.modal) {
+      AppKit.endSheet(parent, current);
+    } else {
+      AppKit.removeChildWindow(parent, current);
+    }
   }
 
   @Override
@@ -779,7 +825,13 @@ public class MacWindow extends AbstractWindow {
 
   @Override
   public void hide() {
-    this.dispatcher().run(() -> AppKit.hide(this.window()));
+    this.dispatcher()
+        .run(
+            () -> {
+              MemorySegment current = this.window();
+              this.detach();
+              AppKit.hide(current);
+            });
   }
 
   @Override
@@ -797,6 +849,7 @@ public class MacWindow extends AbstractWindow {
             () -> {
               MemorySegment current = this.window;
               if (!this.isClosed() && current != null) {
+                this.detach();
                 AppKit.close(current);
               }
             });
@@ -814,7 +867,8 @@ public class MacWindow extends AbstractWindow {
         .formatted(BridgeProtocol.CHANNEL);
   }
 
-  private MemorySegment window() {
+  /** The native {@code NSWindow}. Call on the main thread. */
+  MemorySegment window() {
     return this.alive(this.window);
   }
 
@@ -837,6 +891,7 @@ public class MacWindow extends AbstractWindow {
    */
   @SuppressWarnings("resource")
   private void handleDestroyed() {
+    this.detach();
     MemorySegment closingDelegate = this.delegate;
     if (closingDelegate != null) {
       DELEGATES.remove(closingDelegate.address());

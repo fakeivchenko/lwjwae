@@ -286,7 +286,7 @@
             number(options.x), number(options.y), options.centered ? "1" : "",
             field(options.url), field(options.resource), flag(options.decorated),
             flag(options.closable), flag(options.minimizable), flag(options.maximizable),
-            options.transparent ? "1" : ""
+            options.transparent ? "1" : "", options.child ? "1" : "", options.modal ? "1" : ""
         ].join(separator)).then(({ text }) => Number(text));
     const close = () => callText("${closeCall}", "").then(() => undefined);
 

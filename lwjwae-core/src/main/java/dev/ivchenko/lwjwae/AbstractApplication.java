@@ -183,6 +183,7 @@ public abstract class AbstractApplication implements Application {
   public final Window open(WindowParameters parameters) {
     Objects.requireNonNull(parameters, "parameters");
     this.checkOpen();
+    final AbstractWindow parent = this.checkParent(parameters.parent());
     long id = this.windowIds.incrementAndGet();
     AbstractWindow window = this.createWindow(id, parameters);
     window.closeAction(parameters.closeAction());
@@ -199,6 +200,9 @@ public abstract class AbstractApplication implements Application {
       this.windows.remove(id, window);
       throw new IllegalStateException("The application is closed");
     }
+    if (parent != null) {
+      parent.adoptChild(window);
+    }
     this.bindingScripts.values().forEach(window::injectOnDocumentStart);
     if (parameters.resource() != null) {
       window.loadResource(parameters.resource());
@@ -206,6 +210,22 @@ public abstract class AbstractApplication implements Application {
       window.navigate(parameters.url());
     }
     return window;
+  }
+
+  /**
+   * The parent of a new window as this application's own, or {@code null} for none.
+   *
+   * @throws IllegalArgumentException If {@code parent} is a window of another application, or
+   *     closed.
+   */
+  private AbstractWindow checkParent(Window parent) {
+    if (parent == null) {
+      return null;
+    }
+    if (!(parent instanceof AbstractWindow owner) || this.windows.get(owner.id()) != owner) {
+      throw new IllegalArgumentException("The parent is no open window of this application");
+    }
+    return owner;
   }
 
   /**

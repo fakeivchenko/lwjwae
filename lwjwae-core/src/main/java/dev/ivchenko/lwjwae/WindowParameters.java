@@ -33,8 +33,13 @@ import lombok.Builder;
  *       window manager on X11: without one, the background is black.
  *   <li>Linux, GTK 4: {@code position} and {@code centered} do nothing, on X11 as on Wayland, and
  *       neither do {@code maximumSize} and {@code alwaysOnTop}. The buttons and {@code transparent}
- *       as on GTK 3.
+ *       as on GTK 3. The desktop places a child window, usually over its parent.
  * </ul>
+ *
+ * <p>A child window is an owned window on Windows, a child window of AppKit on macOS, and a
+ * transient window on Linux. A modal one disables its parent on Windows, is a sheet of its parent
+ * on macOS, which slides out of the title bar and has none of its own, and is a modal window in a
+ * window group of its own on Linux, so that it keeps the user from its parent alone.
  *
  * @param title The window title. Default: {@code "Application"}.
  * @param size The initial size of the content area. A dimension that isn't positive takes the
@@ -84,6 +89,11 @@ import lombok.Builder;
  *     Window#icon(byte[])}. Default: {@code null}.
  * @param menu The menu bar of the window, see {@link Window#menu(List)}, or {@code null} for the
  *     one of the application. Default: {@code null}.
+ * @param parent The window that this one belongs to, an open window of the same application, or
+ *     {@code null} for a window of its own. A child window stays above its parent, opens centered
+ *     over it unless it has a position, and closes with it. Default: {@code null}.
+ * @param modal Whether the window keeps the user from its parent while it's shown, as a dialog
+ *     does; it needs a {@code parent}. Default: {@code false}.
  */
 @Builder(toBuilder = true)
 public record WindowParameters(
@@ -104,7 +114,9 @@ public record WindowParameters(
     Boolean maximizable,
     boolean transparent,
     byte[] icon,
-    List<MenuItem> menu) {
+    List<MenuItem> menu,
+    Window parent,
+    boolean modal) {
   private static final String DEFAULT_TITLE = "Application";
   private static final WindowSize DEFAULT_SIZE = new WindowSize(1024, 768);
 
@@ -153,6 +165,9 @@ public record WindowParameters(
     }
     if (menu != null) {
       menu = List.copyOf(menu);
+    }
+    if (modal && parent == null) {
+      throw new IllegalArgumentException("A modal window needs a parent");
     }
   }
 

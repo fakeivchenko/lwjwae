@@ -245,6 +245,11 @@ public class Gtk4Window extends AbstractWindow {
     MemorySegment newWindow = Gtk.windowNew();
     Gtk.windowSetTitle(newWindow, parameters.title());
     Gtk.windowSetDefaultSize(newWindow, parameters.size().width(), parameters.size().height());
+    if (parameters.parent() instanceof Gtk4Window parent) {
+      Gtk.windowSetTransientFor(newWindow, parent.window());
+      Gtk.windowJoinGroupOf(newWindow, parent.window());
+      Gtk.windowSetModal(newWindow, parameters.modal());
+    }
     if (!parameters.decorated() && parameters.transparent()) {
       // No frame at all: its shadow and its edge would outline the whole window around the shape
       // that the page draws.
@@ -765,7 +770,8 @@ public class Gtk4Window extends AbstractWindow {
     this.serveRpc(exchange);
   }
 
-  private MemorySegment window() {
+  /** The native {@code GtkWindow}. Call on the GTK thread. */
+  MemorySegment window() {
     return this.alive(this.window);
   }
 
