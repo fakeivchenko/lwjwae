@@ -2,6 +2,7 @@ package dev.ivchenko.lwjwae.gtk4;
 
 import dev.ivchenko.lwjwae.Application;
 import dev.ivchenko.lwjwae.Window;
+import dev.ivchenko.lwjwae.glib.XdndFileDrag;
 import dev.ivchenko.lwjwae.glib.XtestKeyboard;
 import dev.ivchenko.lwjwae.glib.binding.Glib;
 import dev.ivchenko.lwjwae.gtk4.binding.Gtk;
@@ -9,6 +10,8 @@ import dev.ivchenko.lwjwae.shortcut.Shortcut;
 import dev.ivchenko.lwjwae.testing.contract.WindowContractTest;
 import dev.ivchenko.lwjwae.theme.SystemTheme;
 import dev.ivchenko.lwjwae.util.PlatformUtil;
+import java.nio.file.Path;
+import java.util.List;
 
 class Gtk4WindowTest extends WindowContractTest {
   @Override
@@ -112,5 +115,11 @@ class Gtk4WindowTest extends WindowContractTest {
   @Override
   protected boolean engineFollowsTheDesktop() {
     return true;
+  }
+
+  /** XDND from a small program of another process, pressed through XTest, on X11. */
+  @Override
+  protected boolean dropFiles(String title, List<Path> files) throws Exception {
+    return XdndFileDrag.isX11Session() && XdndFileDrag.dragOnto(title, files);
   }
 }

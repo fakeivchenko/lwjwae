@@ -420,7 +420,7 @@ still come, so a drop zone can light up. A field that edits text keeps its own d
 | Windows | The script of the page posts the files of every `drop` to the host, which reads their paths; the WebView2 runtime must be 1.0.1264 or later. |
 | macOS | Not yet: the event never comes. |
 | Linux, GTK 3 | The URI list of the drop; a file that isn't local is left out. |
-| Linux, GTK 4 | Not yet: the event never comes. |
+| Linux, GTK 4 | The files that the drag offers, read as it comes over the page, at the place of the `drop` event of the page; a file that isn't local is left out. |
 
 ### One instance
 

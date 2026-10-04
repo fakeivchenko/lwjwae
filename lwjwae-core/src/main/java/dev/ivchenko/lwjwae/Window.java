@@ -518,8 +518,8 @@ public interface Window extends AutoCloseable {
    *       browser, without paths.
    *   <li>Linux, GTK 3: The URI list of the drop, so a file that lives only in a remote location
    *       that the file manager mounted is left out.
-   *   <li>Linux, GTK 4: Does nothing yet, as on macOS: the page keeps its own {@code drop} event
-   *       with the files of the browser, and the window doesn't open them.
+   *   <li>Linux, GTK 4: The files that the drag offers, read as it comes over the page, at the
+   *       place of the {@code drop} event of the page; a file that isn't local is left out.
    * </ul>
    *
    * @param listener Receives the event on a virtual thread.

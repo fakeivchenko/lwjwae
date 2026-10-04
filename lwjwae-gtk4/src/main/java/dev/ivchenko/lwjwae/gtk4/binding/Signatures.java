@@ -149,6 +149,17 @@ public class Signatures {
   public final FunctionDescriptor POINTER_POINTER_POINTER_POINTER =
       FunctionDescriptor.of(C_POINTER, C_POINTER, C_POINTER, C_POINTER);
 
+  /** {@code gboolean f(T*, GType)}: {@code gdk_content_formats_contain_gtype}. */
+  public final FunctionDescriptor INT_POINTER_LONG =
+      FunctionDescriptor.of(C_INT, C_POINTER, C_LONG);
+
+  /**
+   * {@code void f(GdkDrop*, GType, int io_priority, GCancellable*, GAsyncReadyCallback, gpointer)}:
+   * {@code gdk_drop_read_value_async}.
+   */
+  public final FunctionDescriptor GDK_DROP_READ_VALUE_ASYNC =
+      FunctionDescriptor.ofVoid(C_POINTER, C_LONG, C_INT, C_POINTER, C_POINTER, C_POINTER);
+
   /** {@code void f(T*, U*, V*, W*)}: {@code gdk_clipboard_read_text_async}. */
   public final FunctionDescriptor VOID_POINTER_X4 =
       FunctionDescriptor.ofVoid(C_POINTER, C_POINTER, C_POINTER, C_POINTER);
@@ -275,6 +286,13 @@ public class Signatures {
 
   /** {@code void (*)(GObject*, GParamSpec*, gpointer)}: a {@code notify::} handler. */
   public final FunctionDescriptor NOTIFY_CALLBACK = VOID_POINTER_POINTER_POINTER;
+
+  /**
+   * {@code void (*)(GtkDropControllerMotion*, double x, double y, gpointer)}: {@code enter} of a
+   * controller that follows a drag over a widget.
+   */
+  public final FunctionDescriptor DROP_MOTION_CALLBACK =
+      FunctionDescriptor.ofVoid(C_POINTER, C_DOUBLE, C_DOUBLE, C_POINTER);
 
   /** {@code void (*)(GdkSurface*, gint, gint, gpointer)}: {@code layout} of a surface. */
   public final FunctionDescriptor LAYOUT_CALLBACK =

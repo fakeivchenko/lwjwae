@@ -68,6 +68,23 @@
           ]
         },
         {
+          "name": "onDragEnter",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "double",
+            "double",
+            "java.lang.foreign.MemorySegment"
+          ]
+        },
+        {
+          "name": "onFilesRead",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
+        },
+        {
           "name": "onLoadChanged",
           "parameterTypes": [
             "java.lang.foreign.MemorySegment",
@@ -355,6 +372,17 @@
           "void*",
           "jint"
         ]
+      },
+      {
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "jlong",
+          "jint",
+          "void*",
+          "void*",
+          "void*"
+        ]
       }
     ],
     "directUpcalls": [
@@ -465,6 +493,27 @@
           "void*",
           "jint",
           "jint",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.gtk4.Gtk4Window",
+        "method": "onDragEnter",
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "jdouble",
+          "jdouble",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.gtk4.Gtk4Window",
+        "method": "onFilesRead",
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "void*",
           "void*"
         ]
       },

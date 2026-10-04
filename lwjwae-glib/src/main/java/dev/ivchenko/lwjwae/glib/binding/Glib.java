@@ -369,6 +369,29 @@ public class Glib {
     return strings;
   }
 
+  /**
+   * The local paths of a {@code GSList} of {@code GFile} whose list the caller owns and whose items
+   * it doesn't, as {@code gdk_file_list_get_files} returns: the list is freed, the items stay.
+   * Items without a local path are left out.
+   */
+  @SneakyThrows
+  public List<String> takeFileListPaths(MemorySegment list) {
+    List<String> paths = new ArrayList<>();
+    MemorySegment node = list;
+    while (!node.equals(MemorySegment.NULL)) {
+      MemorySegment cell = node.reinterpret(2 * Signatures.C_POINTER.byteSize());
+      String path =
+          Glib.takeString(
+              (MemorySegment) FILE_GET_PATH.invokeExact(cell.get(Signatures.C_POINTER, 0)));
+      if (path != null) {
+        paths.add(path);
+      }
+      node = cell.get(Signatures.C_POINTER, Signatures.C_POINTER.byteSize());
+    }
+    SLIST_FREE.invokeExact(list);
+    return paths;
+  }
+
   /** Calls {@code g_file_new_for_path}. The caller owns the {@code GFile}. */
   @SneakyThrows
   public MemorySegment fileForPath(String path) {
