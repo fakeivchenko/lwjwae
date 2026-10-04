@@ -94,6 +94,11 @@ public class FakeWindow extends AbstractWindow {
     this.installBridge();
   }
 
+  /** Plays the engine: the user dropped {@code paths} at ({@code x}, {@code y}). */
+  public void dropFiles(List<Path> paths, int x, int y) {
+    this.filesDropped(paths, x, y);
+  }
+
   /** What {@code presentZoom} was asked for, in order. */
   public final List<Double> zooms = new CopyOnWriteArrayList<>();
 

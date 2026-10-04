@@ -402,6 +402,26 @@ zoom belongs to the window and stays through navigations, including to another o
 can't zoom with Ctrl and the wheel or the keys, on any backend, so only Java sets it. There is no
 call for it on the page.
 
+### Files dropped on a window
+
+`window.onFileDrop(event -> ...)` hears the files that the user drops from the file manager onto the
+page, as a `FileDropEvent`: the `paths`, absolute, in the order that the file manager gave them, the
+`window`, and where the pointer was, `x` and `y`, from the top left of the page. A page hears the
+same through `lwjwae.files.listen(({ paths, x, y }) => ...)`, which resolves to the function that
+stops it. A page can't read paths from the files that the browser gives it, which is why the
+library reads them natively.
+
+A file dropped on a page doesn't open in the window any more: the library takes the drop that the
+page leaves alone. A page that handles `dragover` and `drop` itself keeps its way, and its events
+still come, so a drop zone can light up. A field that edits text keeps its own drop.
+
+| Platform | How it works |
+|---|---|
+| Windows | The script of the page posts the files of every `drop` to the host, which reads their paths; the WebView2 runtime must be 1.0.1264 or later. |
+| macOS | Not yet: the event never comes. |
+| Linux, GTK 3 | The URI list of the drop; a file that isn't local is left out. |
+| Linux, GTK 4 | Not yet: the event never comes. |
+
 ### One instance
 
 `Application.createSingleInstance(parameters, args)` in place of `create` keeps one process of the

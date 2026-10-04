@@ -18,6 +18,7 @@ import dev.ivchenko.lwjwae.dialog.MessageLevel;
 import dev.ivchenko.lwjwae.dialog.OpenDialogParameters;
 import dev.ivchenko.lwjwae.dialog.SaveDialogParameters;
 import dev.ivchenko.lwjwae.event.EventSubscription;
+import dev.ivchenko.lwjwae.event.FileDropEvent;
 import dev.ivchenko.lwjwae.event.LoadEvent;
 import dev.ivchenko.lwjwae.event.SecondInstanceEvent;
 import dev.ivchenko.lwjwae.event.WindowEvent;
@@ -41,6 +42,7 @@ import dev.ivchenko.lwjwae.tray.TrayIcon;
 import dev.ivchenko.lwjwae.util.UserAgentUtil;
 import java.awt.Color;
 import java.nio.ByteBuffer;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
@@ -276,6 +278,17 @@ public abstract class WindowContractTest extends DisplayContractTest {
    * @return Whether the desktop was switched.
    */
   protected boolean switchSystemTheme(SystemTheme theme) throws Exception {
+    return false;
+  }
+
+  /**
+   * Drags {@code files} from outside the process onto the window titled {@code title}, the way a
+   * user drags them from a file manager, and returns once they are dropped.
+   *
+   * @return Whether the files were dropped; a backend that can't leaves the default, and the test
+   *     is skipped.
+   */
+  protected boolean dropFiles(String title, List<Path> files) throws Exception {
     return false;
   }
 
@@ -805,6 +818,44 @@ public abstract class WindowContractTest extends DisplayContractTest {
       return Integer.parseInt(Loads.eval(window, "String(window.innerWidth)"));
     } catch (Exception e) {
       throw new IllegalStateException(e);
+    }
+  }
+
+  @Test
+  void filesDroppedOnThePageReachJavaAndThePageWithTheirPaths(@TempDir Path directory)
+      throws Exception {
+    Path first = Files.writeString(directory.resolve("a file with spaces.txt"), "one");
+    Path second = Files.writeString(directory.resolve("odd #1 & 100% name.txt"), "two");
+    try (Application application = Application.create()) {
+      Window window =
+          application.open(
+              WindowParameters.builder().title("lwjwae :: drop").size(600, 400).build());
+      final var loaded = Loads.expectFinished(window);
+      window.loadResource("test-app/index.html");
+      window.show();
+      loaded.get(30, TimeUnit.SECONDS);
+      BlockingQueue<FileDropEvent> dropped = new LinkedBlockingQueue<>();
+      window.onFileDrop(dropped::add);
+      Loads.eval(
+          window,
+          "lwjwae.files.listen((drop) => window.__dropped = drop.paths.join('|')); undefined;");
+      String page = window.url();
+      WindowContractTest.awaitTrue(window::isVisible, "the window must show");
+      Thread.sleep(500);
+
+      boolean done = this.dropFiles("lwjwae :: drop", List.of(first, second));
+      Assumptions.assumeTrue(done, "this machine can't drag files in a test");
+
+      FileDropEvent event = dropped.poll(15, TimeUnit.SECONDS);
+      Assertions.assertNotNull(event, "Java hears the drop");
+      Assertions.assertEquals(List.of(first, second), event.paths());
+      Assertions.assertTrue(
+          event.x() > 0 && event.y() > 0 && event.x() < 600 && event.y() < 400, "inside the page");
+      Assertions.assertEquals(
+          first + "|" + second,
+          Loads.awaitValue(window, "window.__dropped"),
+          "and so does the page");
+      Assertions.assertEquals(page, window.url(), "the window doesn't open the file");
     }
   }
 

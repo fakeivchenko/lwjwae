@@ -10,6 +10,7 @@ RUN apt-get update \
         libgtk-3-0t64 libwebkit2gtk-4.1-0 libgtk-4-1 libwebkitgtk-6.0-4 \
         imagemagick xvfb openbox dbus-daemon dunst rsync \
         xdg-desktop-portal xdg-desktop-portal-gtk gsettings-desktop-schemas libglib2.0-bin dconf-gsettings-backend \
+        python3-gi gir1.2-gtk-3.0 xdotool \
     && rm -rf /var/lib/apt/lists/*
 
 # Without a desktop to name, the portal picks no backend and serves no settings: this file picks the

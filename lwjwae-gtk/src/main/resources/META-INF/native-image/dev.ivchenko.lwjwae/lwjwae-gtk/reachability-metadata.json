@@ -4,6 +4,30 @@
       "type": "dev.ivchenko.lwjwae.gtk.GtkWindow",
       "methods": [
         {
+          "name": "onDragMotion",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "int",
+            "int",
+            "int",
+            "java.lang.foreign.MemorySegment"
+          ]
+        },
+        {
+          "name": "onDragDataReceived",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "int",
+            "int",
+            "java.lang.foreign.MemorySegment",
+            "int",
+            "int",
+            "java.lang.foreign.MemorySegment"
+          ]
+        },
+        {
           "name": "onBridgeMessage",
           "parameterTypes": [
             "java.lang.foreign.MemorySegment",
@@ -376,6 +400,34 @@
       }
     ],
     "directUpcalls": [
+      {
+        "class": "dev.ivchenko.lwjwae.gtk.GtkWindow",
+        "method": "onDragMotion",
+        "returnType": "jint",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "jint",
+          "jint",
+          "jint",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.gtk.GtkWindow",
+        "method": "onDragDataReceived",
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "jint",
+          "jint",
+          "void*",
+          "jint",
+          "jint",
+          "void*"
+        ]
+      },
       {
         "class": "dev.ivchenko.lwjwae.gtk.GtkWindow",
         "method": "onBridgeMessage",

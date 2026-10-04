@@ -87,6 +87,12 @@ public class BridgeProtocol {
   public final String THEME_EVENT = "lwjwae:theme";
 
   /**
+   * The event that tells a page the user dropped files on it: its payload is JSON, {@code {"paths":
+   * [...], "x": n, "y": n}}, with the absolute paths.
+   */
+  public final String FILES_EVENT = "lwjwae:files";
+
+  /**
    * The name under which a page asks for a new window, through {@code window.lwjwae.open(options)}.
    * Reserved like {@link #EVENT_CALL}. The payload is what {@link #parseWindowParameters} reads;
    * the promise resolves to the ID of the window.
@@ -235,6 +241,7 @@ public class BridgeProtocol {
         .replace("${eventsCall}", EVENTS_CALL)
         .replace("${windowEvent}", WINDOW_EVENT)
         .replace("${themeEvent}", THEME_EVENT)
+        .replace("${filesEvent}", FILES_EVENT)
         .replace("${openCall}", OPEN_CALL)
         .replace("${closeCall}", CLOSE_CALL)
         .replace("${controlCall}", CONTROL_CALL)

@@ -8,6 +8,7 @@ import dev.ivchenko.lwjwae.dialog.OpenDialogParameters;
 import dev.ivchenko.lwjwae.dialog.SaveDialogParameters;
 import dev.ivchenko.lwjwae.event.Event;
 import dev.ivchenko.lwjwae.event.EventSubscription;
+import dev.ivchenko.lwjwae.event.FileDropEvent;
 import dev.ivchenko.lwjwae.event.LoadEvent;
 import dev.ivchenko.lwjwae.event.WindowEvent;
 import dev.ivchenko.lwjwae.menu.MenuItem;
@@ -496,6 +497,35 @@ public interface Window extends AutoCloseable {
    * hears the same events through {@code window.lwjwae.window.listen}.
    */
   EventSubscription onWindowEvent(Consumer<WindowEvent> listener);
+
+  /**
+   * Calls {@code listener} when the user drops files from the file manager of the desktop onto the
+   * page, with their paths, which a page can't read from the files that the browser gives it. A
+   * page hears the same through {@code lwjwae.files.listen}.
+   *
+   * <p>A file dropped on a page doesn't open in the window: the library stops the engine from
+   * navigating to it, unless the page handles {@code drop} itself and stops it first. The {@code
+   * dragenter}, {@code dragover}, and {@code drop} events still reach the page, for the highlight
+   * of a drop zone.
+   *
+   * <p>Platforms:
+   *
+   * <ul>
+   *   <li>Windows: Through the files that a {@code drop} event of the page hands to the host, which
+   *       needs the WebView2 runtime 1.0.1264 or later. The window must have the focus of the page
+   *       script, as for any drop.
+   *   <li>macOS: Does nothing yet: the event never comes, and the page gets the files of the
+   *       browser, without paths.
+   *   <li>Linux, GTK 3: The URI list of the drop, so a file that lives only in a remote location
+   *       that the file manager mounted is left out.
+   *   <li>Linux, GTK 4: Does nothing yet, as on macOS: the page keeps its own {@code drop} event
+   *       with the files of the browser, and the window doesn't open them.
+   * </ul>
+   *
+   * @param listener Receives the event on a virtual thread.
+   * @return The subscription, to stop listening.
+   */
+  EventSubscription onFileDrop(Consumer<FileDropEvent> listener);
 
   /** The smallest zoom of a page, 25%. */
   double MINIMUM_ZOOM = 0.25;

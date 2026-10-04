@@ -39,7 +39,7 @@ class BridgeProtocolTest {
             "window."
                 + BridgeProtocol.PAGE_API
                 + " = { listen, once, emit, open, close, openExternal, call: callRpc, invoke:"
-                + " rpcInvoke, RpcError, window: windowApi, theme, dialog, clipboard, menu,"
+                + " rpcInvoke, RpcError, window: windowApi, theme, files, dialog, clipboard, menu,"
                 + " taskbar, store, updates };"));
     for (String reserved :
         List.of(

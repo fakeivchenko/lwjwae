@@ -6,6 +6,7 @@ import dev.ivchenko.lwjwae.WindowEdge;
 import dev.ivchenko.lwjwae.WindowParameters;
 import dev.ivchenko.lwjwae.WindowPosition;
 import dev.ivchenko.lwjwae.WindowSize;
+import dev.ivchenko.lwjwae.bridge.BridgeProtocol;
 import dev.ivchenko.lwjwae.bridge.RpcMessageChannel;
 import dev.ivchenko.lwjwae.dialog.DialogCompletion;
 import dev.ivchenko.lwjwae.dialog.MessageDialogParameters;
@@ -43,6 +44,7 @@ import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -62,6 +64,25 @@ import java.util.function.Supplier;
  * answered from the JAR file, and {@code .localhost} is a secure context in Chromium.
  */
 public class WindowsWindow extends AbstractWindow {
+  /** What the script of the page posts when files are dropped on it, before where. */
+  private static final String FILE_DROP_MESSAGE = "lwjwae:files";
+
+  /**
+   * Posts the files of every {@code drop} to the host, which learns their paths from the files: a
+   * page has the names, and WebView2 gives the host the full paths. It runs first, in the capture
+   * phase, so that a page that stops the event still lets Java hear of the drop.
+   */
+  private static final String FILE_DROP_SCRIPT =
+      """
+      window.addEventListener("drop", (event) => {
+        const files = event.dataTransfer && event.dataTransfer.files;
+        if (!files || files.length === 0 || !window.chrome || !window.chrome.webview) return;
+        window.chrome.webview.postMessageWithAdditionalObjects(
+            "%s%s" + Math.round(event.clientX) + "%s" + Math.round(event.clientY), files);
+      }, true);
+      """
+          .formatted(FILE_DROP_MESSAGE, BridgeProtocol.SEPARATOR, BridgeProtocol.SEPARATOR);
+
   private volatile boolean sharedBuffers = true;
   private final WindowFrame frame;
   private final boolean maximizable;
@@ -840,7 +861,9 @@ public class WindowsWindow extends AbstractWindow {
           WebView2.IID_WEB_MESSAGE_RECEIVED,
           (_, arguments) -> {
             String message = WebView2.webMessageAsString(arguments);
-            if (message != null) {
+            if (message != null && message.startsWith(FILE_DROP_MESSAGE)) {
+              this.fileDropMessage(message, arguments);
+            } else if (message != null) {
               this.handleBridgeMessage(message);
             }
           });
@@ -870,10 +893,27 @@ public class WindowsWindow extends AbstractWindow {
           (_, arguments) -> this.serveResource(arguments));
 
       this.installBridge();
+      this.injectOnDocumentStart(FILE_DROP_SCRIPT);
       this.ready.complete(null);
     } catch (RuntimeException e) {
       this.ready.completeExceptionally(e);
     }
+  }
+
+  /**
+   * A drop of files, which the script of the page posted with the files themselves, since the page
+   * can't read their paths and the host can. The message is the marker and where the pointer was.
+   */
+  private void fileDropMessage(String message, MemorySegment arguments) {
+    String[] fields = message.split(BridgeProtocol.SEPARATOR);
+    List<Path> paths = new ArrayList<>();
+    for (String path : WebView2.additionalFilePaths(arguments)) {
+      paths.add(Path.of(path));
+    }
+    this.filesDropped(
+        paths,
+        fields.length > 1 ? Integer.parseInt(fields[1]) : 0,
+        fields.length > 2 ? Integer.parseInt(fields[2]) : 0);
   }
 
   /** Answers a request of the page, always, so that WebView2 never shows its own prompt. */

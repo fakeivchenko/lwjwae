@@ -28,6 +28,7 @@ import dev.ivchenko.lwjwae.menu.MenuCommands;
 import dev.ivchenko.lwjwae.menu.MenuRole;
 import dev.ivchenko.lwjwae.permission.PermissionKind;
 import dev.ivchenko.lwjwae.rpc.RpcExchange;
+import dev.ivchenko.lwjwae.util.FileDropUtil;
 import dev.ivchenko.lwjwae.util.ThrowableUtil;
 import java.lang.foreign.MemorySegment;
 import java.lang.invoke.MethodHandles;
@@ -105,6 +106,36 @@ public class GtkWindow extends AbstractWindow {
           MethodType.methodType(
               MemorySegment.class, MemorySegment.class, MemorySegment.class, MemorySegment.class),
           Signatures.CREATE_CALLBACK);
+  private static final MemorySegment ON_DRAG_MOTION =
+      NativeLibraries.upcall(
+          MethodHandles.lookup(),
+          GtkWindow.class,
+          "onDragMotion",
+          MethodType.methodType(
+              int.class,
+              MemorySegment.class,
+              MemorySegment.class,
+              int.class,
+              int.class,
+              int.class,
+              MemorySegment.class),
+          Signatures.DRAG_MOTION_CALLBACK);
+  private static final MemorySegment ON_DRAG_DATA_RECEIVED =
+      NativeLibraries.upcall(
+          MethodHandles.lookup(),
+          GtkWindow.class,
+          "onDragDataReceived",
+          MethodType.methodType(
+              void.class,
+              MemorySegment.class,
+              MemorySegment.class,
+              int.class,
+              int.class,
+              MemorySegment.class,
+              int.class,
+              int.class,
+              MemorySegment.class),
+          Signatures.DRAG_DATA_RECEIVED_CALLBACK);
   private static final MemorySegment ON_PERMISSION_REQUEST =
       NativeLibraries.upcall(
           MethodHandles.lookup(),
@@ -150,6 +181,11 @@ public class GtkWindow extends AbstractWindow {
 
   private volatile MemorySegment window;
   private volatile MemorySegment webView;
+
+  /** Where the pointer was at the last motion of a drag over the web view. */
+  private volatile int dragX;
+
+  private volatile int dragY;
   private volatile MemorySegment userContentManager;
   private volatile MemorySegment headerBar;
 
@@ -263,6 +299,8 @@ public class GtkWindow extends AbstractWindow {
     Glib.signalConnect(newWebView, "context-menu", ON_CONTEXT_MENU, userData);
     Glib.signalConnect(newWebView, "create", ON_CREATE, userData);
     Glib.signalConnect(newWebView, "permission-request", ON_PERMISSION_REQUEST, userData);
+    Glib.signalConnect(newWebView, "drag-motion", ON_DRAG_MOTION, userData);
+    Glib.signalConnect(newWebView, "drag-data-received", ON_DRAG_DATA_RECEIVED, userData);
 
     this.window = newWindow;
     this.webView = newWebView;
@@ -946,6 +984,67 @@ public class GtkWindow extends AbstractWindow {
       ThrowableUtil.report(t);
     }
     return MemorySegment.NULL;
+  }
+
+  /**
+   * The pointer moves over the web view with a drag. This only remembers where, and doesn't answer
+   * for the drag: WebKit decides whether the page accepts it.
+   *
+   * <p>Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
+   * binds it by name, so no Java code calls it and the compiler sees a dead private method. {@code
+   * resource}: the window is {@code AutoCloseable}, and a lookup that returns it looks like an
+   * unclosed resource. It is not: the application owns the window and closes it, this method only
+   * borrows it.
+   */
+  @SuppressWarnings({"unused", "resource"})
+  private static int onDragMotion(
+      MemorySegment webView,
+      MemorySegment context,
+      int x,
+      int y,
+      int time,
+      MemorySegment userData) {
+    GtkWindow window = WINDOWS.lookup(userData);
+    if (window != null) {
+      window.dragX = x;
+      window.dragY = y;
+    }
+    return 0;
+  }
+
+  /**
+   * Something was dropped on the web view. WebKit acts on the drop itself, as the page decided;
+   * this handler only reads the URIs of a file drop, and hands the paths to the window.
+   *
+   * <p>Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
+   * binds it by name, so no Java code calls it and the compiler sees a dead private method. {@code
+   * resource}: the window is {@code AutoCloseable}, and a lookup that returns it looks like an
+   * unclosed resource. It is not: the application owns the window and closes it, this method only
+   * borrows it.
+   */
+  @SuppressWarnings({"unused", "resource"})
+  private static void onDragDataReceived(
+      MemorySegment webView,
+      MemorySegment context,
+      int x,
+      int y,
+      MemorySegment selectionData,
+      int info,
+      int time,
+      MemorySegment userData) {
+    try {
+      GtkWindow window = WINDOWS.lookup(userData);
+      if (window != null) {
+        // WebKit asks for the data from its own handler of the drop, and the coordinates that come
+        // with it are not the ones of the pointer; the last motion has them.
+        window.filesDropped(
+            FileDropUtil.pathsOfUris(Gtk.selectionDataUris(selectionData)),
+            window.dragX,
+            window.dragY);
+      }
+    } catch (Throwable t) {
+      ThrowableUtil.report(t);
+    }
   }
 
   /**

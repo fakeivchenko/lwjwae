@@ -7,6 +7,7 @@ import java.lang.foreign.MemoryLayout;
 import java.lang.foreign.MemorySegment;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.VarHandle;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.function.UnaryOperator;
 import lombok.SneakyThrows;
@@ -133,6 +134,14 @@ public class WebView2 {
   private final int WEB_MESSAGE_TRY_GET_AS_STRING = 5;
   private final int NEW_WINDOW_GET_URI = 3;
   private final int NEW_WINDOW_PUT_HANDLED = 6;
+  // ICoreWebView2WebMessageReceivedEventArgs2, ICoreWebView2ObjectCollectionView, ICoreWebView2File
+  private final MemorySegment IID_WEB_MESSAGE_ARGS_2 =
+      Com.guid("06fc7ab7-c90c-4297-9389-33ca01cf6d5e");
+  private final int WEB_MESSAGE_2_GET_ADDITIONAL_OBJECTS = 6;
+  private final int OBJECT_COLLECTION_GET_COUNT = 3;
+  private final int OBJECT_COLLECTION_GET_VALUE_AT_INDEX = 4;
+  private final MemorySegment IID_FILE = Com.guid("f2c19559-6bc1-4583-a757-90021be9afec");
+  private final int FILE_GET_PATH = 3;
   private final int PERMISSION_GET_URI = 3;
   private final int PERMISSION_GET_KIND = 4;
   private final int PERMISSION_PUT_STATE = 7;
@@ -608,6 +617,52 @@ public class WebView2 {
       MemorySegment out = arena.allocate(Signatures.C_POINTER);
       int hresult = Com.call(arguments, WEB_MESSAGE_TRY_GET_AS_STRING, out);
       return hresult < 0 ? null : Wide.take(Com.pointerAt(out));
+    }
+  }
+
+  /**
+   * The paths of the files that a page posted with {@code postMessageWithAdditionalObjects}: the
+   * {@code File} objects of a {@code drop} event, which the host sees as {@code ICoreWebView2File}.
+   * Empty for a message without any, and for a runtime that is older than the call.
+   */
+  public List<String> additionalFilePaths(MemorySegment arguments) {
+    MemorySegment arguments2 = null;
+    MemorySegment collection = null;
+    try (Arena arena = Arena.ofConfined()) {
+      arguments2 = WinRt.query(arguments, IID_WEB_MESSAGE_ARGS_2);
+      MemorySegment out = arena.allocate(Signatures.C_POINTER);
+      Com.check(
+          "get_AdditionalObjects", Com.call(arguments2, WEB_MESSAGE_2_GET_ADDITIONAL_OBJECTS, out));
+      collection = Com.pointerAt(out);
+      if (collection.equals(MemorySegment.NULL)) {
+        return List.of();
+      }
+      int count = WebView2.integer(collection, OBJECT_COLLECTION_GET_COUNT, "get_Count");
+      List<String> paths = new ArrayList<>();
+      for (int index = 0; index < count; index++) {
+        MemorySegment item = arena.allocate(Signatures.C_POINTER);
+        Com.check(
+            "GetValueAtIndex",
+            Com.call(collection, OBJECT_COLLECTION_GET_VALUE_AT_INDEX, index, item));
+        MemorySegment object = Com.pointerAt(item);
+        MemorySegment file = null;
+        try {
+          file = WinRt.query(object, IID_FILE);
+          MemorySegment path = arena.allocate(Signatures.C_POINTER);
+          Com.check("get_Path", Com.call(file, FILE_GET_PATH, path));
+          paths.add(Wide.take(Com.pointerAt(path)));
+        } finally {
+          Com.release(file);
+          Com.release(object);
+        }
+      }
+      return paths;
+    } catch (RuntimeException e) {
+      // No such interface in an older runtime: the page gets its files, and Java gets none.
+      return List.of();
+    } finally {
+      Com.release(collection);
+      Com.release(arguments2);
     }
   }
 

@@ -37,6 +37,8 @@ public class Gtk {
       NativeLibraries.downcall(GTK, "gtk_clipboard_set_text", Signatures.VOID_POINTER_POINTER_INT);
   private final MethodHandle CLIPBOARD_WAIT_FOR_TEXT =
       NativeLibraries.downcall(GTK, "gtk_clipboard_wait_for_text", Signatures.POINTER_POINTER);
+  private final MethodHandle SELECTION_DATA_GET_URIS =
+      NativeLibraries.downcall(GTK, "gtk_selection_data_get_uris", Signatures.POINTER_POINTER);
   private final MethodHandle CLIPBOARD_SET_IMAGE =
       NativeLibraries.downcall(GTK, "gtk_clipboard_set_image", Signatures.VOID_POINTER_POINTER);
   private final MethodHandle CLIPBOARD_WAIT_FOR_IMAGE =
@@ -306,6 +308,16 @@ public class Gtk {
   @SneakyThrows
   public void windowSetIcon(MemorySegment window, MemorySegment pixbuf) {
     WINDOW_SET_ICON.invokeExact(window, pixbuf);
+  }
+
+  /**
+   * Calls {@code gtk_selection_data_get_uris}: the URIs of a drop that carries a {@code
+   * text/uri-list}, or none for any other kind.
+   */
+  @SneakyThrows
+  public List<String> selectionDataUris(MemorySegment selectionData) {
+    MemorySegment vector = (MemorySegment) SELECTION_DATA_GET_URIS.invokeExact(selectionData);
+    return Glib.takeStringVector(vector);
   }
 
   /** Calls {@code gtk_window_set_title}. {@code null} clears the title. */

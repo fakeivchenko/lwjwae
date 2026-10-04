@@ -298,6 +298,21 @@ public class Signatures {
       FunctionDescriptor.ofVoid(C_POINTER, C_INT, C_POINTER);
 
   /**
+   * {@code gboolean f(GtkWidget*, GdkDragContext*, gint x, gint y, guint time, gpointer)}: the
+   * {@code drag-motion} signal.
+   */
+  public final FunctionDescriptor DRAG_MOTION_CALLBACK =
+      FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_INT, C_INT, C_INT, C_POINTER);
+
+  /**
+   * {@code void f(GtkWidget*, GdkDragContext*, gint x, gint y, GtkSelectionData*, guint info, guint
+   * time, gpointer)}: the {@code drag-data-received} signal.
+   */
+  public final FunctionDescriptor DRAG_DATA_RECEIVED_CALLBACK =
+      FunctionDescriptor.ofVoid(
+          C_POINTER, C_POINTER, C_INT, C_INT, C_POINTER, C_INT, C_INT, C_POINTER);
+
+  /**
    * {@code gboolean (*)(WebKitWebView*, WebKitContextMenu*, GdkEvent*, WebKitHitTestResult*,
    * gpointer)}: {@code context-menu}.
    */

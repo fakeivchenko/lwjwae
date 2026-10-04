@@ -456,6 +456,26 @@
         listen: (handler) => listen("${themeEvent}", (event) => handler(event.payload))
     };
 
+    // Files dropped on the page, with their paths, which the files of the browser don't have: listen
+    // calls the handler with { paths, x, y } and resolves to the function that stops it.
+    const files = {
+        listen: (handler) => listen("${filesEvent}", (event) => handler(JSON.parse(event.payload)))
+    };
+    // A file dropped on a page opens in the window, unless the page took the drop: the page decides
+    // first, and what it left alone is taken here, so that the native handler of the backend, which
+    // hears the same drop, is the only one that acts on it. A dragover that nobody took would also
+    // keep the drop from coming. The engines tell a drop of files by "Files" or, before they have
+    // read it, by a "text/uri-list", which a dragged link has too; a field that edits text keeps
+    // what it does with either.
+    const takeFileDrop = (event) => {
+        const types = event.dataTransfer ? Array.from(event.dataTransfer.types) : [];
+        const files = types.includes("Files") || types.includes("text/uri-list");
+        const editing = event.target instanceof Element && event.target.closest("input, textarea, select, [contenteditable]");
+        if (!event.defaultPrevented && files && !editing) event.preventDefault();
+    };
+    window.addEventListener("dragover", takeFileDrop);
+    window.addEventListener("drop", takeFileDrop);
+
     // The clipboard of the desktop, without the permissions and the user gesture that
     // navigator.clipboard asks for: readText resolves to the text or null, writeText to nothing.
     const clipboard = {
@@ -543,5 +563,5 @@
         }
     };
 
-    window.${pageApi} = { listen, once, emit, open, close, openExternal, call: callRpc, invoke: rpcInvoke, RpcError, window: windowApi, theme, dialog, clipboard, menu, taskbar, store, updates };
+    window.${pageApi} = { listen, once, emit, open, close, openExternal, call: callRpc, invoke: rpcInvoke, RpcError, window: windowApi, theme, files, dialog, clipboard, menu, taskbar, store, updates };
 })();

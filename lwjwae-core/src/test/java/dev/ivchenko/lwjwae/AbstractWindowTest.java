@@ -8,6 +8,7 @@ import dev.ivchenko.lwjwae.dialog.OpenDialogParameters;
 import dev.ivchenko.lwjwae.dialog.SaveDialogParameters;
 import dev.ivchenko.lwjwae.event.Event;
 import dev.ivchenko.lwjwae.event.EventSubscription;
+import dev.ivchenko.lwjwae.event.FileDropEvent;
 import dev.ivchenko.lwjwae.event.LoadEvent;
 import dev.ivchenko.lwjwae.event.LoadState;
 import dev.ivchenko.lwjwae.event.WindowEvent;
@@ -599,6 +600,36 @@ class AbstractWindowTest {
       application.changeTheme(SystemTheme.LIGHT);
       Assertions.assertNull(
           heard.poll(200, TimeUnit.MILLISECONDS), "a listener that left is quiet");
+    }
+  }
+
+  @Test
+  void droppedFilesReachEveryListenerWithTheirPaths() throws Exception {
+    try (FakeApplication application = new FakeApplication()) {
+      FakeWindow window = application.openFake();
+      BlockingQueue<FileDropEvent> first = new LinkedBlockingQueue<>();
+      BlockingQueue<FileDropEvent> second = new LinkedBlockingQueue<>();
+      EventSubscription subscription = window.onFileDrop(first::add);
+      window.onFileDrop(second::add);
+
+      List<Path> paths = List.of(Path.of("/tmp/a.txt"), Path.of("/tmp/some folder"));
+      window.dropFiles(paths, 120, 80);
+      FileDropEvent event = first.poll(5, TimeUnit.SECONDS);
+      Assertions.assertNotNull(event);
+      Assertions.assertEquals(paths, event.paths());
+      Assertions.assertEquals(120, event.x());
+      Assertions.assertEquals(80, event.y());
+      Assertions.assertSame(window, event.window());
+      Assertions.assertNotNull(second.poll(5, TimeUnit.SECONDS), "every listener hears it");
+
+      window.dropFiles(List.of(), 1, 1);
+      Assertions.assertNull(first.poll(200, TimeUnit.MILLISECONDS), "no file, no drop");
+
+      subscription.unlisten();
+      window.dropFiles(paths, 0, 0);
+      Assertions.assertNotNull(second.poll(5, TimeUnit.SECONDS));
+      Assertions.assertNull(
+          first.poll(200, TimeUnit.MILLISECONDS), "a listener that left is quiet");
     }
   }
 

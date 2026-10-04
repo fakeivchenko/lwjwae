@@ -73,6 +73,8 @@ public class Glib {
       NativeLibraries.downcall(GOBJECT, "g_value_unset", Signatures.VOID_POINTER);
   private final MethodHandle VALUE_SET_STRING =
       NativeLibraries.downcall(GOBJECT, "g_value_set_string", Signatures.VOID_POINTER_POINTER);
+  private final MethodHandle STRFREEV =
+      NativeLibraries.downcall(GLIB, "g_strfreev", Signatures.VOID_POINTER);
   private final MethodHandle VALUE_GET_BOOLEAN =
       NativeLibraries.downcall(GOBJECT, "g_value_get_boolean", Signatures.INT_POINTER);
   private final MethodHandle VALUE_SET_BOOLEAN =
@@ -237,6 +239,28 @@ public class Glib {
         VALUE_UNSET.invokeExact(value);
       }
     }
+  }
+
+  /**
+   * Reads a {@code NULL}-terminated {@code gchar**}, such as the URIs of a drop, and frees it with
+   * {@code g_strfreev}. A {@code NULL} vector is empty.
+   */
+  @SneakyThrows
+  public List<String> takeStringVector(MemorySegment vector) {
+    List<String> strings = new ArrayList<>();
+    if (vector.equals(MemorySegment.NULL)) {
+      return strings;
+    }
+    MemorySegment array = vector.reinterpret(Long.MAX_VALUE);
+    for (int index = 0; ; index++) {
+      MemorySegment item = array.getAtIndex(Signatures.C_POINTER, index);
+      if (item.equals(MemorySegment.NULL)) {
+        break;
+      }
+      strings.add(NativeLibraries.string(item));
+    }
+    STRFREEV.invokeExact(vector);
+    return strings;
   }
 
   /** {@code G_TYPE_BOOLEAN}: fundamental type 5, shifted as GObject stores fundamentals. */

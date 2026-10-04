@@ -15,6 +15,7 @@ import dev.ivchenko.lwjwae.dialog.OpenDialogParameters;
 import dev.ivchenko.lwjwae.dialog.SaveDialogParameters;
 import dev.ivchenko.lwjwae.event.Event;
 import dev.ivchenko.lwjwae.event.EventSubscription;
+import dev.ivchenko.lwjwae.event.FileDropEvent;
 import dev.ivchenko.lwjwae.event.LoadEvent;
 import dev.ivchenko.lwjwae.event.WindowEvent;
 import dev.ivchenko.lwjwae.event.WindowEvents;
@@ -131,6 +132,7 @@ public abstract class AbstractWindow implements Window {
   private volatile Consumer<String> externalLinkHandler;
   private volatile Function<PermissionRequest, PermissionDecision> permissionHandler;
   private volatile EventSubscription themeSubscription;
+  private final List<Consumer<FileDropEvent>> fileDropListeners = new CopyOnWriteArrayList<>();
 
   /**
    * Records the owner and the ID. The subclass creates the native window afterwards.
@@ -661,6 +663,44 @@ public abstract class AbstractWindow implements Window {
       case "write-text" -> clipboard.writeText(parts.length > 1 ? parts[1] : "");
       default ->
           throw RpcException.badRequest("malformed-clipboard", "No such action: " + parts[0]);
+    }
+  }
+
+  @Override
+  public final EventSubscription onFileDrop(Consumer<FileDropEvent> listener) {
+    Objects.requireNonNull(listener, "listener");
+    this.fileDropListeners.add(listener);
+    return () -> this.fileDropListeners.remove(listener);
+  }
+
+  /**
+   * The user dropped files on the page. A backend calls this from the callback that hands it their
+   * paths, on any thread: Java listeners and the page both hear of it. A drop with no file in it is
+   * ignored.
+   *
+   * @param paths The files and folders, as the file manager gave them.
+   * @param x Where the pointer was, from the left edge of the page.
+   * @param y The same from the top edge of the page.
+   */
+  protected final void filesDropped(List<Path> paths, int x, int y) {
+    if (paths.isEmpty() || this.closed) {
+      return;
+    }
+    FileDropEvent event = new FileDropEvent(this, paths, x, y);
+    Map<String, Object> payload = new LinkedHashMap<>();
+    payload.put("paths", event.paths().stream().map(Path::toString).toList());
+    payload.put("x", x);
+    payload.put("y", y);
+    this.pageEvents.send(BridgeProtocol.FILES_EVENT, JsonUtil.write(payload), false);
+    for (Consumer<FileDropEvent> listener : this.fileDropListeners) {
+      HANDLER_EXECUTOR.execute(
+          () -> {
+            try {
+              listener.accept(event);
+            } catch (Throwable t) {
+              ThrowableUtil.report(t);
+            }
+          });
     }
   }
 
