@@ -267,6 +267,15 @@
             "java.lang.foreign.MemorySegment",
             "java.lang.foreign.MemorySegment"
           ]
+        },
+        {
+          "name": "onOpenUrls",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
         }
       ]
     },
@@ -997,6 +1006,17 @@
         "method": "onShouldTerminate",
         "returnType": "jlong",
         "parameterTypes": [
+          "void*",
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.macos.MacMainMenu",
+        "method": "onOpenUrls",
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
           "void*",
           "void*",
           "void*"

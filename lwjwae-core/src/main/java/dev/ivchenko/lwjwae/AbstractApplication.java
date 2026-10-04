@@ -6,6 +6,7 @@ import dev.ivchenko.lwjwae.clipboard.Clipboard;
 import dev.ivchenko.lwjwae.cookie.Cookies;
 import dev.ivchenko.lwjwae.event.Event;
 import dev.ivchenko.lwjwae.event.EventSubscription;
+import dev.ivchenko.lwjwae.event.OpenEvent;
 import dev.ivchenko.lwjwae.event.SecondInstanceEvent;
 import dev.ivchenko.lwjwae.exception.ShortcutUnavailableException;
 import dev.ivchenko.lwjwae.instance.InstanceLock;
@@ -26,6 +27,7 @@ import dev.ivchenko.lwjwae.ui.UiDispatcher;
 import dev.ivchenko.lwjwae.update.UpdateParameters;
 import dev.ivchenko.lwjwae.update.Updater;
 import dev.ivchenko.lwjwae.util.HandlerUtil;
+import dev.ivchenko.lwjwae.util.OpenArgumentUtil;
 import dev.ivchenko.lwjwae.util.ThrowableUtil;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -132,6 +134,14 @@ public abstract class AbstractApplication implements Application {
   private final List<Consumer<SecondInstanceEvent>> secondInstanceListeners = new ArrayList<>();
   private final List<SecondInstanceEvent> unheardStarts = new ArrayList<>();
   private volatile InstanceLock instanceLock;
+
+  // --- requests to open, under the lock of the listener list ---
+  private final List<Consumer<OpenEvent>> openListeners = new ArrayList<>();
+  private final List<OpenEvent> unheardOpens = new ArrayList<>();
+
+  /** Tells the listeners of a request to open one request at a time and in order. */
+  private final ExecutorService openNotifier =
+      Executors.newSingleThreadExecutor(Thread.ofVirtual().name("lwjwae-open").factory());
 
   /**
    * Creates an application on the UI thread of a toolkit. Opens no window.
@@ -708,11 +718,66 @@ public abstract class AbstractApplication implements Application {
     }
   }
 
+  @Override
+  public final EventSubscription onOpen(Consumer<OpenEvent> listener) {
+    Objects.requireNonNull(listener, "listener");
+    List<OpenEvent> unheard;
+    synchronized (this.openListeners) {
+      this.openListeners.add(listener);
+      unheard = List.copyOf(this.unheardOpens);
+      this.unheardOpens.clear();
+    }
+    unheard.forEach(listener);
+    return () -> {
+      synchronized (this.openListeners) {
+        this.openListeners.remove(listener);
+      }
+    };
+  }
+
+  /**
+   * The system asks the application to open links or files. A backend calls this from wherever the
+   * platform delivers the request, on any thread; a request with nothing in it is ignored.
+   */
+  protected final void openRequested(OpenEvent request) {
+    if (request.isEmpty()) {
+      return;
+    }
+    List<Consumer<OpenEvent>> listeners;
+    synchronized (this.openListeners) {
+      if (this.openListeners.isEmpty()) {
+        this.unheardOpens.add(request);
+        return;
+      }
+      listeners = List.copyOf(this.openListeners);
+    }
+    try {
+      this.openNotifier.execute(
+          () -> {
+            for (Consumer<OpenEvent> listener : listeners) {
+              try {
+                listener.accept(request);
+              } catch (Throwable t) {
+                ThrowableUtil.report(t);
+              }
+            }
+          });
+    } catch (RejectedExecutionException _) {
+      // The application is closed, and nobody is left to tell.
+    }
+  }
+
+  /** Hands the links and the files among the arguments of this process to {@link #onOpen}. */
+  final void openArguments(List<String> arguments) {
+    this.openRequested(OpenArgumentUtil.of(arguments, Path.of("").toAbsolutePath()));
+  }
+
   /**
    * Another process of the application started and handed its start over: the oldest window comes
-   * to the front, and the listeners hear of it.
+   * to the front, and the listeners hear of it, and of the links and the files among its arguments.
    */
   private void secondInstanceStarted(SecondInstanceEvent start) {
+    this.openRequested(OpenArgumentUtil.of(start.arguments(), start.workingDirectory()));
     List<Window> open = this.windows();
     if (!open.isEmpty()) {
       try {
@@ -883,6 +948,7 @@ public abstract class AbstractApplication implements Application {
     }
     this.listeners.shutdown();
     this.themeNotifier.shutdown();
+    this.openNotifier.shutdown();
     this.stateSaver.shutdown();
     try {
       if (!this.stateSaver.awaitTermination(STATE_SAVE_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {

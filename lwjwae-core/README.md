@@ -455,6 +455,32 @@ temporary directory elsewhere, Windows 10 and later included. A lock file next t
 of two processes that start at the same moment become the first. The socket file stays when the
 process ends, and the next first start replaces it. `quit()` gives the name up.
 
+### Links and files that the system opens
+
+An application can own a scheme of links, such as `notes://today`, and types of files, such as
+`.note`: the Gradle plugin registers both when it packages the application, from `urlScheme` and
+`fileType`. When the user opens one, `onOpen` hears it as an `OpenEvent`, with the `urls` and the
+absolute paths of the `files`:
+
+```java
+Optional<Application> created = Application.createSingleInstance(parameters, args);
+if (created.isEmpty()) {
+  return;
+}
+try (Application application = created.get()) {
+  application.onOpen(request -> request.files().forEach(Notes::open));
+  ...
+}
+```
+
+On Windows and Linux, the system starts the executable with the link or the file as an argument,
+so pass `args` to `createSingleInstance`, or to `create(parameters, args)`: the links and the files
+among them are the first request, and with a single instance, a later start hands its own to the
+process that runs. On macOS, AppKit hands them to the running process, through
+`application:openURLs:`, and starts it first when it doesn't run. A request that comes before any
+listener waits for the first one. Among arguments, a URI with a scheme of two letters or more is a
+link, and a `file:` URI or a path that exists is a file; a flag and anything else are left out.
+
 Where the platform can't, the call does what it can and the reads say so:
 
 | Platform      | What's missing                                                                                                   |

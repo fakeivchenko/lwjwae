@@ -5,6 +5,7 @@ import dev.ivchenko.lwjwae.clipboard.Clipboard;
 import dev.ivchenko.lwjwae.cookie.Cookies;
 import dev.ivchenko.lwjwae.event.Event;
 import dev.ivchenko.lwjwae.event.EventSubscription;
+import dev.ivchenko.lwjwae.event.OpenEvent;
 import dev.ivchenko.lwjwae.event.SecondInstanceEvent;
 import dev.ivchenko.lwjwae.exception.BackendNotAvailableException;
 import dev.ivchenko.lwjwae.exception.ShortcutUnavailableException;
@@ -105,6 +106,20 @@ public interface Application extends AutoCloseable {
         Application.provider()
             .orElseThrow(() -> new BackendNotAvailableException(Application.noBackendMessage()));
     return provider.create(parameters);
+  }
+
+  /**
+   * Creates an application as {@link #create(ApplicationParameters)} does, and hands the links and
+   * the files among {@code arguments} to {@link #onOpen}: the system starts an application with the
+   * link or the file that the user opened.
+   *
+   * @param arguments The arguments of this process, as {@code main} received them.
+   * @throws BackendNotAvailableException If no backend on the classpath supports this machine.
+   */
+  static Application create(ApplicationParameters parameters, String... arguments) {
+    Application application = Application.create(parameters);
+    ((AbstractApplication) application).openArguments(List.of(arguments));
+    return application;
   }
 
   /**
@@ -218,6 +233,7 @@ public interface Application extends AutoCloseable {
       }
     }
     ((AbstractApplication) application).serveInstances(lock);
+    ((AbstractApplication) application).openArguments(List.of(arguments));
     return Optional.of(application);
   }
 
@@ -769,6 +785,32 @@ public interface Application extends AutoCloseable {
    * that registers it.
    */
   EventSubscription onSecondInstance(Consumer<SecondInstanceEvent> listener);
+
+  /**
+   * Listens to the requests of the system to open links or files: a link of a scheme that the
+   * application registered, such as {@code notes://today}, or a file of a type that it registered,
+   * which the user opened from the file manager. The Gradle plugin registers both when it packages
+   * the application, from {@code urlScheme} and {@code fileType}.
+   *
+   * <p>The links and the files among the arguments of the process count as a request too: those
+   * that {@link #create(ApplicationParameters, String...)} or {@link #createSingleInstance} was
+   * given, and, for a single instance, those of every later start. A request that came before any
+   * listener reaches the first one on the thread that registers it; the later ones reach the
+   * listeners on a virtual thread, one request after the other.
+   *
+   * <p>Platforms:
+   *
+   * <ul>
+   *   <li>Windows: The system starts the executable with the link or the file as an argument, so a
+   *       running application hears of it only as a {@link #createSingleInstance single instance}.
+   *   <li>macOS: AppKit hands the links and the files to the process that runs, through {@code
+   *       application:openURLs:} of the delegate of the application, and starts it first when none
+   *       runs; no second process starts.
+   *   <li>Linux, GTK 3: As on Windows, through the {@code Exec} line of the desktop entry.
+   *   <li>Linux, GTK 4: As on GTK 3.
+   * </ul>
+   */
+  EventSubscription onOpen(Consumer<OpenEvent> listener);
 
   /**
    * Opens {@code url} where the system opens it: a web page in the default browser, a {@code

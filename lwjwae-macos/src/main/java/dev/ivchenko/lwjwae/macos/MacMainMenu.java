@@ -1,5 +1,6 @@
 package dev.ivchenko.lwjwae.macos;
 
+import dev.ivchenko.lwjwae.event.OpenEvent;
 import dev.ivchenko.lwjwae.foreign.NativeLibraries;
 import dev.ivchenko.lwjwae.macos.binding.AppKit;
 import dev.ivchenko.lwjwae.macos.binding.Foundation;
@@ -11,10 +12,13 @@ import dev.ivchenko.lwjwae.menu.MenuItem;
 import dev.ivchenko.lwjwae.menu.MenuRole;
 import dev.ivchenko.lwjwae.menu.RoleMenuItem;
 import dev.ivchenko.lwjwae.menu.SubmenuItem;
+import dev.ivchenko.lwjwae.util.OpenArgumentUtil;
 import dev.ivchenko.lwjwae.util.ThrowableUtil;
 import java.lang.foreign.MemorySegment;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
+import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -46,6 +50,11 @@ import lombok.experimental.UtilityClass;
  * program ends as it ends when the last window closes. With no application open, it lets AppKit
  * terminate: there is nothing left to close.
  *
+ * <p>The delegate also takes {@code application:openURLs:}, through which AppKit hands the links of
+ * the schemes and the files of the types that the bundle registered to the process, whether it was
+ * running or AppKit started it for them; every open application hears of them, through {@link
+ * dev.ivchenko.lwjwae.Application#onOpen}.
+ *
  * <p>The menu bar replaces the one that AppKit makes up when {@code run} starts without one, which
  * holds nothing but the application menu. A delegate that something else set first stays.
  */
@@ -62,6 +71,18 @@ class MacMainMenu {
           MethodType.methodType(
               long.class, MemorySegment.class, MemorySegment.class, MemorySegment.class),
           Signatures.DELEGATE_1_LONG);
+  private final MemorySegment OPEN_URLS_STUB =
+      NativeLibraries.upcall(
+          MethodHandles.lookup(),
+          MacMainMenu.class,
+          "onOpenUrls",
+          MethodType.methodType(
+              void.class,
+              MemorySegment.class,
+              MemorySegment.class,
+              MemorySegment.class,
+              MemorySegment.class),
+          Signatures.DELEGATE_2);
 
   /** The delegate of {@code NSApplication}, which holds it weakly. Main thread only. */
   private MemorySegment delegate;
@@ -94,7 +115,9 @@ class MacMainMenu {
                       ObjC.cls("NSObject"),
                       Map.of(
                           "applicationShouldTerminate:",
-                          new MethodStub(SHOULD_TERMINATE_STUB, "Q@:@"))),
+                          new MethodStub(SHOULD_TERMINATE_STUB, "Q@:@"),
+                          "application:openURLs:",
+                          new MethodStub(OPEN_URLS_STUB, "v@:@@"))),
                   "alloc"),
               "init");
       AppKit.setApplicationDelegate(delegate);
@@ -159,6 +182,30 @@ class MacMainMenu {
   /** Makes {@code application} one that a request to quit quits, until it closes. */
   void register(MacApplication application) {
     APPLICATIONS.add(application);
+  }
+
+  /**
+   * {@code application:openURLs:}: hands the links and the files to every open application.
+   *
+   * <p>Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
+   * binds it by name, so no Java code calls it and the compiler sees a dead private method.
+   */
+  @SuppressWarnings("unused")
+  private void onOpenUrls(
+      MemorySegment self, MemorySegment command, MemorySegment application, MemorySegment urls) {
+    try {
+      List<String> texts = new ArrayList<>();
+      long count = ObjC.sendLong(urls, "count");
+      for (long index = 0; index < count; index++) {
+        texts.add(Foundation.urlString(ObjC.send(urls, "objectAtIndex:", index)));
+      }
+      OpenEvent request = OpenArgumentUtil.of(texts, Path.of("/"));
+      for (MacApplication open : List.copyOf(APPLICATIONS)) {
+        open.openRequestedBySystem(request);
+      }
+    } catch (Throwable t) {
+      ThrowableUtil.report(t);
+    }
   }
 
   /** Forgets {@code application}: it has closed. */

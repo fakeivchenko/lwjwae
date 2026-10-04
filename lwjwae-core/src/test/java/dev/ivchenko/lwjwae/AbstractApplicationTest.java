@@ -3,6 +3,7 @@ package dev.ivchenko.lwjwae;
 import dev.ivchenko.lwjwae.bridge.BridgeProtocol;
 import dev.ivchenko.lwjwae.event.Event;
 import dev.ivchenko.lwjwae.event.EventSubscription;
+import dev.ivchenko.lwjwae.event.OpenEvent;
 import dev.ivchenko.lwjwae.event.SecondInstanceEvent;
 import dev.ivchenko.lwjwae.exception.ShortcutUnavailableException;
 import dev.ivchenko.lwjwae.instance.InstanceLock;
@@ -18,6 +19,8 @@ import dev.ivchenko.lwjwae.testing.RpcReply;
 import dev.ivchenko.lwjwae.testing.ShortTemporaryDirectories;
 import dev.ivchenko.lwjwae.tray.Tray;
 import dev.ivchenko.lwjwae.tray.TrayIcon;
+import java.net.URI;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
@@ -587,6 +590,35 @@ class AbstractApplicationTest {
   }
 
   /** Claims "app" in {@code directory} for {@code application}, as createSingleInstance does. */
+  @Test
+  void requestsToOpenComeFromTheArgumentsOfThisProcessAndOfEveryLaterStart(
+      @TempDir(factory = ShortTemporaryDirectories.class) Path directory) throws Exception {
+    Path note = Files.writeString(directory.resolve("note.txt"), "text");
+    try (FakeApplication application = new FakeApplication()) {
+      ((AbstractApplication) application).openArguments(List.of("--flag", "notes://first"));
+      AbstractApplicationTest.serveInstances(application, directory);
+
+      BlockingQueue<OpenEvent> heard = new LinkedBlockingQueue<>();
+      application.onOpen(heard::add);
+      Assertions.assertEquals(
+          new OpenEvent(List.of(URI.create("notes://first")), List.of()),
+          heard.poll(),
+          "the request from before any listener reaches the first one at once");
+
+      SecondInstanceEvent second =
+          new SecondInstanceEvent(List.of("note.txt", "notes://second"), directory);
+      Assertions.assertTrue(InstanceLocks.claim(directory, "app", second).isEmpty());
+      Assertions.assertEquals(
+          new OpenEvent(List.of(URI.create("notes://second")), List.of(note)),
+          heard.poll(5, TimeUnit.SECONDS));
+
+      SecondInstanceEvent plain = new SecondInstanceEvent(List.of("--flag"), directory);
+      Assertions.assertTrue(InstanceLocks.claim(directory, "app", plain).isEmpty());
+      Assertions.assertNull(
+          heard.poll(200, TimeUnit.MILLISECONDS), "a start with nothing to open is no request");
+    }
+  }
+
   private static void serveInstances(AbstractApplication application, Path directory) {
     application.serveInstances(
         InstanceLocks.claim(directory, "app", AbstractApplicationTest.start()).orElseThrow());

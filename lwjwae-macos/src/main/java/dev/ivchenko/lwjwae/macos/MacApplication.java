@@ -8,6 +8,7 @@ import dev.ivchenko.lwjwae.WindowParameters;
 import dev.ivchenko.lwjwae.clipboard.Clipboard;
 import dev.ivchenko.lwjwae.cookie.Cookies;
 import dev.ivchenko.lwjwae.event.EventSubscription;
+import dev.ivchenko.lwjwae.event.OpenEvent;
 import dev.ivchenko.lwjwae.macos.binding.AppKit;
 import dev.ivchenko.lwjwae.macos.binding.WebKit;
 import dev.ivchenko.lwjwae.notification.Notification;
@@ -52,6 +53,11 @@ public class MacApplication extends AbstractApplication {
               MacMainMenu.install(parameters.name());
               this.themeWatcher = new MacTheme(this.dispatcher(), this::themeChanged);
             });
+  }
+
+  /** AppKit asks the application to open links or files, see {@link MacMainMenu}. */
+  void openRequestedBySystem(OpenEvent request) {
+    this.openRequested(request);
   }
 
   @Override
