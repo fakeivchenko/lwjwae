@@ -148,6 +148,14 @@
           ]
         },
         {
+          "name": "onPerformDragOperation",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
+        },
+        {
           "name": "onWindowShouldClose",
           "parameterTypes": [
             "java.lang.foreign.MemorySegment",
@@ -819,6 +827,16 @@
         "class": "dev.ivchenko.lwjwae.macos.MacWindow",
         "method": "onEvaluationComplete",
         "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.macos.MacWindow",
+        "method": "onPerformDragOperation",
+        "returnType": "jboolean",
         "parameterTypes": [
           "void*",
           "void*",

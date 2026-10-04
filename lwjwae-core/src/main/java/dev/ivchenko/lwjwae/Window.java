@@ -514,8 +514,8 @@ public interface Window extends AutoCloseable {
    *   <li>Windows: Through the files that a {@code drop} event of the page hands to the host, which
    *       needs the WebView2 runtime 1.0.1264 or later. The window must have the focus of the page
    *       script, as for any drop.
-   *   <li>macOS: Does nothing yet: the event never comes, and the page gets the files of the
-   *       browser, without paths.
+   *   <li>macOS: The file URLs on the pasteboard of the drag, which the web view reads as it takes
+   *       the drop, at the place of the {@code drop} event of the page.
    *   <li>Linux, GTK 3: The URI list of the drop, so a file that lives only in a remote location
    *       that the file manager mounted is left out.
    *   <li>Linux, GTK 4: The files that the drag offers, read as it comes over the page, at the

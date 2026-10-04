@@ -27,6 +27,7 @@ import dev.ivchenko.lwjwae.menu.MenuCommands;
 import dev.ivchenko.lwjwae.menu.MenuRole;
 import dev.ivchenko.lwjwae.permission.PermissionKind;
 import dev.ivchenko.lwjwae.rpc.RpcExchange;
+import dev.ivchenko.lwjwae.util.FileDropUtil;
 import dev.ivchenko.lwjwae.util.MimeTypeUtil;
 import dev.ivchenko.lwjwae.util.ResourceUtil;
 import dev.ivchenko.lwjwae.util.ScriptUtil;
@@ -65,9 +66,44 @@ public class MacWindow extends AbstractWindow {
   private static final String CONTEXT_MENU_FLAG = "__lwjwaeContextMenu";
 
   private static final Map<Long, MacWindow> DELEGATES = new ConcurrentHashMap<>();
+  private static final Map<Long, MacWindow> WEB_VIEWS = new ConcurrentHashMap<>();
+
+  /** What the script of the page posts when files are dropped on it, before where. */
+  private static final String FILE_DROP_MESSAGE = "lwjwae:files";
+
+  /**
+   * Tells the host where files were dropped on the page: AppKit says where in the window, and the
+   * page where in the page, which is what the event reports. It runs first, in the capture phase,
+   * so that a page that stops the event still lets Java hear of the drop. The paths come from the
+   * drag itself, see {@link #onPerformDragOperation}, so a page that posts this without a drag
+   * finds nothing to report.
+   */
+  private static final String FILE_DROP_SCRIPT =
+      """
+      window.addEventListener("drop", (event) => {
+        const types = event.dataTransfer ? Array.from(event.dataTransfer.types) : [];
+        if (!types.includes("Files") && !types.includes("text/uri-list")) return;
+        window.webkit.messageHandlers.%s.postMessage(
+            "%s%s" + Math.round(event.clientX) + "%s" + Math.round(event.clientY));
+      }, true);
+      """
+          .formatted(
+              BridgeProtocol.CHANNEL,
+              FILE_DROP_MESSAGE,
+              BridgeProtocol.SEPARATOR,
+              BridgeProtocol.SEPARATOR);
+
   private static final CallbackRegistry<PendingEvaluation> PENDING_EVALUATIONS =
       new CallbackRegistry<>();
 
+  private static final MemorySegment ON_PERFORM_DRAG_OPERATION =
+      NativeLibraries.upcall(
+          MethodHandles.lookup(),
+          MacWindow.class,
+          "onPerformDragOperation",
+          MethodType.methodType(
+              boolean.class, MemorySegment.class, MemorySegment.class, MemorySegment.class),
+          Signatures.DELEGATE_1_BOOL);
   private static final MemorySegment ON_WINDOW_SHOULD_CLOSE =
       NativeLibraries.upcall(
           MethodHandles.lookup(),
@@ -136,6 +172,17 @@ public class MacWindow extends AbstractWindow {
               void.class, MemorySegment.class, MemorySegment.class, MemorySegment.class),
           Signatures.COMPLETION_BLOCK);
 
+  /**
+   * {@code WKWebView} with {@code performDragOperation:} of its own, which reads the paths of a
+   * drop of files before WebKit handles it: the page gets the files without paths, and WebKit
+   * offers no delegate method for a drop.
+   */
+  private static final MemorySegment WEB_VIEW_CLASS =
+      ObjC.defineClass(
+          "LwjwaeWebView",
+          WebKit.webViewClass(),
+          Map.of("performDragOperation:", new MethodStub(ON_PERFORM_DRAG_OPERATION, "B@:@")));
+
   private static final MemorySegment DELEGATE_CLASS =
       ObjC.defineClass(
           "LwjwaeDelegate",
@@ -188,6 +235,10 @@ public class MacWindow extends AbstractWindow {
   private volatile MemorySegment webView;
   private volatile MemorySegment userContentController;
   private volatile MemorySegment delegate;
+
+  /** The paths of the files that AppKit dropped on the web view, until the page says where. */
+  private volatile List<Path> droppedFiles;
+
   private volatile String loading = "about:blank";
   private volatile String reportedFailure;
   private volatile WindowSize minimumSize = WindowSize.NONE;
@@ -220,7 +271,8 @@ public class MacWindow extends AbstractWindow {
     WebKit.addScriptMessageHandler(controller, newDelegate, BridgeProtocol.CHANNEL);
 
     MemorySegment newWebView =
-        WebKit.webView(parameters.size().width(), parameters.size().height(), configuration);
+        WebKit.webView(
+            WEB_VIEW_CLASS, parameters.size().width(), parameters.size().height(), configuration);
     Foundation.release(configuration);
     WebKit.setNavigationDelegate(newWebView, newDelegate);
     WebKit.setUiDelegate(newWebView, newDelegate);
@@ -253,7 +305,9 @@ public class MacWindow extends AbstractWindow {
     this.delegate = newDelegate;
     this.userContentController = controller;
     this.webView = newWebView;
+    WEB_VIEWS.put(newWebView.address(), this);
     this.window = newWindow;
+    this.injectOnDocumentStart(FILE_DROP_SCRIPT);
     this.injectOnDocumentStart(
         "document.addEventListener('contextmenu', event => { if (!window."
             + CONTEXT_MENU_FLAG
@@ -790,6 +844,7 @@ public class MacWindow extends AbstractWindow {
 
     MemorySegment closingWebView = this.webView;
     if (closingWebView != null) {
+      WEB_VIEWS.remove(closingWebView.address());
       WebKit.setNavigationDelegate(closingWebView, MemorySegment.NULL);
     }
     if (this.window != null) {
@@ -1170,6 +1225,47 @@ public class MacWindow extends AbstractWindow {
   }
 
   /**
+   * A drop of files on the page, which the script of the page posted with where it happened: the
+   * window reports the files that AppKit dropped. Without such a drop, there is nothing to report.
+   */
+  private void fileDropMessage(String message) {
+    String[] fields = message.split(BridgeProtocol.SEPARATOR);
+    List<Path> paths = this.droppedFiles;
+    this.droppedFiles = null;
+    if (paths != null && fields.length == 3) {
+      this.filesDropped(paths, Integer.parseInt(fields[1]), Integer.parseInt(fields[2]));
+    }
+  }
+
+  /**
+   * {@code -[NSDraggingDestination performDragOperation:]} of the web view: keeps the paths of the
+   * files that the drag carries, for the {@code drop} event that the page posts once WebKit handled
+   * it, see {@link #fileDropMessage}, and lets WebKit handle the drop as it would.
+   *
+   * <p>Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
+   * binds it by name. {@code resource}: the window is only borrowed.
+   */
+  @SuppressWarnings({"unused", "resource"})
+  private static boolean onPerformDragOperation(
+      MemorySegment self, MemorySegment command, MemorySegment sender) {
+    try {
+      MacWindow window = WEB_VIEWS.get(self.address());
+      if (window != null) {
+        List<Path> paths = FileDropUtil.pathsOfUris(WebKit.draggedFileUrls(sender));
+        window.droppedFiles = paths.isEmpty() ? null : paths;
+      }
+    } catch (Throwable t) {
+      ThrowableUtil.report(t);
+    }
+    try {
+      return ObjC.sendSuperBool(self, WebKit.webViewClass(), "performDragOperation:", sender);
+    } catch (Throwable t) {
+      ThrowableUtil.report(t);
+      return false;
+    }
+  }
+
+  /**
    * Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
    * binds it by name, so no Java code calls it and the compiler sees a dead private method. {@code
    * resource}: the window is {@code AutoCloseable}, and a lookup that returns it looks like an
@@ -1181,8 +1277,11 @@ public class MacWindow extends AbstractWindow {
       MemorySegment self, MemorySegment command, MemorySegment controller, MemorySegment message) {
     try {
       MacWindow window = MacWindow.windowOf(self);
-      if (window != null) {
-        window.handleBridgeMessage(WebKit.messageBody(message));
+      String body = window == null ? null : WebKit.messageBody(message);
+      if (body != null && body.startsWith(FILE_DROP_MESSAGE)) {
+        window.fileDropMessage(body);
+      } else if (body != null) {
+        window.handleBridgeMessage(body);
       }
     } catch (Throwable t) {
       ThrowableUtil.report(t);

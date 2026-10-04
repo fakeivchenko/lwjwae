@@ -5,6 +5,8 @@ import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.SymbolLookup;
 import java.lang.foreign.ValueLayout;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import lombok.experimental.UtilityClass;
@@ -79,13 +81,22 @@ public class WebKit {
         configuration, "setURLSchemeHandler:forURLScheme:", handler, Foundation.string(scheme));
   }
 
-  /** A view that fills its window and follows its resizing. The caller owns it. */
-  public MemorySegment webView(int width, int height, MemorySegment configuration) {
+  /** {@code WKWebView}, the class to subclass, with its framework loaded. */
+  public MemorySegment webViewClass() {
+    return ObjC.cls("WKWebView");
+  }
+
+  /**
+   * A view of {@code webViewClass}, {@code WKWebView} or a subclass of it, that fills its window
+   * and follows its resizing. The caller owns it.
+   */
+  public MemorySegment webView(
+      MemorySegment webViewClass, int width, int height, MemorySegment configuration) {
     MemorySegment webView;
     try (Arena arena = Arena.ofConfined()) {
       webView =
           ObjC.sendWithRect(
-              ObjC.send(ObjC.cls("WKWebView"), "alloc"),
+              ObjC.send(webViewClass, "alloc"),
               "initWithFrame:configuration:",
               Foundation.rect(arena, 0, 0, width, height),
               configuration);
@@ -139,6 +150,34 @@ public class WebKit {
    */
   public void answerMediaCapture(MemorySegment decisionHandler, boolean granted) {
     ObjC.callBlock(decisionHandler, granted ? PERMISSION_DECISION_GRANT : PERMISSION_DECISION_DENY);
+  }
+
+  /**
+   * The {@code file:} URLs of the items on the pasteboard of a drag, {@code sender} of an {@code
+   * NSDraggingDestination} method, as plain paths: Finder hands file reference URLs, {@code
+   * file:///.file/id=...}, which {@code filePathURL} turns into the URL of the path.
+   */
+  public List<String> draggedFileUrls(MemorySegment sender) {
+    List<String> urls = new ArrayList<>();
+    MemorySegment items = ObjC.send(ObjC.send(sender, "draggingPasteboard"), "pasteboardItems");
+    if (ObjC.isNull(items)) {
+      return urls;
+    }
+    MemorySegment fileUrlType = Foundation.string("public.file-url");
+    long count = ObjC.sendLong(items, "count");
+    for (long index = 0; index < count; index++) {
+      MemorySegment text =
+          ObjC.send(ObjC.send(items, "objectAtIndex:", index), "stringForType:", fileUrlType);
+      if (ObjC.isNull(text)) {
+        continue;
+      }
+      MemorySegment url = ObjC.send(ObjC.cls("NSURL"), "URLWithString:", text);
+      MemorySegment pathUrl = ObjC.isNull(url) ? url : ObjC.send(url, "filePathURL");
+      if (!ObjC.isNull(pathUrl)) {
+        urls.add(Foundation.urlString(pathUrl));
+      }
+    }
+    return urls;
   }
 
   /** Calls {@code -[WKWebView setPageZoom:]}, which macOS 11 and later have. */
