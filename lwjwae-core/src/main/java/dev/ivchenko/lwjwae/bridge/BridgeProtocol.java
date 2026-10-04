@@ -23,6 +23,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -334,39 +335,49 @@ public class BridgeProtocol {
    * Parses the fields of an open dialog in a {@link #DIALOG_CALL}: the title, the directory, {@code
    * 1} for multiple, {@code 1} for directories, and the kinds of file, see {@link #parseFileTypes}.
    *
-   * @return The parameters, or {@code null} if the text doesn't have the shape.
+   * @return The parameters, or {@code null} if the text doesn't have the shape or the directory
+   *     isn't a path of this platform.
    */
   public OpenDialogParameters parseOpenDialog(String payload) {
     String[] parts = payload.split(SEPARATOR, -1);
     if (parts.length != 5) {
       return null;
     }
-    return OpenDialogParameters.builder()
-        .title(BridgeProtocol.text(parts[0]))
-        .directory(BridgeProtocol.path(parts[1]))
-        .multiple(parts[2].equals("1"))
-        .directories(parts[3].equals("1"))
-        .fileTypes(BridgeProtocol.parseFileTypes(parts[4]))
-        .build();
+    try {
+      return OpenDialogParameters.builder()
+          .title(BridgeProtocol.text(parts[0]))
+          .directory(BridgeProtocol.path(parts[1]))
+          .multiple(parts[2].equals("1"))
+          .directories(parts[3].equals("1"))
+          .fileTypes(BridgeProtocol.parseFileTypes(parts[4]))
+          .build();
+    } catch (InvalidPathException _) {
+      return null;
+    }
   }
 
   /**
    * Parses the fields of a save dialog in a {@link #DIALOG_CALL}: the title, the directory, the
    * file name, and the kinds of file.
    *
-   * @return The parameters, or {@code null} if the text doesn't have the shape.
+   * @return The parameters, or {@code null} if the text doesn't have the shape or the directory
+   *     isn't a path of this platform.
    */
   public SaveDialogParameters parseSaveDialog(String payload) {
     String[] parts = payload.split(SEPARATOR, -1);
     if (parts.length != 4) {
       return null;
     }
-    return SaveDialogParameters.builder()
-        .title(BridgeProtocol.text(parts[0]))
-        .directory(BridgeProtocol.path(parts[1]))
-        .fileName(BridgeProtocol.text(parts[2]))
-        .fileTypes(BridgeProtocol.parseFileTypes(parts[3]))
-        .build();
+    try {
+      return SaveDialogParameters.builder()
+          .title(BridgeProtocol.text(parts[0]))
+          .directory(BridgeProtocol.path(parts[1]))
+          .fileName(BridgeProtocol.text(parts[2]))
+          .fileTypes(BridgeProtocol.parseFileTypes(parts[3]))
+          .build();
+    } catch (InvalidPathException _) {
+      return null;
+    }
   }
 
   /**

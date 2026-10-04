@@ -129,6 +129,15 @@ class BridgeProtocolTest {
   }
 
   @Test
+  void dialogWhoseDirectoryIsNoPathIsMalformed() {
+    String sep = BridgeProtocol.SEPARATOR;
+    Assertions.assertNull(
+        BridgeProtocol.parseOpenDialog(String.join(sep, "", "bad\0dir", "", "", "")));
+    Assertions.assertNull(BridgeProtocol.parseSaveDialog(String.join(sep, "", "bad\0dir", "", "")));
+    Assertions.assertNotNull(BridgeProtocol.parseOpenDialog(String.join(sep, "", "", "", "", "")));
+  }
+
+  @Test
   void checkIdentifierAcceptsJavaScriptNamesOnly() {
     Assertions.assertDoesNotThrow(() -> BridgeProtocol.checkIdentifier("$_ok9"));
     Assertions.assertThrows(
