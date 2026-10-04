@@ -655,7 +655,7 @@ public abstract class WindowContractTest extends DisplayContractTest {
   }
 
   @Test
-  void aPageAsksForTheCameraAndTheHandlerDecides() throws Exception {
+  void pageAsksForTheCameraAndTheHandlerDecides() throws Exception {
     try (Application application = Application.create()) {
       Window window =
           application.open(WindowParameters.builder().title("lwjwae :: permissions").build());
@@ -839,7 +839,7 @@ public abstract class WindowContractTest extends DisplayContractTest {
       Loads.eval(
           window,
           "lwjwae.files.listen((drop) => window.__dropped = drop.paths.join('|')); undefined;");
-      String page = window.url();
+      final String page = window.url();
       WindowContractTest.awaitTrue(window::isVisible, "the window must show");
       Thread.sleep(500);
 

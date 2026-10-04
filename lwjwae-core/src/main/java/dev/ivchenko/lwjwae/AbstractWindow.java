@@ -349,8 +349,7 @@ public abstract class AbstractWindow implements Window {
     ExchangeRpcCall call =
         new ExchangeRpcCall(exchange, name, this, this.application::requireCodec, cors);
     exchange.onCancel(call::cancel);
-    RpcHandler found = handler;
-    HANDLER_EXECUTOR.execute(() -> call.run(found));
+    HANDLER_EXECUTOR.execute(() -> call.run(handler));
   }
 
   /**

@@ -25,7 +25,7 @@ class FileDropUtilTest {
   }
 
   @Test
-  void whatIsNotAFileOfThisMachineIsLeftOut() {
+  void whatIsNoFileOfThisMachineIsLeftOut() {
     Assertions.assertEquals(
         List.of(Path.of("/tmp/kept.txt")),
         FileDropUtil.pathsOfUris(

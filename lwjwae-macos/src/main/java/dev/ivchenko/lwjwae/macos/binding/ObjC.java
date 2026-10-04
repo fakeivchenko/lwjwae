@@ -394,25 +394,6 @@ public class ObjC {
   }
 
   /**
-   * Sends {@code selector} to {@code receiver}: {@code void -[receiver selector:id:id:id:id]}, four
-   * arguments of the size of a pointer, such as {@code addObserver:selector:name:object:} with the
-   * selector as a pointer.
-   */
-  @SneakyThrows
-  public void sendVoid(
-      MemorySegment receiver,
-      String selector,
-      MemorySegment first,
-      MemorySegment second,
-      MemorySegment third,
-      MemorySegment fourth) {
-    MemorySegment _ =
-        (MemorySegment)
-            MSG_ID_ID_ID_ID_POINTER.invokeExact(
-                receiver, ObjC.sel(selector), first, second, third, fourth);
-  }
-
-  /**
    * Sends {@code selector} to {@code receiver}: {@code id -[receiver selector:id:id:id
    * error:NSError**]}, with {@code NULL} for the error, which the caller learns from the {@code
    * nil} result.
@@ -452,7 +433,7 @@ public class ObjC {
     return (MemorySegment) MSG_ID_RECT.invokeExact(receiver, ObjC.sel(selector), rect);
   }
 
-  /** Sends {@code selector} to {@code receiver}: {@code id -[receiver selector:id:id]}. */
+  /** Sends {@code selector} to {@code receiver}: {@code id -[receiver selector:NSRect:id]}. */
   @SneakyThrows
   public MemorySegment sendWithRect(
       MemorySegment receiver, String selector, MemorySegment rect, MemorySegment argument) {
@@ -495,6 +476,25 @@ public class ObjC {
   @SneakyThrows
   public void sendVoid(MemorySegment receiver, String selector, long argument) {
     MSG_VOID_LONG.invokeExact(receiver, ObjC.sel(selector), argument);
+  }
+
+  /**
+   * Sends {@code selector} to {@code receiver}: {@code void -[receiver selector:id:id:id:id]}, four
+   * arguments of the size of a pointer, such as {@code addObserver:selector:name:object:} with the
+   * selector as a pointer.
+   */
+  @SneakyThrows
+  public void sendVoid(
+      MemorySegment receiver,
+      String selector,
+      MemorySegment first,
+      MemorySegment second,
+      MemorySegment third,
+      MemorySegment fourth) {
+    MemorySegment _ =
+        (MemorySegment)
+            MSG_ID_ID_ID_ID_POINTER.invokeExact(
+                receiver, ObjC.sel(selector), first, second, third, fourth);
   }
 
   /**

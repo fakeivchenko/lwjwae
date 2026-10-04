@@ -220,8 +220,6 @@ public class Gtk4Window extends AbstractWindow {
       Gtk.windowClearBackground(newWindow);
     }
 
-    MemorySegment userData = CallbackRegistry.userData(this.callbackId);
-
     MemorySegment newWebView = WebKit.webViewNew();
     if (parameters.transparent()) {
       WebKit.setTransparentBackground(newWebView);
@@ -232,6 +230,7 @@ public class Gtk4Window extends AbstractWindow {
     if (Boolean.getBoolean("lwjwae.mockCaptureDevices")) {
       WebKit.setMockCaptureDevicesEnabled(newWebView, true);
     }
+    MemorySegment userData = CallbackRegistry.userData(this.callbackId);
     // Connect before registering, otherwise early messages race the signal handler.
     MemorySegment manager = WebKit.userContentManager(newWebView);
     Glib.signalConnect(
@@ -818,9 +817,9 @@ public class Gtk4Window extends AbstractWindow {
    * The state of the surface changed.
    *
    * <p>Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
-   * binds it by name. {@code resource}: the window is only borrowed.
+   * binds it by name.
    */
-  @SuppressWarnings({"unused", "resource"})
+  @SuppressWarnings("unused")
   private static void onStateNotify(
       MemorySegment surface, MemorySegment property, MemorySegment userData) {
     Gtk4Window.changed(userData);
@@ -830,9 +829,9 @@ public class Gtk4Window extends AbstractWindow {
    * The surface has a new size.
    *
    * <p>Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
-   * binds it by name. {@code resource}: the window is only borrowed.
+   * binds it by name.
    */
-  @SuppressWarnings({"unused", "resource"})
+  @SuppressWarnings("unused")
   private static void onLayout(
       MemorySegment surface, int width, int height, MemorySegment userData) {
     Gtk4Window.changed(userData);

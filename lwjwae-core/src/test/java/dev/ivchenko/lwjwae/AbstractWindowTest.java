@@ -581,11 +581,11 @@ class AbstractWindowTest {
   @Test
   void themeStartsLightAndEveryChangeReachesJavaAndThePageOnce() throws Exception {
     try (FakeApplication application = new FakeApplication()) {
-      FakeWindow window = application.openFake();
+      final FakeWindow window = application.openFake();
       Assertions.assertEquals(SystemTheme.LIGHT, application.theme());
 
       BlockingQueue<SystemTheme> heard = new LinkedBlockingQueue<>();
-      EventSubscription subscription = application.onThemeChange(heard::add);
+      final EventSubscription subscription = application.onThemeChange(heard::add);
       application.changeTheme(SystemTheme.LIGHT);
       application.changeTheme(SystemTheme.DARK);
       application.changeTheme(SystemTheme.DARK);
@@ -609,7 +609,7 @@ class AbstractWindowTest {
       FakeWindow window = application.openFake();
       BlockingQueue<FileDropEvent> first = new LinkedBlockingQueue<>();
       BlockingQueue<FileDropEvent> second = new LinkedBlockingQueue<>();
-      EventSubscription subscription = window.onFileDrop(first::add);
+      final EventSubscription subscription = window.onFileDrop(first::add);
       window.onFileDrop(second::add);
 
       List<Path> paths = List.of(Path.of("/tmp/a.txt"), Path.of("/tmp/some folder"));
@@ -666,7 +666,7 @@ class AbstractWindowTest {
   }
 
   @Test
-  void iconIsAPngThatReachesTheBackendAndNullBringsTheDefaultBack() {
+  void iconIsPngThatReachesTheBackendAndNullBringsTheDefaultBack() {
     byte[] png = Icons.circle(64, Color.BLUE);
     try (FakeApplication application = new FakeApplication()) {
       FakeWindow window = application.openFake(WindowParameters.builder().icon(png).build());

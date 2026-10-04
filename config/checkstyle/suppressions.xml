@@ -8,5 +8,5 @@
     <!-- A Gradle-generated Lombok config isn't code. -->
     <suppress checks=".*" files="lombok\.config"/>
     <!-- Control characters and U+2028/U+2029 have no special escape; the Unicode escape is the readable form. -->
-    <suppress checks="IllegalTokenText" files="(BridgeProtocol|ScriptUtil|ScriptUtilTest|JsonStringUtilTest)\.java"/>
+    <suppress checks="IllegalTokenText" files="(BridgeProtocol|JsonUtil|ScriptUtil|ScriptUtilTest|JsonStringUtilTest)\.java"/>
 </suppressions>

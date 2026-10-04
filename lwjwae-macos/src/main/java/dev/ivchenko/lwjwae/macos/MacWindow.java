@@ -161,7 +161,8 @@ public class MacWindow extends AbstractWindow {
                   "webView:createWebViewWithConfiguration:forNavigationAction:windowFeatures:",
                   new MethodStub(ON_CREATE_WEB_VIEW, "@@:@@@@")),
               Map.entry(
-                  "webView:requestMediaCapturePermissionForOrigin:initiatedByFrame:type:decisionHandler:",
+                  "webView:requestMediaCapturePermissionForOrigin:initiatedByFrame:"
+                      + "type:decisionHandler:",
                   new MethodStub(ON_MEDIA_CAPTURE, "v@:@@@q@?")),
               Map.entry("windowDidResize:", new MethodStub(ON_WINDOW_CHANGED, "v@:@")),
               Map.entry("windowDidMove:", new MethodStub(ON_WINDOW_CHANGED, "v@:@")),
