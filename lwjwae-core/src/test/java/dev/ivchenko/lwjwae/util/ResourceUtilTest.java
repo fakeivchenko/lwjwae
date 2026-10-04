@@ -28,4 +28,24 @@ class ResourceUtilTest {
             ResourceNotFoundException.class, () -> ResourceUtil.read("fixtures/nope.txt"));
     Assertions.assertTrue(failure.getMessage().contains("fixtures/nope.txt"));
   }
+
+  @Test
+  void pageReachesNoResourceOutsideItsPathsByDotSegments() {
+    Assertions.assertTrue(ResourceUtil.servedSize("fixtures/hello.txt") > 0);
+    String services = "META-INF/services/dev.ivchenko.lwjwae.BackendProvider";
+    for (String path :
+        new String[] {
+          services,
+          "./" + services,
+          "fixtures/../" + services,
+          "fixtures//../" + services,
+          ResourceUtil.servedPath("fixtures%2F..%2F" + services.replace("/", "%2F")),
+          "fixtures/../fixtures/hello.txt",
+          "fixtures\\hello.txt",
+          "dev/ivchenko/lwjwae/util/ResourceUtilTest.class"
+        }) {
+      Assertions.assertThrows(
+          ResourceNotFoundException.class, () -> ResourceUtil.servedSize(path), path);
+    }
+  }
 }
