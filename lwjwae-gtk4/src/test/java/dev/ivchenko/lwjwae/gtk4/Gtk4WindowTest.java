@@ -2,10 +2,16 @@ package dev.ivchenko.lwjwae.gtk4;
 
 import dev.ivchenko.lwjwae.Application;
 import dev.ivchenko.lwjwae.Window;
+import dev.ivchenko.lwjwae.glib.XdndFileDrag;
 import dev.ivchenko.lwjwae.glib.XtestKeyboard;
+import dev.ivchenko.lwjwae.glib.binding.Glib;
+import dev.ivchenko.lwjwae.gtk4.binding.Gtk;
 import dev.ivchenko.lwjwae.shortcut.Shortcut;
 import dev.ivchenko.lwjwae.testing.contract.WindowContractTest;
+import dev.ivchenko.lwjwae.theme.SystemTheme;
 import dev.ivchenko.lwjwae.util.PlatformUtil;
+import java.nio.file.Path;
+import java.util.List;
 
 class Gtk4WindowTest extends WindowContractTest {
   @Override
@@ -90,5 +96,46 @@ class Gtk4WindowTest extends WindowContractTest {
   @Override
   protected Class<? extends Window> expectedWindowType() {
     return Gtk4Window.class;
+  }
+
+  /** GTK takes the choice from the dark preference of its settings, which a test sets here. */
+  @Override
+  protected boolean switchSystemTheme(SystemTheme theme) {
+    Gtk4Dispatcher.instance()
+        .run(
+            () ->
+                Glib.setBooleanProperty(
+                    Gtk.settingsGetDefault(),
+                    "gtk-application-prefer-dark-theme",
+                    theme == SystemTheme.DARK));
+    return true;
+  }
+
+  /** WebKitGTK follows the dark preference of GTK. */
+  @Override
+  protected boolean engineFollowsTheDesktop() {
+    return true;
+  }
+
+  /** XDND from a small program of another process, pressed through XTest, on X11. */
+  @Override
+  protected boolean dropFiles(String title, List<Path> files) throws Exception {
+    return XdndFileDrag.isX11Session() && XdndFileDrag.dragOnto(title, files);
+  }
+
+  /** The transient parent of the child. */
+  @Override
+  protected Boolean isOwnedBy(Window child, Window parent) {
+    return Gtk4Dispatcher.instance()
+        .call(
+            () ->
+                Gtk.windowTransientFor(((Gtk4Window) child).window())
+                    .equals(((Gtk4Window) parent).window()));
+  }
+
+  /** A visible modal window transient for the parent, in its window group. */
+  @Override
+  protected Boolean isBlockedByModal(Window parent) {
+    return Gtk4Dispatcher.instance().call(() -> Gtk.hasModalChild(((Gtk4Window) parent).window()));
   }
 }

@@ -37,4 +37,11 @@ class VersionOrderTest {
     Assertions.assertEquals(0, VersionOrder.compare("1.2.0+build.7", "1.2.0"));
     Assertions.assertTrue(VersionOrder.compare("1.2.0-SNAPSHOT", "1.2.0") < 0);
   }
+
+  @Test
+  void versionTagPrefixDoesNotCount() {
+    Assertions.assertEquals(0, VersionOrder.compare("v1.2.0", "1.2.0"));
+    Assertions.assertTrue(VersionOrder.compare("v1.2.0", "1.3.0") < 0);
+    Assertions.assertTrue(VersionOrder.compare("1.4.0", "V1.3.0") > 0);
+  }
 }

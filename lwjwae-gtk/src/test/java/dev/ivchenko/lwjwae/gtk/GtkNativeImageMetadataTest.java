@@ -1,5 +1,6 @@
 package dev.ivchenko.lwjwae.gtk;
 
+import dev.ivchenko.lwjwae.glib.DesktopTheme;
 import dev.ivchenko.lwjwae.glib.FreedesktopNotifier;
 import dev.ivchenko.lwjwae.glib.GlibDispatcher;
 import dev.ivchenko.lwjwae.glib.PortalShortcuts;
@@ -52,6 +53,7 @@ class GtkNativeImageMetadataTest extends NativeImageMetadataContractTest {
         FreedesktopNotifier.class,
         StatusNotifierTray.class,
         X11.class,
+        DesktopTheme.class,
         PortalShortcuts.class,
         Soup.class,
         WebKitCookies.class,

@@ -95,6 +95,14 @@ public class Signatures {
   public final FunctionDescriptor VOID_POINTER_POINTER_POINTER =
       FunctionDescriptor.ofVoid(C_POINTER, C_POINTER, C_POINTER);
 
+  /** {@code void f(T*, gdouble)}: {@code webkit_web_view_set_zoom_level}. */
+  public final FunctionDescriptor VOID_POINTER_DOUBLE =
+      FunctionDescriptor.ofVoid(C_POINTER, ValueLayout.JAVA_DOUBLE);
+
+  /** {@code gdouble f(T*)}: {@code webkit_web_view_get_zoom_level}. */
+  public final FunctionDescriptor DOUBLE_POINTER =
+      FunctionDescriptor.of(ValueLayout.JAVA_DOUBLE, C_POINTER);
+
   /** {@code void f(T*, gint)}. */
   public final FunctionDescriptor VOID_POINTER_INT = FunctionDescriptor.ofVoid(C_POINTER, C_INT);
 
@@ -288,6 +296,21 @@ public class Signatures {
   /** {@code void (*)(WebKitWebView*, WebKitLoadEvent, gpointer)}: {@code load-changed}. */
   public final FunctionDescriptor LOAD_CHANGED_CALLBACK =
       FunctionDescriptor.ofVoid(C_POINTER, C_INT, C_POINTER);
+
+  /**
+   * {@code gboolean f(GtkWidget*, GdkDragContext*, gint x, gint y, guint time, gpointer)}: the
+   * {@code drag-motion} signal.
+   */
+  public final FunctionDescriptor DRAG_MOTION_CALLBACK =
+      FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_INT, C_INT, C_INT, C_POINTER);
+
+  /**
+   * {@code void f(GtkWidget*, GdkDragContext*, gint x, gint y, GtkSelectionData*, guint info, guint
+   * time, gpointer)}: the {@code drag-data-received} signal.
+   */
+  public final FunctionDescriptor DRAG_DATA_RECEIVED_CALLBACK =
+      FunctionDescriptor.ofVoid(
+          C_POINTER, C_POINTER, C_INT, C_INT, C_POINTER, C_INT, C_INT, C_POINTER);
 
   /**
    * {@code gboolean (*)(WebKitWebView*, WebKitContextMenu*, GdkEvent*, WebKitHitTestResult*,

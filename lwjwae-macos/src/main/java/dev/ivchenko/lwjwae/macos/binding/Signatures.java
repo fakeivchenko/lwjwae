@@ -323,6 +323,14 @@ public class Signatures {
           C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER);
 
   /**
+   * {@code webView:requestMediaCapturePermissionForOrigin:initiatedByFrame:type:decisionHandler:}:
+   * four objects, an {@code NSInteger}, and the block, after {@code self} and {@code _cmd}.
+   */
+  public final FunctionDescriptor DELEGATE_MEDIA_CAPTURE =
+      FunctionDescriptor.ofVoid(
+          C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_LONG, C_POINTER);
+
+  /**
    * {@code void (^)(NSModalResponse)}: the completion handler of a sheet. It receives the block
    * itself first.
    */

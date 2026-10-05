@@ -44,6 +44,10 @@ public class AppKit {
   public final long MODIFIER_COMMAND = 1 << 20;
 
   private final long WINDOW_TITLE_HIDDEN = 1;
+
+  /** {@code NSWindowAbove}: the place of a child window, over its parent. */
+  private final long WINDOW_ABOVE = 1;
+
   private final long ZOOM_BUTTON = 2;
   private final long EVENT_TYPE_LEFT_MOUSE_DOWN = 1;
   private final long EVENT_TYPE_LEFT_MOUSE_DRAGGED = 6;
@@ -425,6 +429,43 @@ public class AppKit {
     }
   }
 
+  /**
+   * Calls {@code -[NSWindow addChildWindow:ordered:]} with {@code NSWindowAbove}: {@code child}
+   * stays above {@code parent} and moves with it.
+   */
+  public void addChildWindow(MemorySegment parent, MemorySegment child) {
+    ObjC.sendVoid(parent, "addChildWindow:ordered:", child, WINDOW_ABOVE);
+  }
+
+  /** Calls {@code -[NSWindow removeChildWindow:]}. */
+  public void removeChildWindow(MemorySegment parent, MemorySegment child) {
+    ObjC.sendVoid(parent, "removeChildWindow:", child);
+  }
+
+  /**
+   * Calls {@code -[NSWindow beginSheet:completionHandler:]} without a handler: {@code sheet} slides
+   * out of the title bar of {@code parent}, which takes no input until {@link #endSheet}.
+   */
+  public void beginSheet(MemorySegment parent, MemorySegment sheet) {
+    ObjC.sendVoid(parent, "beginSheet:completionHandler:", sheet, MemorySegment.NULL);
+  }
+
+  /** Calls {@code -[NSWindow endSheet:]}, which takes the sheet away. */
+  public void endSheet(MemorySegment parent, MemorySegment sheet) {
+    ObjC.sendVoid(parent, "endSheet:", sheet);
+  }
+
+  /** {@code -[NSWindow parentWindow]}, or {@code sheetParent} for a sheet, or {@code nil}. */
+  public MemorySegment parentOf(MemorySegment window) {
+    MemorySegment parent = ObjC.send(window, "parentWindow");
+    return ObjC.isNull(parent) ? ObjC.send(window, "sheetParent") : parent;
+  }
+
+  /** Whether {@code window} has a sheet attached, which keeps the user from it. */
+  public boolean hasAttachedSheet(MemorySegment window) {
+    return !ObjC.isNull(ObjC.send(window, "attachedSheet"));
+  }
+
   /** Calls {@code -[NSWindow makeKeyAndOrderFront:]}: shows the window and gives it focus. */
   public void show(MemorySegment window) {
     ObjC.sendVoid(window, "makeKeyAndOrderFront:", MemorySegment.NULL);
@@ -503,6 +544,26 @@ public class AppKit {
           image, "setSize:", Foundation.size(arena, STATUS_ICON_SIZE, STATUS_ICON_SIZE));
     }
     ObjC.sendVoid(button, "setImage:", image);
+    Foundation.release(image);
+  }
+
+  /**
+   * Sets the icon of the application, which the Dock and the switcher show, from PNG bytes; {@code
+   * null} gives back the icon of the bundle, or of the system without one.
+   *
+   * @throws IllegalArgumentException If AppKit can't read the image.
+   */
+  public void setApplicationIcon(byte[] png) {
+    if (png == null) {
+      ObjC.sendVoid(AppKit.application(), "setApplicationIconImage:", MemorySegment.NULL);
+      return;
+    }
+    MemorySegment image =
+        ObjC.send(ObjC.send(ObjC.cls("NSImage"), "alloc"), "initWithData:", Foundation.data(png));
+    if (ObjC.isNull(image)) {
+      throw new IllegalArgumentException("The icon is not an image AppKit can read");
+    }
+    ObjC.sendVoid(AppKit.application(), "setApplicationIconImage:", image);
     Foundation.release(image);
   }
 

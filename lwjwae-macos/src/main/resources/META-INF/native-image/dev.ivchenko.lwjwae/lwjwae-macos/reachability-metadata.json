@@ -13,6 +13,19 @@
       ]
     },
     {
+      "type": "dev.ivchenko.lwjwae.macos.MacTheme",
+      "methods": [
+        {
+          "name": "onChanged",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
+        }
+      ]
+    },
+    {
       "type": "dev.ivchenko.lwjwae.macos.MacWindow",
       "methods": [
         {
@@ -23,6 +36,18 @@
             "java.lang.foreign.MemorySegment",
             "java.lang.foreign.MemorySegment",
             "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
+        },
+        {
+          "name": "onMediaCapture",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "long",
             "java.lang.foreign.MemorySegment"
           ]
         },
@@ -116,6 +141,14 @@
         },
         {
           "name": "onWindowChanged",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
+        },
+        {
+          "name": "onPerformDragOperation",
           "parameterTypes": [
             "java.lang.foreign.MemorySegment",
             "java.lang.foreign.MemorySegment",
@@ -230,6 +263,15 @@
         {
           "name": "onShouldTerminate",
           "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
+        },
+        {
+          "name": "onOpenUrls",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
             "java.lang.foreign.MemorySegment",
             "java.lang.foreign.MemorySegment",
             "java.lang.foreign.MemorySegment"
@@ -802,6 +844,16 @@
       },
       {
         "class": "dev.ivchenko.lwjwae.macos.MacWindow",
+        "method": "onPerformDragOperation",
+        "returnType": "jboolean",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.macos.MacWindow",
         "method": "onWindowShouldClose",
         "returnType": "jboolean",
         "parameterTypes": [
@@ -897,6 +949,30 @@
         ]
       },
       {
+        "class": "dev.ivchenko.lwjwae.macos.MacWindow",
+        "method": "onMediaCapture",
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "void*",
+          "void*",
+          "void*",
+          "jlong",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.macos.MacTheme",
+        "method": "onChanged",
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "void*"
+        ]
+      },
+      {
         "class": "dev.ivchenko.lwjwae.macos.MacDialogs",
         "method": "onSheetEnd",
         "returnType": "void",
@@ -930,6 +1006,17 @@
         "method": "onShouldTerminate",
         "returnType": "jlong",
         "parameterTypes": [
+          "void*",
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.macos.MacMainMenu",
+        "method": "onOpenUrls",
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
           "void*",
           "void*",
           "void*"

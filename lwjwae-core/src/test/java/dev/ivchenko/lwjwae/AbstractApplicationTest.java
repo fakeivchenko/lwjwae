@@ -3,6 +3,7 @@ package dev.ivchenko.lwjwae;
 import dev.ivchenko.lwjwae.bridge.BridgeProtocol;
 import dev.ivchenko.lwjwae.event.Event;
 import dev.ivchenko.lwjwae.event.EventSubscription;
+import dev.ivchenko.lwjwae.event.OpenEvent;
 import dev.ivchenko.lwjwae.event.SecondInstanceEvent;
 import dev.ivchenko.lwjwae.exception.ShortcutUnavailableException;
 import dev.ivchenko.lwjwae.instance.InstanceLock;
@@ -18,8 +19,11 @@ import dev.ivchenko.lwjwae.testing.RpcReply;
 import dev.ivchenko.lwjwae.testing.ShortTemporaryDirectories;
 import dev.ivchenko.lwjwae.tray.Tray;
 import dev.ivchenko.lwjwae.tray.TrayIcon;
+import java.net.URI;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -442,6 +446,61 @@ class AbstractApplicationTest {
   }
 
   @Test
+  void childWindowBelongsToItsParentAndClosesWithIt() {
+    try (FakeApplication application = new FakeApplication()) {
+      FakeWindow parent = application.openFake();
+      FakeWindow child = application.openFake(WindowParameters.builder().parent(parent).build());
+      FakeWindow modal =
+          application.openFake(WindowParameters.builder().parent(child).modal(true).build());
+      FakeWindow alone = application.openFake();
+      Assertions.assertEquals(Optional.of(parent), child.parent());
+      Assertions.assertEquals(Optional.of(child), modal.parent());
+      Assertions.assertEquals(Optional.empty(), alone.parent());
+
+      parent.close();
+
+      Assertions.assertTrue(child.isClosed(), "a child closes with its parent");
+      Assertions.assertTrue(modal.isClosed(), "and so does a child of the child");
+      Assertions.assertFalse(alone.isClosed());
+    }
+  }
+
+  @Test
+  void childWindowNeedsAnOpenParentOfTheSameApplication() {
+    try (FakeApplication application = new FakeApplication();
+        FakeApplication other = new FakeApplication()) {
+      FakeWindow closed = application.openFake();
+      closed.close();
+      FakeWindow stranger = other.openFake();
+      Assertions.assertThrows(
+          IllegalArgumentException.class,
+          () -> application.open(WindowParameters.builder().parent(closed).build()));
+      Assertions.assertThrows(
+          IllegalArgumentException.class,
+          () -> application.open(WindowParameters.builder().parent(stranger).build()));
+      Assertions.assertThrows(
+          IllegalArgumentException.class, () -> WindowParameters.builder().modal(true).build());
+    }
+  }
+
+  @Test
+  void pageOpensChildAndModalWindowsOfItsOwnWindow() throws Exception {
+    try (FakeApplication application = new FakeApplication()) {
+      FakeWindow opener = application.openFake();
+      String plain = SEP.repeat(12);
+      opener.call(1, BridgeProtocol.OPEN_CALL, plain + SEP + "1" + SEP);
+      opener.call(2, BridgeProtocol.OPEN_CALL, plain + SEP + SEP + "1");
+      opener.call(3, BridgeProtocol.OPEN_CALL, plain + SEP + SEP);
+      Window child = application.window(Long.parseLong(opener.awaitReply(1).body())).orElseThrow();
+      Window modal = application.window(Long.parseLong(opener.awaitReply(2).body())).orElseThrow();
+      Window alone = application.window(Long.parseLong(opener.awaitReply(3).body())).orElseThrow();
+      Assertions.assertEquals(Optional.of(opener), child.parent());
+      Assertions.assertEquals(Optional.of(opener), modal.parent());
+      Assertions.assertEquals(Optional.empty(), alone.parent());
+    }
+  }
+
+  @Test
   void pageClosesItsWindowThroughTheReservedCall() {
     try (FakeApplication application = new FakeApplication()) {
       FakeWindow window = application.openFake();
@@ -587,6 +646,35 @@ class AbstractApplicationTest {
   }
 
   /** Claims "app" in {@code directory} for {@code application}, as createSingleInstance does. */
+  @Test
+  void requestsToOpenComeFromTheArgumentsOfThisProcessAndOfEveryLaterStart(
+      @TempDir(factory = ShortTemporaryDirectories.class) Path directory) throws Exception {
+    Path note = Files.writeString(directory.resolve("note.txt"), "text");
+    try (FakeApplication application = new FakeApplication()) {
+      ((AbstractApplication) application).openArguments(List.of("--flag", "notes://first"));
+      AbstractApplicationTest.serveInstances(application, directory);
+
+      BlockingQueue<OpenEvent> heard = new LinkedBlockingQueue<>();
+      application.onOpen(heard::add);
+      Assertions.assertEquals(
+          new OpenEvent(List.of(URI.create("notes://first")), List.of()),
+          heard.poll(),
+          "the request from before any listener reaches the first one at once");
+
+      SecondInstanceEvent second =
+          new SecondInstanceEvent(List.of("note.txt", "notes://second"), directory);
+      Assertions.assertTrue(InstanceLocks.claim(directory, "app", second).isEmpty());
+      Assertions.assertEquals(
+          new OpenEvent(List.of(URI.create("notes://second")), List.of(note)),
+          heard.poll(5, TimeUnit.SECONDS));
+
+      SecondInstanceEvent plain = new SecondInstanceEvent(List.of("--flag"), directory);
+      Assertions.assertTrue(InstanceLocks.claim(directory, "app", plain).isEmpty());
+      Assertions.assertNull(
+          heard.poll(200, TimeUnit.MILLISECONDS), "a start with nothing to open is no request");
+    }
+  }
+
   private static void serveInstances(AbstractApplication application, Path directory) {
     application.serveInstances(
         InstanceLocks.claim(directory, "app", AbstractApplicationTest.start()).orElseThrow());

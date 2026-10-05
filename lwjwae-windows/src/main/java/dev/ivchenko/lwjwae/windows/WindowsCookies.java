@@ -8,9 +8,12 @@ import dev.ivchenko.lwjwae.windows.binding.CookieManager;
 import java.lang.foreign.MemorySegment;
 import java.net.URI;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 /**
@@ -18,10 +21,20 @@ import java.util.function.Supplier;
  *
  * <p>WebView2 hands the manager out only through a view, and every view of the application shares
  * one profile, so each call takes the view of any open window and lets go of the manager when it's
- * done: a call with no window open fails. Setting and deleting are synchronous in WebView2; only
- * reading answers later, in a completion on the UI thread.
+ * done: a call with no window open fails. Reading answers in a completion on the UI thread.
+ *
+ * <p>Setting and deleting return at once, but the network process of WebView2 applies them a moment
+ * later, so a read straight after one can still find the cookie as it was. A change therefore
+ * completes once a read shows it, or after {@value #VISIBLE_TIMEOUT_MILLIS} ms at most, which keeps
+ * the promise of {@link Cookies}: what comes after the change sees it.
  */
 public class WindowsCookies implements Cookies {
+  /** How long a change waits for a read to show it. */
+  private static final long VISIBLE_TIMEOUT_MILLIS = 5000;
+
+  /** How long it waits between two reads. */
+  private static final long VISIBLE_POLL_MILLIS = 50;
+
   private final WindowsDispatcher dispatcher;
   private final Supplier<MemorySegment> webView;
 
@@ -51,18 +64,27 @@ public class WindowsCookies implements Cookies {
   @Override
   public CompletableFuture<Void> set(Cookie cookie) {
     Objects.requireNonNull(cookie, "cookie");
-    return this.change(manager -> CookieManager.addOrUpdate(manager, cookie));
+    return this.change(
+        manager -> CookieManager.addOrUpdate(manager, cookie),
+        cookies ->
+            cookies.stream()
+                .anyMatch(
+                    found ->
+                        WindowsCookies.isSame(found, cookie)
+                            && found.value().equals(cookie.value())));
   }
 
   @Override
   public CompletableFuture<Void> delete(Cookie cookie) {
     Objects.requireNonNull(cookie, "cookie");
-    return this.change(manager -> CookieManager.delete(manager, cookie));
+    return this.change(
+        manager -> CookieManager.delete(manager, cookie),
+        cookies -> cookies.stream().noneMatch(found -> WindowsCookies.isSame(found, cookie)));
   }
 
   @Override
   public CompletableFuture<Void> clear() {
-    return this.change(CookieManager::deleteAll);
+    return this.change(CookieManager::deleteAll, List::isEmpty);
   }
 
   private CompletableFuture<List<Cookie>> read(String uri) {
@@ -87,7 +109,12 @@ public class WindowsCookies implements Cookies {
     return read;
   }
 
-  private CompletableFuture<Void> change(Consumer<MemorySegment> operation) {
+  /**
+   * Runs {@code operation} on the manager, and completes once {@code visible} holds for every
+   * cookie of the profile, or the wait is over.
+   */
+  private CompletableFuture<Void> change(
+      Consumer<MemorySegment> operation, Predicate<List<Cookie>> visible) {
     CompletableFuture<Void> changed = new CompletableFuture<>();
     this.dispatcher.post(
         () -> {
@@ -95,14 +122,50 @@ public class WindowsCookies implements Cookies {
           try {
             manager = CookieManager.of(this.webView.get());
             operation.accept(manager);
-            changed.complete(null);
           } catch (Throwable t) {
             changed.completeExceptionally(t);
+            return;
           } finally {
             Com.release(manager);
           }
+          this.awaitVisible(
+              visible,
+              System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(VISIBLE_TIMEOUT_MILLIS),
+              changed);
         });
     return changed;
+  }
+
+  /** Reads the cookies until {@code visible} holds or {@code deadline} passes. */
+  private void awaitVisible(
+      Predicate<List<Cookie>> visible, long deadline, CompletableFuture<Void> changed) {
+    this.read("")
+        .whenComplete(
+            (cookies, failure) -> {
+              if (failure != null) {
+                changed.completeExceptionally(failure);
+              } else if (visible.test(cookies) || System.nanoTime() > deadline) {
+                changed.complete(null);
+              } else {
+                CompletableFuture.delayedExecutor(VISIBLE_POLL_MILLIS, TimeUnit.MILLISECONDS)
+                    .execute(() -> this.awaitVisible(visible, deadline, changed));
+              }
+            });
+  }
+
+  /**
+   * Whether {@code found} is the cookie of the name, the domain, and the path of {@code wanted}.
+   */
+  private static boolean isSame(Cookie found, Cookie wanted) {
+    return found.name().equals(wanted.name())
+        && found.path().equals(wanted.path())
+        && WindowsCookies.bareDomain(found.domain())
+            .equals(WindowsCookies.bareDomain(wanted.domain()));
+  }
+
+  private static String bareDomain(String domain) {
+    String lower = domain.toLowerCase(Locale.ROOT);
+    return lower.startsWith(".") ? lower.substring(1) : lower;
   }
 
   private static void completeRead(

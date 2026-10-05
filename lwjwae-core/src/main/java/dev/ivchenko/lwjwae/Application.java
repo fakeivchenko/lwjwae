@@ -5,6 +5,7 @@ import dev.ivchenko.lwjwae.clipboard.Clipboard;
 import dev.ivchenko.lwjwae.cookie.Cookies;
 import dev.ivchenko.lwjwae.event.Event;
 import dev.ivchenko.lwjwae.event.EventSubscription;
+import dev.ivchenko.lwjwae.event.OpenEvent;
 import dev.ivchenko.lwjwae.event.SecondInstanceEvent;
 import dev.ivchenko.lwjwae.exception.BackendNotAvailableException;
 import dev.ivchenko.lwjwae.exception.ShortcutUnavailableException;
@@ -16,6 +17,7 @@ import dev.ivchenko.lwjwae.rpc.RpcHandler;
 import dev.ivchenko.lwjwae.shortcut.Shortcut;
 import dev.ivchenko.lwjwae.store.Store;
 import dev.ivchenko.lwjwae.taskbar.TaskbarProgress;
+import dev.ivchenko.lwjwae.theme.SystemTheme;
 import dev.ivchenko.lwjwae.tray.Tray;
 import dev.ivchenko.lwjwae.tray.TrayIcon;
 import dev.ivchenko.lwjwae.tray.TrayMenuItem;
@@ -104,6 +106,20 @@ public interface Application extends AutoCloseable {
         Application.provider()
             .orElseThrow(() -> new BackendNotAvailableException(Application.noBackendMessage()));
     return provider.create(parameters);
+  }
+
+  /**
+   * Creates an application as {@link #create(ApplicationParameters)} does, and hands the links and
+   * the files among {@code arguments} to {@link #onOpen}: the system starts an application with the
+   * link or the file that the user opened.
+   *
+   * @param arguments The arguments of this process, as {@code main} received them.
+   * @throws BackendNotAvailableException If no backend on the classpath supports this machine.
+   */
+  static Application create(ApplicationParameters parameters, String... arguments) {
+    Application application = Application.create(parameters);
+    ((AbstractApplication) application).openArguments(List.of(arguments));
+    return application;
   }
 
   /**
@@ -217,6 +233,7 @@ public interface Application extends AutoCloseable {
       }
     }
     ((AbstractApplication) application).serveInstances(lock);
+    ((AbstractApplication) application).openArguments(List.of(arguments));
     return Optional.of(application);
   }
 
@@ -297,6 +314,8 @@ public interface Application extends AutoCloseable {
    * anything appears on screen. When {@code parameters} carry a URL or a resource, the window
    * navigates there before this method returns.
    *
+   * @throws IllegalArgumentException If the parent of {@code parameters} isn't an open window of
+   *     this application.
    * @throws IllegalStateException If the application is closed.
    */
   Window open(WindowParameters parameters);
@@ -697,6 +716,36 @@ public interface Application extends AutoCloseable {
   Cookies cookies();
 
   /**
+   * The colors that the user chose for the desktop, as of the last change. A page sees the same as
+   * {@code lwjwae.theme.current()}, and as {@code prefers-color-scheme} where its engine follows
+   * the desktop.
+   *
+   * <p>Platforms:
+   *
+   * <ul>
+   *   <li>Windows: {@code AppsUseLightTheme} of the user in the registry, the "app mode" of the
+   *       settings.
+   *   <li>macOS: The appearance of the system, light or dark.
+   *   <li>Linux, GTK 3: The {@code color-scheme} of the desktop portal, and without a portal the
+   *       dark preference or the name of the GTK theme.
+   *   <li>Linux, GTK 4: As on GTK 3.
+   * </ul>
+   *
+   * @return {@link SystemTheme#LIGHT} where the desktop makes no choice.
+   * @throws IllegalStateException If the application is closed.
+   */
+  SystemTheme theme();
+
+  /**
+   * Calls {@code listener} when the user switches the desktop between light and dark, and never
+   * with the theme that it already has. Pages hear the same through {@code lwjwae.theme.listen}.
+   *
+   * @param listener Receives the new theme on a virtual thread, in the order of the changes.
+   * @return The subscription, to stop listening.
+   */
+  EventSubscription onThemeChange(Consumer<SystemTheme> listener);
+
+  /**
    * Shows a desktop notification and returns the handle that takes it back.
    *
    * <p>The notification belongs to the application. It stays when every window is closed, but it
@@ -738,6 +787,32 @@ public interface Application extends AutoCloseable {
    * that registers it.
    */
   EventSubscription onSecondInstance(Consumer<SecondInstanceEvent> listener);
+
+  /**
+   * Listens to the requests of the system to open links or files: a link of a scheme that the
+   * application registered, such as {@code notes://today}, or a file of a type that it registered,
+   * which the user opened from the file manager. The Gradle plugin registers both when it packages
+   * the application, from {@code urlScheme} and {@code fileType}.
+   *
+   * <p>The links and the files among the arguments of the process count as a request too: those
+   * that {@link #create(ApplicationParameters, String...)} or {@link #createSingleInstance} was
+   * given, and, for a single instance, those of every later start. A request that came before any
+   * listener reaches the first one on the thread that registers it; the later ones reach the
+   * listeners on a virtual thread, one request after the other.
+   *
+   * <p>Platforms:
+   *
+   * <ul>
+   *   <li>Windows: The system starts the executable with the link or the file as an argument, so a
+   *       running application hears of it only as a {@link #createSingleInstance single instance}.
+   *   <li>macOS: AppKit hands the links and the files to the process that runs, through {@code
+   *       application:openURLs:} of the delegate of the application, and starts it first when none
+   *       runs; no second process starts.
+   *   <li>Linux, GTK 3: As on Windows, through the {@code Exec} line of the desktop entry.
+   *   <li>Linux, GTK 4: As on GTK 3.
+   * </ul>
+   */
+  EventSubscription onOpen(Consumer<OpenEvent> listener);
 
   /**
    * Opens {@code url} where the system opens it: a web page in the default browser, a {@code

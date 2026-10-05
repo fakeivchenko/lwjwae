@@ -63,8 +63,15 @@ public final class MessageRpcCalls {
     }
     String[] callFields = new String[6];
     System.arraycopy(fields, 2, callFields, 0, 6);
-    MessageRpcExchange exchange =
-        new MessageRpcExchange(this, this.channel, this.window, callFields);
+    MessageRpcExchange exchange;
+    try {
+      exchange = new MessageRpcExchange(this, this.channel, this.window, callFields);
+    } catch (IllegalArgumentException e) {
+      // A body that isn't Base64: dropped like any other malformed message, since this runs in a
+      // callback of the engine, where an exception must not unwind into native code.
+      ThrowableUtil.report(new IllegalStateException("Malformed bridge message body", e));
+      return null;
+    }
     this.running.put(exchange.key(), exchange);
     return exchange;
   }

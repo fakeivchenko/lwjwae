@@ -9,8 +9,10 @@ import lombok.experimental.UtilityClass;
  * pre-release such as {@code 2.0.0-rc.1} before its release.
  *
  * <p>A missing part counts as 0, so {@code 1.2} and {@code 1.2.0} are one version, and build
- * metadata after a {@code +} doesn't count. A part that isn't a number compares as text, after the
- * numbers, which keeps any version string comparable.
+ * metadata after a {@code +} doesn't count. A {@code v} in front, as in the tag {@code v1.4.0},
+ * doesn't count either: a manifest and an application that disagree on it would otherwise compare
+ * the text {@code v1} with the number {@code 1}. A part that isn't a number compares as text, after
+ * the numbers, which keeps any version string comparable.
  */
 @UtilityClass
 class VersionOrder {
@@ -32,7 +34,12 @@ class VersionOrder {
 
   private String withoutBuild(String version) {
     int plus = version.indexOf('+');
-    return (plus < 0 ? version : version.substring(0, plus)).strip();
+    String bare = (plus < 0 ? version : version.substring(0, plus)).strip();
+    return bare.length() > 1
+            && (bare.charAt(0) == 'v' || bare.charAt(0) == 'V')
+            && Character.isDigit(bare.charAt(1))
+        ? bare.substring(1)
+        : bare;
   }
 
   /**

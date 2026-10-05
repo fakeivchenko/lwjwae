@@ -6,6 +6,7 @@ import dev.ivchenko.lwjwae.clipboard.Clipboard;
 import dev.ivchenko.lwjwae.cookie.Cookies;
 import dev.ivchenko.lwjwae.event.Event;
 import dev.ivchenko.lwjwae.event.EventSubscription;
+import dev.ivchenko.lwjwae.event.OpenEvent;
 import dev.ivchenko.lwjwae.event.SecondInstanceEvent;
 import dev.ivchenko.lwjwae.exception.ShortcutUnavailableException;
 import dev.ivchenko.lwjwae.instance.InstanceLock;
@@ -19,12 +20,14 @@ import dev.ivchenko.lwjwae.state.WindowStateStore;
 import dev.ivchenko.lwjwae.state.WindowStateTracker;
 import dev.ivchenko.lwjwae.store.Store;
 import dev.ivchenko.lwjwae.taskbar.TaskbarProgress;
+import dev.ivchenko.lwjwae.theme.SystemTheme;
 import dev.ivchenko.lwjwae.tray.Tray;
 import dev.ivchenko.lwjwae.tray.TrayIcon;
 import dev.ivchenko.lwjwae.ui.UiDispatcher;
 import dev.ivchenko.lwjwae.update.UpdateParameters;
 import dev.ivchenko.lwjwae.update.Updater;
 import dev.ivchenko.lwjwae.util.HandlerUtil;
+import dev.ivchenko.lwjwae.util.OpenArgumentUtil;
 import dev.ivchenko.lwjwae.util.ThrowableUtil;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -40,6 +43,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -110,6 +114,13 @@ public abstract class AbstractApplication implements Application {
 
   private final AtomicBoolean closed = new AtomicBoolean();
 
+  private final List<Consumer<SystemTheme>> themeListeners = new CopyOnWriteArrayList<>();
+
+  /** Tells the listeners of a theme change one at a time and in order, off the UI thread. */
+  private final ExecutorService themeNotifier =
+      Executors.newSingleThreadExecutor(Thread.ofVirtual().name("lwjwae-theme").factory());
+
+  private volatile SystemTheme theme = SystemTheme.LIGHT;
   private volatile Clipboard clipboard;
   private volatile Cookies cookies;
   private volatile List<MenuItem> menu = List.of();
@@ -123,6 +134,14 @@ public abstract class AbstractApplication implements Application {
   private final List<Consumer<SecondInstanceEvent>> secondInstanceListeners = new ArrayList<>();
   private final List<SecondInstanceEvent> unheardStarts = new ArrayList<>();
   private volatile InstanceLock instanceLock;
+
+  // --- requests to open, under the lock of the listener list ---
+  private final List<Consumer<OpenEvent>> openListeners = new ArrayList<>();
+  private final List<OpenEvent> unheardOpens = new ArrayList<>();
+
+  /** Tells the listeners of a request to open one request at a time and in order. */
+  private final ExecutorService openNotifier =
+      Executors.newSingleThreadExecutor(Thread.ofVirtual().name("lwjwae-open").factory());
 
   /**
    * Creates an application on the UI thread of a toolkit. Opens no window.
@@ -164,10 +183,14 @@ public abstract class AbstractApplication implements Application {
   public final Window open(WindowParameters parameters) {
     Objects.requireNonNull(parameters, "parameters");
     this.checkOpen();
+    final AbstractWindow parent = this.checkParent(parameters.parent());
     long id = this.windowIds.incrementAndGet();
     AbstractWindow window = this.createWindow(id, parameters);
     window.closeAction(parameters.closeAction());
     window.initializeMenu(parameters.menu());
+    if (parameters.icon() != null) {
+      window.icon(parameters.icon());
+    }
     AbstractApplication.applyLimits(window, parameters);
     this.restoreState(window, parameters);
     this.windows.put(id, window);
@@ -177,6 +200,9 @@ public abstract class AbstractApplication implements Application {
       this.windows.remove(id, window);
       throw new IllegalStateException("The application is closed");
     }
+    if (parent != null) {
+      parent.adoptChild(window);
+    }
     this.bindingScripts.values().forEach(window::injectOnDocumentStart);
     if (parameters.resource() != null) {
       window.loadResource(parameters.resource());
@@ -184,6 +210,22 @@ public abstract class AbstractApplication implements Application {
       window.navigate(parameters.url());
     }
     return window;
+  }
+
+  /**
+   * The parent of a new window as this application's own, or {@code null} for none.
+   *
+   * @throws IllegalArgumentException If {@code parent} is a window of another application, or
+   *     closed.
+   */
+  private AbstractWindow checkParent(Window parent) {
+    if (parent == null) {
+      return null;
+    }
+    if (!(parent instanceof AbstractWindow owner) || this.windows.get(owner.id()) != owner) {
+      throw new IllegalArgumentException("The parent is no open window of this application");
+    }
+    return owner;
   }
 
   /**
@@ -627,6 +669,47 @@ public abstract class AbstractApplication implements Application {
   }
 
   @Override
+  public final SystemTheme theme() {
+    this.checkOpen();
+    return this.theme;
+  }
+
+  @Override
+  public final EventSubscription onThemeChange(Consumer<SystemTheme> listener) {
+    Objects.requireNonNull(listener, "listener");
+    this.themeListeners.add(listener);
+    return () -> this.themeListeners.remove(listener);
+  }
+
+  /**
+   * The desktop is, or may be, in another theme. A backend calls this from the thread where it
+   * heard of it, with the theme that it read, once at startup before any window and again whenever
+   * the desktop reports a change. A theme that the application has already changes nothing.
+   */
+  protected final void themeChanged(SystemTheme newTheme) {
+    Objects.requireNonNull(newTheme, "newTheme");
+    SystemTheme old = this.theme;
+    if (old == newTheme) {
+      return;
+    }
+    this.theme = newTheme;
+    try {
+      this.themeNotifier.execute(
+          () -> {
+            for (Consumer<SystemTheme> listener : this.themeListeners) {
+              try {
+                listener.accept(newTheme);
+              } catch (Throwable t) {
+                ThrowableUtil.report(t);
+              }
+            }
+          });
+    } catch (RejectedExecutionException _) {
+      // The application is closed, and nobody is left to tell.
+    }
+  }
+
+  @Override
   public final EventSubscription onSecondInstance(Consumer<SecondInstanceEvent> listener) {
     Objects.requireNonNull(listener, "listener");
     List<SecondInstanceEvent> unheard;
@@ -655,11 +738,66 @@ public abstract class AbstractApplication implements Application {
     }
   }
 
+  @Override
+  public final EventSubscription onOpen(Consumer<OpenEvent> listener) {
+    Objects.requireNonNull(listener, "listener");
+    List<OpenEvent> unheard;
+    synchronized (this.openListeners) {
+      this.openListeners.add(listener);
+      unheard = List.copyOf(this.unheardOpens);
+      this.unheardOpens.clear();
+    }
+    unheard.forEach(listener);
+    return () -> {
+      synchronized (this.openListeners) {
+        this.openListeners.remove(listener);
+      }
+    };
+  }
+
+  /**
+   * The system asks the application to open links or files. A backend calls this from wherever the
+   * platform delivers the request, on any thread; a request with nothing in it is ignored.
+   */
+  protected final void openRequested(OpenEvent request) {
+    if (request.isEmpty()) {
+      return;
+    }
+    List<Consumer<OpenEvent>> listeners;
+    synchronized (this.openListeners) {
+      if (this.openListeners.isEmpty()) {
+        this.unheardOpens.add(request);
+        return;
+      }
+      listeners = List.copyOf(this.openListeners);
+    }
+    try {
+      this.openNotifier.execute(
+          () -> {
+            for (Consumer<OpenEvent> listener : listeners) {
+              try {
+                listener.accept(request);
+              } catch (Throwable t) {
+                ThrowableUtil.report(t);
+              }
+            }
+          });
+    } catch (RejectedExecutionException _) {
+      // The application is closed, and nobody is left to tell.
+    }
+  }
+
+  /** Hands the links and the files among the arguments of this process to {@link #onOpen}. */
+  final void openArguments(List<String> arguments) {
+    this.openRequested(OpenArgumentUtil.of(arguments, Path.of("").toAbsolutePath()));
+  }
+
   /**
    * Another process of the application started and handed its start over: the oldest window comes
-   * to the front, and the listeners hear of it.
+   * to the front, and the listeners hear of it, and of the links and the files among its arguments.
    */
   private void secondInstanceStarted(SecondInstanceEvent start) {
+    this.openRequested(OpenArgumentUtil.of(start.arguments(), start.workingDirectory()));
     List<Window> open = this.windows();
     if (!open.isEmpty()) {
       try {
@@ -829,6 +967,8 @@ public abstract class AbstractApplication implements Application {
       lock.close();
     }
     this.listeners.shutdown();
+    this.themeNotifier.shutdown();
+    this.openNotifier.shutdown();
     this.stateSaver.shutdown();
     try {
       if (!this.stateSaver.awaitTermination(STATE_SAVE_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {

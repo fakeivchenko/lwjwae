@@ -8,9 +8,12 @@ import dev.ivchenko.lwjwae.dialog.OpenDialogParameters;
 import dev.ivchenko.lwjwae.dialog.SaveDialogParameters;
 import dev.ivchenko.lwjwae.event.Event;
 import dev.ivchenko.lwjwae.event.EventSubscription;
+import dev.ivchenko.lwjwae.event.FileDropEvent;
 import dev.ivchenko.lwjwae.event.LoadEvent;
 import dev.ivchenko.lwjwae.event.WindowEvent;
 import dev.ivchenko.lwjwae.menu.MenuItem;
+import dev.ivchenko.lwjwae.permission.PermissionDecision;
+import dev.ivchenko.lwjwae.permission.PermissionRequest;
 import dev.ivchenko.lwjwae.rpc.RpcHandler;
 import dev.ivchenko.lwjwae.util.ResourceUtil;
 import java.nio.file.Path;
@@ -137,6 +140,12 @@ public interface Window extends AutoCloseable {
    * </ul>
    */
   Screen screen();
+
+  /**
+   * The window that this one belongs to, see {@link WindowParameters#parent()}, or empty for a
+   * window of its own.
+   */
+  Optional<Window> parent();
 
   /**
    * Moves the window to the middle of the screen it's on.
@@ -496,6 +505,105 @@ public interface Window extends AutoCloseable {
   EventSubscription onWindowEvent(Consumer<WindowEvent> listener);
 
   /**
+   * Calls {@code listener} when the user drops files from the file manager of the desktop onto the
+   * page, with their paths, which a page can't read from the files that the browser gives it. A
+   * page hears the same through {@code lwjwae.files.listen}.
+   *
+   * <p>A file dropped on a page doesn't open in the window: the library stops the engine from
+   * navigating to it, unless the page handles {@code drop} itself and stops it first. The {@code
+   * dragenter}, {@code dragover}, and {@code drop} events still reach the page, for the highlight
+   * of a drop zone.
+   *
+   * <p>Platforms:
+   *
+   * <ul>
+   *   <li>Windows: Through the files that a {@code drop} event of the page hands to the host, which
+   *       needs the WebView2 runtime 1.0.1264 or later. The window must have the focus of the page
+   *       script, as for any drop.
+   *   <li>macOS: The file URLs on the pasteboard of the drag, which the web view reads as it takes
+   *       the drop, at the place of the {@code drop} event of the page.
+   *   <li>Linux, GTK 3: The URI list of the drop, so a file that lives only in a remote location
+   *       that the file manager mounted is left out.
+   *   <li>Linux, GTK 4: The files that the drag offers, read as it comes over the page, at the
+   *       place of the {@code drop} event of the page; a file that isn't local is left out.
+   * </ul>
+   *
+   * @param listener Receives the event on a virtual thread.
+   * @return The subscription, to stop listening.
+   */
+  EventSubscription onFileDrop(Consumer<FileDropEvent> listener);
+
+  /** The smallest zoom of a page, 25%. */
+  double MINIMUM_ZOOM = 0.25;
+
+  /** The largest zoom of a page, 500%. */
+  double MAXIMUM_ZOOM = 5.0;
+
+  /**
+   * The zoom of the page: 1 is 100%, 1.5 is 150%, and 0.5 is 50%. A page starts at 1, and the
+   * answer is what the engine shows now, which is what {@link #zoom(double)} set last.
+   *
+   * @throws IllegalStateException If the window is closed.
+   */
+  double zoom();
+
+  /**
+   * Zooms the page, the whole of its content, as the zoom of a browser does: text, images, and
+   * layout grow together, and the page sees a narrower viewport in CSS pixels. The user can't zoom
+   * the page with the keyboard or the wheel; only Java does. The zoom belongs to the window and
+   * stays through navigations.
+   *
+   * <p>Platforms:
+   *
+   * <ul>
+   *   <li>Windows: The zoom factor of the web view.
+   *   <li>macOS: The page zoom of the web view, which needs macOS 11 or later.
+   *   <li>Linux, GTK 3: The zoom level of the web view.
+   *   <li>Linux, GTK 4: As on GTK 3.
+   * </ul>
+   *
+   * @param factor The zoom, from {@link #MINIMUM_ZOOM} to {@link #MAXIMUM_ZOOM}.
+   * @throws IllegalArgumentException If {@code factor} is outside that range, or isn't a number.
+   * @throws IllegalStateException If the window is closed.
+   */
+  void zoom(double factor);
+
+  /**
+   * Sets the icon of the window: the one in its title bar, in the taskbar or the Dock, and in the
+   * switcher of the windows. The icon is a PNG image; a square of 256 pixels or more is scaled down
+   * to every size that the platform needs.
+   *
+   * <p>Platforms:
+   *
+   * <ul>
+   *   <li>Windows: The icon of the title bar, the taskbar button, and Alt+Tab.
+   *   <li>macOS: The icon that the Dock and the switcher show for the application, which every
+   *       window of it shares: macOS has no icon of a single window. The title bar has none.
+   *   <li>Linux, GTK 3: X11: as described, though a window manager may go on showing the last icon
+   *       after {@code null}. Wayland: the compositor takes the icon from the {@code .desktop} file
+   *       of the application and ignores this one.
+   *   <li>Linux, GTK 4: Does nothing, on X11 as on Wayland: GTK 4 has no call for it, and the
+   *       desktop takes the icon from the {@code .desktop} file of the application.
+   * </ul>
+   *
+   * @param png The bytes of a PNG image, or {@code null} for the icon of the platform.
+   * @throws IllegalArgumentException If {@code png} isn't a PNG image.
+   * @throws IllegalStateException If the window is closed.
+   */
+  void icon(byte[] png);
+
+  /**
+   * The same as {@link #icon(byte[])}, with a PNG among the resources of the application, such as
+   * {@code "app/icon.png"}.
+   *
+   * @throws dev.ivchenko.lwjwae.exception.ResourceNotFoundException If the classpath has no such
+   *     resource.
+   */
+  default void icon(String resource) {
+    this.icon(ResourceUtil.read(resource));
+  }
+
+  /**
    * Decides where a link that leaves the application goes: a click in a page of the application on
    * a link to another origin, a {@code mailto:} link, {@code window.open} of such a URL, a link
    * with {@code target="_blank"} or another request for a new window, and {@code
@@ -510,6 +618,28 @@ public interface Window extends AutoCloseable {
    *     #navigate} to it, or drop it; {@code null} brings the default back.
    */
   void externalLinkHandler(Consumer<String> handler);
+
+  /**
+   * Decides what a page may use that needs the permission of the user: the camera, the microphone,
+   * the position, and notifications. By default, every request is denied, on every platform, so
+   * that the page fails the same way everywhere and no engine shows a prompt of its own.
+   *
+   * <p>Platforms:
+   *
+   * <ul>
+   *   <li>Windows: Every kind. The prompt of WebView2 never shows.
+   *   <li>macOS: The camera and the microphone. After the handler grants one, the system asks the
+   *       user for its own permission of the application, which needs the usage description of the
+   *       camera or the microphone in {@code Info.plist}. WKWebView has no hook for the position
+   *       and notifications, so the handler doesn't hear of them there.
+   *   <li>Linux, GTK 3 and GTK 4: The camera and the microphone. The position and notifications are
+   *       always denied, and the handler doesn't hear of them.
+   * </ul>
+   *
+   * @param handler Receives each request on the UI thread, so it must answer without waiting. A
+   *     handler that throws denies the request. {@code null} brings the default back.
+   */
+  void permissionHandler(Function<PermissionRequest, PermissionDecision> handler);
 
   /**
    * Shows the dialog of the platform that opens files, or folders, over this window, and returns

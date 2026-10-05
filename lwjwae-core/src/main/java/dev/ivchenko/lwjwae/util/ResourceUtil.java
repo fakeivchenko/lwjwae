@@ -9,6 +9,7 @@ import java.net.URL;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Pattern;
 import lombok.experimental.UtilityClass;
@@ -81,14 +82,17 @@ public class ResourceUtil {
    * doesn't say. The code of the application, its {@code .class} files, and {@code META-INF} are no
    * page's business, so they count as missing.
    *
+   * <p>So does a path with an empty, {@code .}, or {@code ..} segment, or a backslash: a class
+   * loader that reads a directory resolves those, so {@code app/../META-INF/x}, which a page spells
+   * {@code app%2F..%2FMETA-INF%2Fx} past the URL parser of the engine, would reach what the check
+   * keeps out.
+   *
    * @throws ResourceNotFoundException If no such resource exists, or it isn't for a page.
    */
   public long servedSize(String path) {
     String normalized = ResourceUtil.normalize(path);
     URL resource =
-        normalized.endsWith(".class") || normalized.startsWith("META-INF/")
-            ? null
-            : ResourceUtil.loader().getResource(normalized);
+        ResourceUtil.isForPage(normalized) ? ResourceUtil.loader().getResource(normalized) : null;
     if (resource == null) {
       throw new ResourceNotFoundException("No classpath resource: " + normalized);
     }
@@ -146,6 +150,24 @@ public class ResourceUtil {
     } catch (IOException e) {
       throw new UncheckedIOException("Could not read classpath resource: " + normalized, e);
     }
+  }
+
+  /** Whether a page may read the resource at {@code path}, see {@link #servedSize}. */
+  private boolean isForPage(String path) {
+    String lower = path.toLowerCase(Locale.ROOT);
+    if (lower.endsWith(".class") || lower.startsWith("meta-inf/") || path.indexOf('\\') >= 0) {
+      return false;
+    }
+    String[] segments = path.split("/", -1);
+    for (int index = 0; index < segments.length; index++) {
+      String segment = segments[index];
+      // A trailing slash, the request for a directory, leaves the last segment empty.
+      boolean empty = segment.isEmpty() && index < segments.length - 1;
+      if (empty || segment.equals(".") || segment.equals("..")) {
+        return false;
+      }
+    }
+    return true;
   }
 
   private ClassLoader loader() {

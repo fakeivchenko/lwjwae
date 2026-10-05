@@ -6,6 +6,7 @@ import dev.ivchenko.lwjwae.WindowEdge;
 import dev.ivchenko.lwjwae.WindowParameters;
 import dev.ivchenko.lwjwae.WindowPosition;
 import dev.ivchenko.lwjwae.WindowSize;
+import dev.ivchenko.lwjwae.bridge.BridgeProtocol;
 import dev.ivchenko.lwjwae.bridge.RpcMessageChannel;
 import dev.ivchenko.lwjwae.dialog.DialogCompletion;
 import dev.ivchenko.lwjwae.dialog.MessageDialogParameters;
@@ -20,6 +21,7 @@ import dev.ivchenko.lwjwae.foreign.NativeLibraries;
 import dev.ivchenko.lwjwae.menu.CheckMenuItem;
 import dev.ivchenko.lwjwae.menu.MenuCommands;
 import dev.ivchenko.lwjwae.menu.MenuRole;
+import dev.ivchenko.lwjwae.permission.PermissionKind;
 import dev.ivchenko.lwjwae.shortcut.Shortcut;
 import dev.ivchenko.lwjwae.util.MimeTypeUtil;
 import dev.ivchenko.lwjwae.util.ResourceUtil;
@@ -42,6 +44,7 @@ import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -61,6 +64,25 @@ import java.util.function.Supplier;
  * answered from the JAR file, and {@code .localhost} is a secure context in Chromium.
  */
 public class WindowsWindow extends AbstractWindow {
+  /** What the script of the page posts when files are dropped on it, before where. */
+  private static final String FILE_DROP_MESSAGE = "lwjwae:files";
+
+  /**
+   * Posts the files of every {@code drop} to the host, which learns their paths from the files: a
+   * page has the names, and WebView2 gives the host the full paths. It runs first, in the capture
+   * phase, so that a page that stops the event still lets Java hear of the drop.
+   */
+  private static final String FILE_DROP_SCRIPT =
+      """
+      window.addEventListener("drop", (event) => {
+        const files = event.dataTransfer && event.dataTransfer.files;
+        if (!files || files.length === 0 || !window.chrome || !window.chrome.webview) return;
+        window.chrome.webview.postMessageWithAdditionalObjects(
+            "%s%s" + Math.round(event.clientX) + "%s" + Math.round(event.clientY), files);
+      }, true);
+      """
+          .formatted(FILE_DROP_MESSAGE, BridgeProtocol.SEPARATOR, BridgeProtocol.SEPARATOR);
+
   private volatile boolean sharedBuffers = true;
   private final WindowFrame frame;
   private final boolean maximizable;
@@ -104,6 +126,16 @@ public class WindowsWindow extends AbstractWindow {
   private final CompletableFuture<Void> ready = new CompletableFuture<>();
 
   private volatile MemorySegment hwnd;
+
+  /** The window that owns this one, or {@code null}. */
+  private final WindowsWindow owner;
+
+  /** Whether this window disables its owner while it's shown. */
+  private final boolean modal;
+
+  /** Whether this window disabled its owner and still has to enable it. UI thread only. */
+  private boolean ownerDisabled;
+
   private volatile MemorySegment controller;
   private volatile MemorySegment webView;
 
@@ -132,6 +164,8 @@ public class WindowsWindow extends AbstractWindow {
             : parameters.transparent() ? WindowFrame.NONE : WindowFrame.NO_TITLE_BAR;
     this.maximizable = parameters.maximizable();
     this.transparent = parameters.transparent();
+    this.owner = (WindowsWindow) parameters.parent();
+    this.modal = parameters.modal();
     this.callbackId = WINDOWS.register(this);
     try {
       this.dispatcher().run(() -> this.createWindow(parameters));
@@ -159,7 +193,8 @@ public class WindowsWindow extends AbstractWindow {
             parameters.size().height(),
             WindowsWindow.windowStyle(parameters),
             parameters.alwaysOnTop(),
-            parameters.transparent());
+            parameters.transparent(),
+            this.owner == null ? null : this.owner.window());
     User32.userData(window, this.callbackId);
     this.hwnd = window;
     if (this.frame != WindowFrame.FULL) {
@@ -172,6 +207,8 @@ public class WindowsWindow extends AbstractWindow {
     User32.resizeClient(window, parameters.size().width(), parameters.size().height(), this.frame);
     if (parameters.centered()) {
       WindowsWindow.centerWindow(window);
+    } else if (!placed && this.owner != null) {
+      WindowsWindow.centerOver(window, this.owner.window());
     }
 
     MemorySegment handler =
@@ -204,6 +241,47 @@ public class WindowsWindow extends AbstractWindow {
   @Override
   public void title(String title) {
     this.dispatcher().run(() -> User32.setTitle(this.window(), title));
+  }
+
+  /** The icons that this window made and gave to Windows, to destroy when it replaces them. */
+  private MemorySegment smallIcon;
+
+  private MemorySegment largeIcon;
+
+  @Override
+  protected void presentIcon(byte[] png) {
+    MemorySegment window = this.window();
+    MemorySegment small = png == null ? null : User32.iconFromPng(png, false);
+    MemorySegment large = png == null ? null : User32.iconFromPng(png, true);
+    // The default icon is sent too, not a zero: the taskbar keeps the last icon it had on a zero.
+    MemorySegment fallback = User32.defaultIcon();
+    User32.send(
+        window, User32.WM_SETICON, User32.ICON_SMALL, (small == null ? fallback : small).address());
+    User32.send(
+        window, User32.WM_SETICON, User32.ICON_BIG, (large == null ? fallback : large).address());
+    this.destroyIcons();
+    this.smallIcon = small;
+    this.largeIcon = large;
+  }
+
+  private void destroyIcons() {
+    for (MemorySegment icon : new MemorySegment[] {this.smallIcon, this.largeIcon}) {
+      if (icon != null) {
+        User32.destroyIcon(icon);
+      }
+    }
+    this.smallIcon = null;
+    this.largeIcon = null;
+  }
+
+  @Override
+  protected void presentZoom(double factor) {
+    WebView2.setZoomFactor(this.controller, factor);
+  }
+
+  @Override
+  protected double currentZoom() {
+    return WebView2.zoomFactor(this.controller);
   }
 
   @Override
@@ -244,6 +322,33 @@ public class WindowsWindow extends AbstractWindow {
   @Override
   public void center() {
     this.dispatcher().run(() -> WindowsWindow.centerWindow(this.window()));
+  }
+
+  /** Puts the frame over the middle of the frame of {@code owner}. */
+  private static void centerOver(MemorySegment hwnd, MemorySegment owner) {
+    int[] around = User32.windowRect(owner);
+    int[] frame = User32.windowRect(hwnd);
+    int width = frame[2] - frame[0];
+    int height = frame[3] - frame[1];
+    User32.move(
+        hwnd,
+        around[0] + (around[2] - around[0] - width) / 2,
+        around[1] + (around[3] - around[1] - height) / 2);
+  }
+
+  /**
+   * Gives the owner of a modal window the mouse and the keyboard back. Windows activates the next
+   * enabled window when one goes, so this happens before the modal window hides or goes, or the
+   * focus would land in another application. Runs on the UI thread; does nothing twice.
+   */
+  private void releaseOwner() {
+    if (this.ownerDisabled) {
+      this.ownerDisabled = false;
+      MemorySegment current = this.owner.hwnd;
+      if (current != null && !this.owner.isClosed()) {
+        User32.enable(current, true);
+      }
+    }
   }
 
   /** Puts the frame in the middle of the work area of the monitor that holds the window. */
@@ -682,6 +787,10 @@ public class WindowsWindow extends AbstractWindow {
         .run(
             () -> {
               MemorySegment current = this.window();
+              if (this.modal && !this.ownerDisabled && !this.owner.isClosed()) {
+                this.ownerDisabled = true;
+                User32.enable(this.owner.window(), false);
+              }
               User32.showWindow(
                   current, User32.isVisible(current) ? User32.SW_SHOW : this.showCommand);
               this.showCommand = User32.SW_SHOW;
@@ -710,6 +819,7 @@ public class WindowsWindow extends AbstractWindow {
    * Runs on the UI thread.
    */
   private void hideNow() {
+    this.releaseOwner();
     WebView2.setVisible(this.controller, false);
     User32.hide(this.window());
   }
@@ -725,6 +835,7 @@ public class WindowsWindow extends AbstractWindow {
             () -> {
               MemorySegment current = this.hwnd;
               if (!this.isClosed() && current != null) {
+                this.releaseOwner();
                 User32.destroy(current);
               }
             });
@@ -763,6 +874,8 @@ public class WindowsWindow extends AbstractWindow {
         WebView2.setTransparentBackground(createdController);
       }
       WebView2.setDevToolsEnabled(this.webView, false);
+      // Only Java zooms the page, as on the other backends.
+      WebView2.setZoomControlEnabled(this.webView, false);
       try {
         WebView2.changeUserAgent(this.webView, this::userAgent);
       } catch (RuntimeException e) {
@@ -796,7 +909,9 @@ public class WindowsWindow extends AbstractWindow {
           WebView2.IID_WEB_MESSAGE_RECEIVED,
           (_, arguments) -> {
             String message = WebView2.webMessageAsString(arguments);
-            if (message != null) {
+            if (message != null && message.startsWith(FILE_DROP_MESSAGE)) {
+              this.fileDropMessage(message, arguments);
+            } else if (message != null) {
               this.handleBridgeMessage(message);
             }
           });
@@ -804,6 +919,10 @@ public class WindowsWindow extends AbstractWindow {
           WebView2::onNewWindowRequested,
           WebView2.IID_NEW_WINDOW_REQUESTED,
           (_, arguments) -> this.newWindowRequested(WebView2.takeNewWindowRequest(arguments)));
+      this.subscribe(
+          WebView2::onPermissionRequested,
+          WebView2.IID_PERMISSION_REQUESTED,
+          (_, arguments) -> this.answerPermission(arguments));
       MemorySegment keys =
           ComCallback.event(
               WebView2.IID_ACCELERATOR_KEY_PRESSED,
@@ -822,10 +941,39 @@ public class WindowsWindow extends AbstractWindow {
           (_, arguments) -> this.serveResource(arguments));
 
       this.installBridge();
+      this.injectOnDocumentStart(FILE_DROP_SCRIPT);
       this.ready.complete(null);
     } catch (RuntimeException e) {
       this.ready.completeExceptionally(e);
     }
+  }
+
+  /**
+   * A drop of files, which the script of the page posted with the files themselves, since the page
+   * can't read their paths and the host can. The message is the marker and where the pointer was.
+   */
+  private void fileDropMessage(String message, MemorySegment arguments) {
+    String[] fields = message.split(BridgeProtocol.SEPARATOR);
+    List<Path> paths = new ArrayList<>();
+    for (String path : WebView2.additionalFilePaths(arguments)) {
+      paths.add(Path.of(path));
+    }
+    this.filesDropped(
+        paths,
+        fields.length > 1 ? Integer.parseInt(fields[1]) : 0,
+        fields.length > 2 ? Integer.parseInt(fields[2]) : 0);
+  }
+
+  /** Answers a request of the page, always, so that WebView2 never shows its own prompt. */
+  private void answerPermission(MemorySegment arguments) {
+    boolean granted = false;
+    try {
+      PermissionKind kind = WebView2.permissionKind(arguments);
+      granted = kind != null && this.permissionRequested(WebView2.permissionUri(arguments), kind);
+    } catch (RuntimeException e) {
+      ThrowableUtil.report(e);
+    }
+    WebView2.answerPermission(arguments, granted);
   }
 
   private void subscribe(
@@ -1045,6 +1193,7 @@ public class WindowsWindow extends AbstractWindow {
     final MemorySegment closingController = this.controller;
     final MemorySegment closingView = this.webView;
     this.hwnd = null;
+    this.destroyIcons();
     this.webView = null;
     this.controller = null;
     this.menuBarHandle = null;
@@ -1124,8 +1273,12 @@ public class WindowsWindow extends AbstractWindow {
           // Not passed on: DefWindowProc would destroy the window.
           window.hideNow();
           return 0;
+        } else if (message == User32.WM_CLOSE) {
+          // DefWindowProc destroys the window: its owner takes the focus first.
+          window.releaseOwner();
         } else if (message == User32.WM_DESTROY) {
           WINDOWS.unregister(window.callbackId);
+          window.releaseOwner();
           window.handleDestroyed();
         }
       }

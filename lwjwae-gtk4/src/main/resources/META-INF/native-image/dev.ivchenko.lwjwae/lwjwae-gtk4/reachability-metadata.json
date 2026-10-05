@@ -36,6 +36,14 @@
           ]
         },
         {
+          "name": "onPermissionRequest",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
+        },
+        {
           "name": "onDestroy",
           "parameterTypes": [
             "java.lang.foreign.MemorySegment",
@@ -56,6 +64,23 @@
             "java.lang.foreign.MemorySegment",
             "int",
             "int",
+            "java.lang.foreign.MemorySegment"
+          ]
+        },
+        {
+          "name": "onDragEnter",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "double",
+            "double",
+            "java.lang.foreign.MemorySegment"
+          ]
+        },
+        {
+          "name": "onFilesRead",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
             "java.lang.foreign.MemorySegment"
           ]
         },
@@ -176,6 +201,13 @@
   ],
   "foreign": {
     "downcalls": [
+      {
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "jdouble"
+        ]
+      },
       {
         "returnType": "jint",
         "parameterTypes": []
@@ -340,6 +372,17 @@
           "void*",
           "jint"
         ]
+      },
+      {
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "jlong",
+          "jint",
+          "void*",
+          "void*",
+          "void*"
+        ]
       }
     ],
     "directUpcalls": [
@@ -455,8 +498,39 @@
       },
       {
         "class": "dev.ivchenko.lwjwae.gtk4.Gtk4Window",
+        "method": "onDragEnter",
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "jdouble",
+          "jdouble",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.gtk4.Gtk4Window",
+        "method": "onFilesRead",
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.gtk4.Gtk4Window",
         "method": "onCreate",
         "returnType": "void*",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.gtk4.Gtk4Window",
+        "method": "onPermissionRequest",
+        "returnType": "jint",
         "parameterTypes": [
           "void*",
           "void*",

@@ -11,6 +11,7 @@ import dev.ivchenko.lwjwae.event.EventSubscription;
 import dev.ivchenko.lwjwae.exception.ResourceNotFoundException;
 import dev.ivchenko.lwjwae.foreign.NativeLibraries;
 import dev.ivchenko.lwjwae.glib.DesktopServices;
+import dev.ivchenko.lwjwae.glib.DesktopTheme;
 import dev.ivchenko.lwjwae.glib.PortalDialogs;
 import dev.ivchenko.lwjwae.glib.StatusNotifierTray;
 import dev.ivchenko.lwjwae.glib.WebKitCookies;
@@ -18,6 +19,7 @@ import dev.ivchenko.lwjwae.glib.X11Shortcuts;
 import dev.ivchenko.lwjwae.glib.binding.Glib;
 import dev.ivchenko.lwjwae.gtk.binding.AppIndicator;
 import dev.ivchenko.lwjwae.gtk.binding.Gdk;
+import dev.ivchenko.lwjwae.gtk.binding.Gtk;
 import dev.ivchenko.lwjwae.gtk.binding.Signatures;
 import dev.ivchenko.lwjwae.gtk.binding.WebKit;
 import dev.ivchenko.lwjwae.notification.Notification;
@@ -71,6 +73,7 @@ public class GtkApplication extends AbstractApplication {
   private static boolean filtering;
 
   private final DesktopServices desktop;
+  private volatile DesktopTheme themeWatcher;
 
   /** Creates an application with {@link ApplicationParameters#createDefault()}. */
   public GtkApplication() {
@@ -97,6 +100,7 @@ public class GtkApplication extends AbstractApplication {
             () -> {
               WebKit.retainDefaultWebContext();
               WebKit.registerUriScheme(ResourceUtil.SCHEME, ON_RESOURCE_REQUEST);
+              this.themeWatcher = new DesktopTheme(Gtk.settingsGetDefault(), this::themeChanged);
             });
   }
 
@@ -186,6 +190,10 @@ public class GtkApplication extends AbstractApplication {
 
   @Override
   protected void onClose() {
+    DesktopTheme watcher = this.themeWatcher;
+    if (watcher != null) {
+      watcher.close();
+    }
     this.desktop.close();
   }
 

@@ -30,6 +30,8 @@ public class Gdk {
           Signatures.C_INT.withName("width"),
           Signatures.C_INT.withName("height"));
 
+  private final MethodHandle WINDOW_SET_ICON_LIST =
+      NativeLibraries.downcall(GDK, "gdk_window_set_icon_list", Signatures.VOID_POINTER_POINTER);
   private final MethodHandle SCREEN_GET_RGBA_VISUAL =
       NativeLibraries.downcall(GDK, "gdk_screen_get_rgba_visual", Signatures.POINTER_POINTER);
   private final MethodHandle DISPLAY_GET_DEFAULT =
@@ -238,6 +240,19 @@ public class Gdk {
     MemorySegment display = (MemorySegment) DISPLAY_GET_DEFAULT.invokeExact();
     long waylandType = (long) WAYLAND_DISPLAY_GET_TYPE.invokeExact();
     return Glib.typeCheckInstanceIsA(display, waylandType);
+  }
+
+  /**
+   * Gives {@code gdkWindow} an empty list of icons, which makes GDK delete {@code _NET_WM_ICON} so
+   * that the window manager shows its own default icon. GTK sets the property when a window gets an
+   * icon and never deletes it, so a window that goes back to no icon has to. On X11 only.
+   */
+  @SneakyThrows
+  public void clearWindowIcons(MemorySegment gdkWindow) {
+    if (!Gdk.isX11() || gdkWindow.equals(MemorySegment.NULL)) {
+      return;
+    }
+    WINDOW_SET_ICON_LIST.invokeExact(gdkWindow, MemorySegment.NULL);
   }
 
   /** Whether the default display is one of X11, where a client grabs keys itself. */

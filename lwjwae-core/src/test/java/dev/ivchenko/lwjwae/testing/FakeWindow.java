@@ -16,6 +16,7 @@ import dev.ivchenko.lwjwae.dialog.SaveDialogParameters;
 import dev.ivchenko.lwjwae.event.LoadEvent;
 import dev.ivchenko.lwjwae.menu.MenuCommands;
 import dev.ivchenko.lwjwae.menu.MenuRole;
+import dev.ivchenko.lwjwae.permission.PermissionKind;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
@@ -93,9 +94,40 @@ public class FakeWindow extends AbstractWindow {
     this.installBridge();
   }
 
+  /** Plays the engine: the user dropped {@code paths} at ({@code x}, {@code y}). */
+  public void dropFiles(List<Path> paths, int x, int y) {
+    this.filesDropped(paths, x, y);
+  }
+
+  /** What {@code presentZoom} was asked for, in order. */
+  public final List<Double> zooms = new CopyOnWriteArrayList<>();
+
+  @Override
+  protected void presentZoom(double factor) {
+    this.zooms.add(factor);
+  }
+
+  @Override
+  protected double currentZoom() {
+    return this.zooms.isEmpty() ? 1.0 : this.zooms.getLast();
+  }
+
+  /** What {@code presentIcon} was asked to show, in order; {@code null} is the default icon. */
+  public final List<byte[]> icons = new CopyOnWriteArrayList<>();
+
+  @Override
+  protected void presentIcon(byte[] png) {
+    this.icons.add(png);
+  }
+
   /** Plays the engine: the page asked for a new window of {@code url}. */
   public void requestNewWindow(String url) {
     this.newWindowRequested(url);
+  }
+
+  /** Plays the engine: the page asked for {@code kinds} at once, and the engine waits. */
+  public boolean requestPermission(String origin, PermissionKind... kinds) {
+    return this.permissionRequested(origin, kinds);
   }
 
   /** Exposes the protected hook, so that tests can play the part of the engine. */

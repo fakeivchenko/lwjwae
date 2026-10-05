@@ -114,6 +114,10 @@ public class Dbus {
           GLIB, "g_variant_new_array", Signatures.POINTER_POINTER_POINTER_LONG);
   private final MethodHandle VARIANT_GET_CHILD_VALUE =
       NativeLibraries.downcall(GLIB, "g_variant_get_child_value", Signatures.POINTER_POINTER_LONG);
+  private final MethodHandle VARIANT_GET_TYPE_STRING =
+      NativeLibraries.downcall(GLIB, "g_variant_get_type_string", Signatures.POINTER_POINTER);
+  private final MethodHandle VARIANT_GET_VARIANT =
+      NativeLibraries.downcall(GLIB, "g_variant_get_variant", Signatures.POINTER_POINTER);
   private final MethodHandle VARIANT_GET_UINT32 =
       NativeLibraries.downcall(GLIB, "g_variant_get_uint32", Signatures.INT_POINTER);
   private final MethodHandle VARIANT_GET_STRING =
@@ -522,6 +526,33 @@ public class Dbus {
     } finally {
       Dbus.unref(child);
     }
+  }
+
+  /**
+   * The {@code u} that the {@code v} at {@code index} of a tuple holds, however many {@code v} wrap
+   * it: the portal answers {@code Read} with one more than {@code ReadOne}.
+   */
+  @SneakyThrows
+  public int wrappedUint32At(MemorySegment tuple, int index) {
+    MemorySegment boxed = Dbus.child(tuple, index);
+    MemorySegment value = (MemorySegment) VARIANT_GET_VARIANT.invokeExact(boxed);
+    Dbus.unref(boxed);
+    while (Dbus.typeString(value).equals("v")) {
+      MemorySegment inner = (MemorySegment) VARIANT_GET_VARIANT.invokeExact(value);
+      Dbus.unref(value);
+      value = inner;
+    }
+    try {
+      return (int) VARIANT_GET_UINT32.invokeExact(value);
+    } finally {
+      Dbus.unref(value);
+    }
+  }
+
+  /** {@code g_variant_get_type_string}. */
+  @SneakyThrows
+  private String typeString(MemorySegment value) {
+    return NativeLibraries.string((MemorySegment) VARIANT_GET_TYPE_STRING.invokeExact(value));
   }
 
   /** The {@code i} at {@code index} of a tuple or an array. */

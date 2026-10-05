@@ -36,6 +36,7 @@ class GlibNativeImageMetadataTest extends NativeImageMetadataContractTest {
         FreedesktopNotifier.class,
         StatusNotifierTray.class,
         X11.class,
+        DesktopTheme.class,
         PortalShortcuts.class,
         Soup.class,
         WebKitCookies.class);

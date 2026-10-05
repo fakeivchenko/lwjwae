@@ -31,12 +31,17 @@ public class Gtk {
   /** {@code GTK_WIN_POS_CENTER}: the window opens in the middle of the screen. */
   public final int WIN_POS_CENTER = 1;
 
+  /** {@code GTK_WIN_POS_CENTER_ON_PARENT}: the window opens over the middle of its parent. */
+  public final int WIN_POS_CENTER_ON_PARENT = 4;
+
   private final MethodHandle CLIPBOARD_GET =
       NativeLibraries.downcall(GTK, "gtk_clipboard_get", Signatures.POINTER_POINTER);
   private final MethodHandle CLIPBOARD_SET_TEXT =
       NativeLibraries.downcall(GTK, "gtk_clipboard_set_text", Signatures.VOID_POINTER_POINTER_INT);
   private final MethodHandle CLIPBOARD_WAIT_FOR_TEXT =
       NativeLibraries.downcall(GTK, "gtk_clipboard_wait_for_text", Signatures.POINTER_POINTER);
+  private final MethodHandle SELECTION_DATA_GET_URIS =
+      NativeLibraries.downcall(GTK, "gtk_selection_data_get_uris", Signatures.POINTER_POINTER);
   private final MethodHandle CLIPBOARD_SET_IMAGE =
       NativeLibraries.downcall(GTK, "gtk_clipboard_set_image", Signatures.VOID_POINTER_POINTER);
   private final MethodHandle CLIPBOARD_WAIT_FOR_IMAGE =
@@ -50,6 +55,8 @@ public class Gtk {
   private final MethodHandle MAIN = NativeLibraries.downcall(GTK, "gtk_main", Signatures.VOID_VOID);
   private final MethodHandle WINDOW_NEW =
       NativeLibraries.downcall(GTK, "gtk_window_new", Signatures.POINTER_INT);
+  private final MethodHandle WINDOW_SET_ICON =
+      NativeLibraries.downcall(GTK, "gtk_window_set_icon", Signatures.VOID_POINTER_POINTER);
   private final MethodHandle WINDOW_SET_TITLE =
       NativeLibraries.downcall(GTK, "gtk_window_set_title", Signatures.VOID_POINTER_POINTER);
   private final MethodHandle WINDOW_GET_TITLE =
@@ -199,6 +206,20 @@ public class Gtk {
           GTK, "gtk_window_set_transient_for", Signatures.VOID_POINTER_POINTER);
   private final MethodHandle WINDOW_SET_MODAL =
       NativeLibraries.downcall(GTK, "gtk_window_set_modal", Signatures.VOID_POINTER_INT);
+  private final MethodHandle WINDOW_LIST_TOPLEVELS =
+      NativeLibraries.downcall(GTK, "gtk_window_list_toplevels", Signatures.POINTER_VOID);
+  private final MethodHandle WINDOW_GET_TRANSIENT_FOR =
+      NativeLibraries.downcall(GTK, "gtk_window_get_transient_for", Signatures.POINTER_POINTER);
+  private final MethodHandle WINDOW_GET_MODAL =
+      NativeLibraries.downcall(GTK, "gtk_window_get_modal", Signatures.INT_POINTER);
+  private final MethodHandle WINDOW_HAS_GROUP =
+      NativeLibraries.downcall(GTK, "gtk_window_has_group", Signatures.INT_POINTER);
+  private final MethodHandle WINDOW_GET_GROUP =
+      NativeLibraries.downcall(GTK, "gtk_window_get_group", Signatures.POINTER_POINTER);
+  private final MethodHandle WINDOW_GROUP_NEW =
+      NativeLibraries.downcall(GTK, "gtk_window_group_new", Signatures.POINTER_VOID);
+  private final MethodHandle WINDOW_GROUP_ADD_WINDOW =
+      NativeLibraries.downcall(GTK, "gtk_window_group_add_window", Signatures.VOID_POINTER_POINTER);
   private final MethodHandle WIDGET_SET_SENSITIVE =
       NativeLibraries.downcall(GTK, "gtk_widget_set_sensitive", Signatures.VOID_POINTER_INT);
 
@@ -295,6 +316,25 @@ public class Gtk {
   @SneakyThrows
   public MemorySegment windowNew(int type) {
     return (MemorySegment) WINDOW_NEW.invokeExact(type);
+  }
+
+  /**
+   * Calls {@code gtk_window_set_icon}: the window keeps its own reference to {@code pixbuf}. {@code
+   * NULL} gives the window the default icon back.
+   */
+  @SneakyThrows
+  public void windowSetIcon(MemorySegment window, MemorySegment pixbuf) {
+    WINDOW_SET_ICON.invokeExact(window, pixbuf);
+  }
+
+  /**
+   * Calls {@code gtk_selection_data_get_uris}: the URIs of a drop that carries a {@code
+   * text/uri-list}, or none for any other kind.
+   */
+  @SneakyThrows
+  public List<String> selectionDataUris(MemorySegment selectionData) {
+    MemorySegment vector = (MemorySegment) SELECTION_DATA_GET_URIS.invokeExact(selectionData);
+    return Glib.takeStringVector(vector);
   }
 
   /** Calls {@code gtk_window_set_title}. {@code null} clears the title. */
@@ -805,6 +845,54 @@ public class Gtk {
   @SneakyThrows
   public void windowSetModal(MemorySegment window, boolean modal) {
     WINDOW_SET_MODAL.invokeExact(window, modal ? 1 : 0);
+  }
+
+  /** Calls {@code gtk_window_get_transient_for}: the parent, or {@code NULL}. */
+  @SneakyThrows
+  public MemorySegment windowTransientFor(MemorySegment window) {
+    return (MemorySegment) WINDOW_GET_TRANSIENT_FOR.invokeExact(window);
+  }
+
+  /**
+   * Whether a modal window that is transient for {@code parent} is up, and so keeps the user from
+   * it.
+   */
+  @SneakyThrows
+  public boolean hasModalChild(MemorySegment parent) {
+    for (MemorySegment window :
+        Glib.takeListItems((MemorySegment) WINDOW_LIST_TOPLEVELS.invokeExact())) {
+      if (Gtk.windowTransientFor(window).equals(parent)
+          && Gtk.windowIsModal(window)
+          && Gtk.isWidgetVisible(window)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** Calls {@code gtk_window_get_modal}. */
+  @SneakyThrows
+  public boolean windowIsModal(MemorySegment window) {
+    return (int) WINDOW_GET_MODAL.invokeExact(window) != 0;
+  }
+
+  /**
+   * Puts {@code child} into the window group of {@code parent}, which gets a group of its own first
+   * if it's still in the default one: a modal window keeps the user from the windows of its group
+   * alone, and the default group holds every window of the process.
+   */
+  @SneakyThrows
+  public void windowJoinGroupOf(MemorySegment child, MemorySegment parent) {
+    MemorySegment group;
+    if ((int) WINDOW_HAS_GROUP.invokeExact(parent) != 0) {
+      group = (MemorySegment) WINDOW_GET_GROUP.invokeExact(parent);
+    } else {
+      group = (MemorySegment) WINDOW_GROUP_NEW.invokeExact();
+      WINDOW_GROUP_ADD_WINDOW.invokeExact(group, parent);
+      // The windows hold the group from now on.
+      Glib.unref(group);
+    }
+    WINDOW_GROUP_ADD_WINDOW.invokeExact(group, child);
   }
 
   /** Calls {@code gtk_widget_set_sensitive}: an insensitive widget is grayed out. */

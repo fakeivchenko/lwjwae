@@ -8,6 +8,7 @@ import dev.ivchenko.lwjwae.WindowParameters;
 import dev.ivchenko.lwjwae.clipboard.Clipboard;
 import dev.ivchenko.lwjwae.cookie.Cookies;
 import dev.ivchenko.lwjwae.event.EventSubscription;
+import dev.ivchenko.lwjwae.event.OpenEvent;
 import dev.ivchenko.lwjwae.macos.binding.AppKit;
 import dev.ivchenko.lwjwae.macos.binding.WebKit;
 import dev.ivchenko.lwjwae.notification.Notification;
@@ -32,6 +33,7 @@ import java.util.function.Consumer;
 public class MacApplication extends AbstractApplication {
   private volatile boolean runningApplication;
   private MacNotifier notifier;
+  private volatile MacTheme themeWatcher;
 
   /** Creates an application with {@link ApplicationParameters#createDefault()}. */
   public MacApplication() {
@@ -45,7 +47,17 @@ public class MacApplication extends AbstractApplication {
   public MacApplication(ApplicationParameters parameters) {
     super(MacDispatcher.instance(), parameters);
     MacMainMenu.register(this);
-    this.dispatcher().run(() -> MacMainMenu.install(parameters.name()));
+    this.dispatcher()
+        .run(
+            () -> {
+              MacMainMenu.install(parameters.name());
+              this.themeWatcher = new MacTheme(this.dispatcher(), this::themeChanged);
+            });
+  }
+
+  /** AppKit asks the application to open links or files, see {@link MacMainMenu}. */
+  void openRequestedBySystem(OpenEvent request) {
+    this.openRequested(request);
   }
 
   @Override
@@ -115,6 +127,10 @@ public class MacApplication extends AbstractApplication {
   @Override
   protected void onClose() {
     MacMainMenu.unregister(this);
+    MacTheme watcher = this.themeWatcher;
+    if (watcher != null) {
+      this.dispatcher().run(watcher::close);
+    }
     MacNotifier current;
     synchronized (this) {
       current = this.notifier;

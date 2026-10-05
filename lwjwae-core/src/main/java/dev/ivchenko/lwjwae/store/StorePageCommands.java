@@ -38,10 +38,17 @@ public class StorePageCommands {
               StorePageCommands.forPage(
                   StorePageCommands.query(store, command.get("sql"), command.get("params"))));
       case "execute" -> {
-        int changes = StorePageCommands.execute(store, command.get("sql"), command.get("params"));
-        Map<String, Object> answer = new LinkedHashMap<>();
-        answer.put("changes", changes);
-        answer.put("lastInsertRowId", store.lastInsertRowId());
+        // Under one hold of the store: an insert of another thread in between would change the ID.
+        Map<String, Object> answer =
+            store.exclusively(
+                _ -> {
+                  Map<String, Object> fields = new LinkedHashMap<>();
+                  fields.put(
+                      "changes",
+                      StorePageCommands.execute(store, command.get("sql"), command.get("params")));
+                  fields.put("lastInsertRowId", store.lastInsertRowId());
+                  return fields;
+                });
         yield JsonUtil.write(answer);
       }
       case "script" -> {

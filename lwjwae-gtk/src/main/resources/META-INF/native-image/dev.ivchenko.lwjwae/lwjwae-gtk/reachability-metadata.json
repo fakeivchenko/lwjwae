@@ -4,6 +4,30 @@
       "type": "dev.ivchenko.lwjwae.gtk.GtkWindow",
       "methods": [
         {
+          "name": "onDragMotion",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "int",
+            "int",
+            "int",
+            "java.lang.foreign.MemorySegment"
+          ]
+        },
+        {
+          "name": "onDragDataReceived",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "int",
+            "int",
+            "java.lang.foreign.MemorySegment",
+            "int",
+            "int",
+            "java.lang.foreign.MemorySegment"
+          ]
+        },
+        {
           "name": "onBridgeMessage",
           "parameterTypes": [
             "java.lang.foreign.MemorySegment",
@@ -13,6 +37,14 @@
         },
         {
           "name": "onCreate",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
+        },
+        {
+          "name": "onPermissionRequest",
           "parameterTypes": [
             "java.lang.foreign.MemorySegment",
             "java.lang.foreign.MemorySegment",
@@ -154,6 +186,19 @@
   ],
   "foreign": {
     "downcalls": [
+      {
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "jdouble"
+        ]
+      },
+      {
+        "returnType": "jdouble",
+        "parameterTypes": [
+          "void*"
+        ]
+      },
       {
         "returnType": "void*",
         "parameterTypes": []
@@ -357,6 +402,34 @@
     "directUpcalls": [
       {
         "class": "dev.ivchenko.lwjwae.gtk.GtkWindow",
+        "method": "onDragMotion",
+        "returnType": "jint",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "jint",
+          "jint",
+          "jint",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.gtk.GtkWindow",
+        "method": "onDragDataReceived",
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "jint",
+          "jint",
+          "void*",
+          "jint",
+          "jint",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.gtk.GtkWindow",
         "method": "onBridgeMessage",
         "returnType": "void",
         "parameterTypes": [
@@ -480,6 +553,16 @@
         "class": "dev.ivchenko.lwjwae.gtk.GtkWindow",
         "method": "onCreate",
         "returnType": "void*",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.gtk.GtkWindow",
+        "method": "onPermissionRequest",
+        "returnType": "jint",
         "parameterTypes": [
           "void*",
           "void*",

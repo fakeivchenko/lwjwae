@@ -209,9 +209,9 @@ fields (`// --- shapes ---`); it never groups methods.
 - The upstream suppression file is optional and absent; the project has two, listed above. Each
   entry has a comment with the reason.
 - `IllegalTokenText`, which rejects a Unicode escape of a printable character, is off for
-  `BridgeProtocol`, `ScriptUtil`, and their tests. They escape U+001F, U+2028, and U+2029, which
-  aren't printable, and the escape is the readable form. The upstream rule can't tell the
-  difference, and the files are few.
+  `BridgeProtocol`, `JsonUtil`, `ScriptUtil`, and their tests. They escape U+001F, U+2028, and
+  U+2029, which aren't printable, and the escape is the readable form. The upstream rule can't
+  tell the difference, and the files are few.
 
 ## What isn't in Google Java Style at all
 

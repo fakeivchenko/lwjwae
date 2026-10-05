@@ -12,6 +12,7 @@ import dev.ivchenko.lwjwae.notification.Notification;
 import dev.ivchenko.lwjwae.notification.NotificationHandle;
 import dev.ivchenko.lwjwae.shortcut.Shortcut;
 import dev.ivchenko.lwjwae.taskbar.TaskbarProgress;
+import dev.ivchenko.lwjwae.theme.SystemTheme;
 import dev.ivchenko.lwjwae.tray.Tray;
 import dev.ivchenko.lwjwae.tray.TrayIcon;
 import java.util.List;
@@ -43,6 +44,11 @@ public class FakeApplication extends AbstractApplication {
   private static FakeUiDispatcher started(FakeUiDispatcher dispatcher) {
     dispatcher.start();
     return dispatcher;
+  }
+
+  /** Plays the desktop: the user switched to {@code theme}. */
+  public void changeTheme(SystemTheme theme) {
+    this.themeChanged(theme);
   }
 
   /** Opens a window and returns it as the fake, so a test needs no cast. */

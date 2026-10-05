@@ -169,6 +169,9 @@ fun Test.configureWindowTest() {
     testClassesDirs = test.output.classesDirs
     classpath = test.runtimeClasspath
     systemProperty("lwjwae.requireDisplay", System.getProperty("lwjwae.requireDisplay", "false"))
+    // A fake camera and microphone, so that the tests see a permission request where none exist.
+    systemProperty("lwjwae.mockCaptureDevices", "true")
+    environment("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", "--use-fake-device-for-media-stream")
     systemProperty("lwjwae.screenshots", System.getProperty("lwjwae.screenshots", "false"))
     systemProperty("lwjwae.screenshotsDir", project.layout.buildDirectory.dir("screenshots").get().asFile.absolutePath)
     outputs.cacheIf { false }

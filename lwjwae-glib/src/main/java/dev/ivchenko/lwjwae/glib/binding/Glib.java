@@ -73,6 +73,12 @@ public class Glib {
       NativeLibraries.downcall(GOBJECT, "g_value_unset", Signatures.VOID_POINTER);
   private final MethodHandle VALUE_SET_STRING =
       NativeLibraries.downcall(GOBJECT, "g_value_set_string", Signatures.VOID_POINTER_POINTER);
+  private final MethodHandle STRFREEV =
+      NativeLibraries.downcall(GLIB, "g_strfreev", Signatures.VOID_POINTER);
+  private final MethodHandle VALUE_GET_BOOLEAN =
+      NativeLibraries.downcall(GOBJECT, "g_value_get_boolean", Signatures.INT_POINTER);
+  private final MethodHandle VALUE_SET_BOOLEAN =
+      NativeLibraries.downcall(GOBJECT, "g_value_set_boolean", Signatures.VOID_POINTER_INT);
   private final MethodHandle VALUE_SET_ENUM =
       NativeLibraries.downcall(GOBJECT, "g_value_set_enum", Signatures.VOID_POINTER_INT);
   private final MethodHandle OBJECT_SET_PROPERTY =
@@ -83,6 +89,8 @@ public class Glib {
           GOBJECT, "g_object_new_with_properties", Signatures.POINTER_LONG_INT_POINTER_POINTER);
   private final MethodHandle DGETTEXT =
       NativeLibraries.downcall(GLIB, "g_dgettext", Signatures.POINTER_POINTER_POINTER);
+  private final MethodHandle LIST_FREE =
+      NativeLibraries.downcall(GLIB, "g_list_free", Signatures.VOID_POINTER);
   private final MethodHandle SLIST_FREE =
       NativeLibraries.downcall(GLIB, "g_slist_free", Signatures.VOID_POINTER);
   private final MethodHandle FILE_NEW_FOR_PATH =
@@ -191,6 +199,23 @@ public class Glib {
     }
   }
 
+  /**
+   * The items of a {@code GList} whose list the caller owns and whose items it doesn't, as {@code
+   * gtk_window_list_toplevels} returns: the list is freed, the items stay.
+   */
+  @SneakyThrows
+  public List<MemorySegment> takeListItems(MemorySegment list) {
+    List<MemorySegment> items = new ArrayList<>();
+    MemorySegment node = list;
+    while (!node.equals(MemorySegment.NULL)) {
+      MemorySegment cell = node.reinterpret(3 * Signatures.C_POINTER.byteSize());
+      items.add(cell.get(Signatures.C_POINTER, 0));
+      node = cell.get(Signatures.C_POINTER, Signatures.C_POINTER.byteSize());
+    }
+    LIST_FREE.invokeExact(list);
+    return items;
+  }
+
   /** Calls {@code g_free}. */
   @SneakyThrows
   public void free(MemorySegment pointer) {
@@ -229,6 +254,61 @@ public class Glib {
       try {
         OBJECT_GET_PROPERTY.invokeExact(object, arena.allocateFrom(name), value);
         return NativeLibraries.string((MemorySegment) VALUE_GET_STRING.invokeExact(value));
+      } finally {
+        VALUE_UNSET.invokeExact(value);
+      }
+    }
+  }
+
+  /**
+   * Reads a {@code NULL}-terminated {@code gchar**}, such as the URIs of a drop, and frees it with
+   * {@code g_strfreev}. A {@code NULL} vector is empty.
+   */
+  @SneakyThrows
+  public List<String> takeStringVector(MemorySegment vector) {
+    List<String> strings = new ArrayList<>();
+    if (vector.equals(MemorySegment.NULL)) {
+      return strings;
+    }
+    MemorySegment array = vector.reinterpret(Long.MAX_VALUE);
+    for (int index = 0; ; index++) {
+      MemorySegment item = array.getAtIndex(Signatures.C_POINTER, index);
+      if (item.equals(MemorySegment.NULL)) {
+        break;
+      }
+      strings.add(NativeLibraries.string(item));
+    }
+    STRFREEV.invokeExact(vector);
+    return strings;
+  }
+
+  /** {@code G_TYPE_BOOLEAN}: fundamental type 5, shifted as GObject stores fundamentals. */
+  private final long TYPE_BOOLEAN = 5L << 2;
+
+  /** Reads a boolean property of a GObject, the way {@link #stringProperty} reads a string. */
+  @SneakyThrows
+  public boolean booleanProperty(MemorySegment object, String name) {
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment value = arena.allocate(VALUE_SIZE, 8);
+      MemorySegment _ = (MemorySegment) VALUE_INIT.invokeExact(value, TYPE_BOOLEAN);
+      try {
+        OBJECT_GET_PROPERTY.invokeExact(object, arena.allocateFrom(name), value);
+        return (int) VALUE_GET_BOOLEAN.invokeExact(value) != 0;
+      } finally {
+        VALUE_UNSET.invokeExact(value);
+      }
+    }
+  }
+
+  /** Sets a boolean property through {@code g_object_set_property}. */
+  @SneakyThrows
+  public void setBooleanProperty(MemorySegment object, String name, boolean flag) {
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment value = arena.allocate(VALUE_SIZE, 8);
+      MemorySegment _ = (MemorySegment) VALUE_INIT.invokeExact(value, TYPE_BOOLEAN);
+      try {
+        VALUE_SET_BOOLEAN.invokeExact(value, flag ? 1 : 0);
+        OBJECT_SET_PROPERTY.invokeExact(object, arena.allocateFrom(name), value);
       } finally {
         VALUE_UNSET.invokeExact(value);
       }
@@ -306,6 +386,29 @@ public class Glib {
     }
     SLIST_FREE.invokeExact(list);
     return strings;
+  }
+
+  /**
+   * The local paths of a {@code GSList} of {@code GFile} whose list the caller owns and whose items
+   * it doesn't, as {@code gdk_file_list_get_files} returns: the list is freed, the items stay.
+   * Items without a local path are left out.
+   */
+  @SneakyThrows
+  public List<String> takeFileListPaths(MemorySegment list) {
+    List<String> paths = new ArrayList<>();
+    MemorySegment node = list;
+    while (!node.equals(MemorySegment.NULL)) {
+      MemorySegment cell = node.reinterpret(2 * Signatures.C_POINTER.byteSize());
+      String path =
+          Glib.takeString(
+              (MemorySegment) FILE_GET_PATH.invokeExact(cell.get(Signatures.C_POINTER, 0)));
+      if (path != null) {
+        paths.add(path);
+      }
+      node = cell.get(Signatures.C_POINTER, Signatures.C_POINTER.byteSize());
+    }
+    SLIST_FREE.invokeExact(list);
+    return paths;
   }
 
   /** Calls {@code g_file_new_for_path}. The caller owns the {@code GFile}. */

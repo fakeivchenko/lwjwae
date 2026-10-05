@@ -178,17 +178,33 @@ public final class Store implements AutoCloseable {
             this.database.execute(outermost ? "COMMIT" : "RELEASE " + savepoint, List.of());
             return result;
           } catch (RuntimeException | Error e) {
-            if (outermost) {
-              this.database.execute("ROLLBACK", List.of());
-            } else {
-              this.database.execute("ROLLBACK TO " + savepoint, List.of());
-              this.database.execute("RELEASE " + savepoint, List.of());
+            // A rollback that fails, because SQLite already rolled back after a full disk, say,
+            // must not hide the failure that started it.
+            try {
+              if (outermost) {
+                this.database.execute("ROLLBACK", List.of());
+              } else {
+                this.database.execute("ROLLBACK TO " + savepoint, List.of());
+                this.database.execute("RELEASE " + savepoint, List.of());
+              }
+            } catch (RuntimeException rollback) {
+              e.addSuppressed(rollback);
             }
             throw e;
           } finally {
             this.transactionDepth--;
           }
         });
+  }
+
+  /**
+   * Runs {@code work} while no other call of the store runs, so that what it reads between its own
+   * calls, such as {@link #lastInsertRowId()} after an insert, is what those calls left. Unlike
+   * {@link #inTransaction}, it opens no transaction, so a statement that SQLite refuses inside one,
+   * such as {@code VACUUM}, still runs.
+   */
+  <T> T exclusively(Function<Store, T> work) {
+    return this.locked(() -> work.apply(this));
   }
 
   /** Closes the file. The store can't be used afterwards. Idempotent. */

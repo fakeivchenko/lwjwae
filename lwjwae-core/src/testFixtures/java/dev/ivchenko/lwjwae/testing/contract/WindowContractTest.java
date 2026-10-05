@@ -18,6 +18,7 @@ import dev.ivchenko.lwjwae.dialog.MessageLevel;
 import dev.ivchenko.lwjwae.dialog.OpenDialogParameters;
 import dev.ivchenko.lwjwae.dialog.SaveDialogParameters;
 import dev.ivchenko.lwjwae.event.EventSubscription;
+import dev.ivchenko.lwjwae.event.FileDropEvent;
 import dev.ivchenko.lwjwae.event.LoadEvent;
 import dev.ivchenko.lwjwae.event.SecondInstanceEvent;
 import dev.ivchenko.lwjwae.event.WindowEvent;
@@ -25,6 +26,9 @@ import dev.ivchenko.lwjwae.event.WindowEventType;
 import dev.ivchenko.lwjwae.exception.ShortcutUnavailableException;
 import dev.ivchenko.lwjwae.menu.MenuItem;
 import dev.ivchenko.lwjwae.menu.MenuRole;
+import dev.ivchenko.lwjwae.permission.PermissionDecision;
+import dev.ivchenko.lwjwae.permission.PermissionKind;
+import dev.ivchenko.lwjwae.permission.PermissionRequest;
 import dev.ivchenko.lwjwae.shortcut.Shortcut;
 import dev.ivchenko.lwjwae.taskbar.TaskbarProgress;
 import dev.ivchenko.lwjwae.testing.Icons;
@@ -32,11 +36,13 @@ import dev.ivchenko.lwjwae.testing.Loads;
 import dev.ivchenko.lwjwae.testing.LocalPages;
 import dev.ivchenko.lwjwae.testing.Screenshots;
 import dev.ivchenko.lwjwae.testing.Tags;
+import dev.ivchenko.lwjwae.theme.SystemTheme;
 import dev.ivchenko.lwjwae.tray.Tray;
 import dev.ivchenko.lwjwae.tray.TrayIcon;
 import dev.ivchenko.lwjwae.util.UserAgentUtil;
 import java.awt.Color;
 import java.nio.ByteBuffer;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
@@ -48,6 +54,7 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Assumptions;
@@ -263,6 +270,33 @@ public abstract class WindowContractTest extends DisplayContractTest {
     return false;
   }
 
+  /**
+   * Switches the desktop to {@code theme}, the way the user does, and returns once the switch is
+   * made; the test then waits for the library to hear of it. A backend that can't switch the theme
+   * of the machine it runs on leaves the default, and the test is skipped.
+   *
+   * @return Whether the desktop was switched.
+   */
+  protected boolean switchSystemTheme(SystemTheme theme) throws Exception {
+    return false;
+  }
+
+  /**
+   * Drags {@code files} from outside the process onto the window titled {@code title}, the way a
+   * user drags them from a file manager, and returns once they are dropped.
+   *
+   * @return Whether the files were dropped; a backend that can't leaves the default, and the test
+   *     is skipped.
+   */
+  protected boolean dropFiles(String title, List<Path> files) throws Exception {
+    return false;
+  }
+
+  /** Whether the engine of the web view takes {@code prefers-color-scheme} from the desktop. */
+  protected boolean engineFollowsTheDesktop() {
+    return false;
+  }
+
   /** Whether the menu bar is part of the window, and takes room from the page. Not on macOS. */
   protected boolean hasMenuBarInWindow() {
     return true;
@@ -276,6 +310,25 @@ public abstract class WindowContractTest extends DisplayContractTest {
    */
   protected boolean pickFirstEntryOfOpenMenu() throws Exception {
     return false;
+  }
+
+  /**
+   * Whether the native window of {@code child} belongs to the one of {@code parent}, as the toolkit
+   * says: owned, transient, or a child window.
+   *
+   * @return The answer, or {@code null} when the backend test can't tell, which skips the check.
+   */
+  protected Boolean isOwnedBy(Window child, Window parent) {
+    return null;
+  }
+
+  /**
+   * Whether the toolkit keeps the user from {@code parent} now, because a modal window of it is up.
+   *
+   * @return The answer, or {@code null} when the backend test can't tell, which skips the check.
+   */
+  protected Boolean isBlockedByModal(Window parent) {
+    return null;
   }
 
   /** Whether the toolkit can keep a window above the others. GTK 4 can't. */
@@ -617,6 +670,211 @@ public abstract class WindowContractTest extends DisplayContractTest {
 
       window.close();
       Assertions.assertTrue(window.isClosed(), "Java closes a window without a close button");
+    }
+  }
+
+  @Test
+  void pageAsksForTheCameraAndTheHandlerDecides() throws Exception {
+    try (Application application = Application.create()) {
+      Window window =
+          application.open(WindowParameters.builder().title("lwjwae :: permissions").build());
+      BlockingQueue<PermissionRequest> asked = new LinkedBlockingQueue<>();
+      AtomicReference<PermissionDecision> answer = new AtomicReference<>(PermissionDecision.DENY);
+      window.permissionHandler(
+          request -> {
+            asked.add(request);
+            return answer.get();
+          });
+      final var loaded = Loads.expectFinished(window);
+      window.loadResource("test-app/index.html");
+      window.show();
+      loaded.get(30, TimeUnit.SECONDS);
+
+      String ask =
+          "navigator.mediaDevices.getUserMedia({ video: true })"
+              + ".then(() => window.__media = 'granted', e => window.__media = e.name); undefined;";
+      Loads.eval(window, ask);
+      PermissionRequest first = asked.poll(10, TimeUnit.SECONDS);
+      if (first == null) {
+        String failure = Loads.awaitValue(window, "window.__media");
+        Assumptions.assumeFalse(
+            failure.equals("NotFoundError") || failure.equals("OverconstrainedError"),
+            "no capture device here, so the engine fails before it asks: " + failure);
+        Assertions.fail("the handler is never asked; the page saw " + failure);
+      }
+      Assertions.assertEquals(PermissionKind.CAMERA, first.kind());
+      Assertions.assertEquals(
+          "NotAllowedError",
+          Loads.awaitValue(window, "window.__media"),
+          "a denial fails the call as a user's no does");
+
+      // No device behind the permission here, so a grant ends in "no device", never in a denial.
+      answer.set(PermissionDecision.GRANT);
+      Loads.eval(window, "window.__media = undefined; " + ask);
+      Assertions.assertEquals(PermissionKind.CAMERA, asked.poll(10, TimeUnit.SECONDS).kind());
+      Assertions.assertNotEquals(
+          "NotAllowedError", Loads.awaitValue(window, "window.__media"), "a grant passes");
+    }
+  }
+
+  @Test
+  void theThemeOfTheDesktopReachesJavaAndThePage() throws Exception {
+    try (Application application = Application.create()) {
+      Window window = application.open(WindowParameters.builder().title("lwjwae :: theme").build());
+      final var loaded = Loads.expectFinished(window);
+      window.loadResource("test-app/index.html");
+      window.show();
+      loaded.get(30, TimeUnit.SECONDS);
+
+      SystemTheme original = application.theme();
+      Loads.eval(
+          window,
+          "lwjwae.theme.current().then((t) => window.__current = t);"
+              + " lwjwae.theme.listen((t) => window.__heard = t); undefined;");
+      Assertions.assertEquals(
+          original.pageName(),
+          Loads.awaitValue(window, "window.__current"),
+          "the page reads the theme that Java reads");
+
+      SystemTheme other = original == SystemTheme.DARK ? SystemTheme.LIGHT : SystemTheme.DARK;
+      BlockingQueue<SystemTheme> heard = new LinkedBlockingQueue<>();
+      application.onThemeChange(heard::add);
+      boolean switched = this.switchSystemTheme(other);
+      try {
+        Assumptions.assumeTrue(switched, "this machine can't switch its theme in a test");
+        Assertions.assertEquals(other, heard.poll(10, TimeUnit.SECONDS), "Java hears the switch");
+        Assertions.assertEquals(other, application.theme());
+        Assertions.assertEquals(
+            other.pageName(), Loads.awaitValue(window, "window.__heard"), "and so does the page");
+        Loads.eval(window, "lwjwae.theme.current().then((t) => window.__after = t); undefined;");
+        Assertions.assertEquals(other.pageName(), Loads.awaitValue(window, "window.__after"));
+        if (this.engineFollowsTheDesktop()) {
+          WindowContractTest.awaitTrue(
+              () -> {
+                try {
+                  return Loads.eval(
+                          window, "String(matchMedia('(prefers-color-scheme: dark)').matches)")
+                      .equals(String.valueOf(other == SystemTheme.DARK));
+                } catch (Exception e) {
+                  throw new IllegalStateException(e);
+                }
+              },
+              "the engine matches the desktop");
+        }
+      } finally {
+        if (switched) {
+          this.switchSystemTheme(original);
+        }
+      }
+    }
+  }
+
+  @Test
+  void windowTakesItsIconFromTheParametersAndFromJava() throws Exception {
+    try (Application application = Application.create()) {
+      Window window =
+          application.open(
+              WindowParameters.builder()
+                  .title("lwjwae :: icon")
+                  .icon(Icons.circle(256, Color.ORANGE))
+                  .build());
+      window.show();
+      WindowContractTest.awaitTrue(window::isVisible, "the window must show");
+      Screenshots.capture("window-icon");
+
+      window.icon(Icons.circle(64, Color.GREEN));
+      window.icon((byte[]) null);
+      window.icon(Icons.circle(32, Color.BLUE));
+      Assertions.assertThrows(
+          IllegalArgumentException.class, () -> window.icon("not a PNG".getBytes()));
+      Assertions.assertTrue(window.isVisible(), "the window lives through its icons");
+    }
+  }
+
+  @Test
+  void pageZoomScalesThePageAndStaysThroughNavigations() throws Exception {
+    try (LocalPages pages = new LocalPages();
+        Application application = Application.create()) {
+      Window window =
+          application.open(
+              WindowParameters.builder().title("lwjwae :: zoom").size(800, 600).build());
+      final var loaded = Loads.expectFinished(window);
+      window.loadResource("test-app/index.html");
+      window.show();
+      loaded.get(30, TimeUnit.SECONDS);
+      Assertions.assertEquals(1.0, window.zoom(), 0.001);
+      int width = WindowContractTest.viewportWidth(window);
+
+      window.zoom(2.0);
+      Assertions.assertEquals(2.0, window.zoom(), 0.001);
+      WindowContractTest.awaitTrue(
+          () -> Math.abs(WindowContractTest.viewportWidth(window) - width / 2) <= 2,
+          "at 200% the page has half the width in CSS pixels");
+
+      // Another page, and another origin: the zoom belongs to the window, not to the page.
+      String url = pages.page("/zoom.html", "<!DOCTYPE html><html><body>zoom</body></html>");
+      final var next = Loads.expectFinished(window);
+      window.navigate(url);
+      next.get(30, TimeUnit.SECONDS);
+      Assertions.assertEquals(2.0, window.zoom(), 0.001);
+      WindowContractTest.awaitTrue(
+          () -> Math.abs(WindowContractTest.viewportWidth(window) - width / 2) <= 2,
+          "the zoom stays through the navigation");
+
+      window.zoom(0.5);
+      WindowContractTest.awaitTrue(
+          () -> Math.abs(WindowContractTest.viewportWidth(window) - width * 2) <= 4,
+          "at 50% the page has twice the width");
+      window.zoom(1.0);
+      WindowContractTest.awaitTrue(
+          () -> Math.abs(WindowContractTest.viewportWidth(window) - width) <= 2, "and back");
+      Assertions.assertThrows(IllegalArgumentException.class, () -> window.zoom(10));
+    }
+  }
+
+  private static int viewportWidth(Window window) {
+    try {
+      return Integer.parseInt(Loads.eval(window, "String(window.innerWidth)"));
+    } catch (Exception e) {
+      throw new IllegalStateException(e);
+    }
+  }
+
+  @Test
+  void filesDroppedOnThePageReachJavaAndThePageWithTheirPaths(@TempDir Path directory)
+      throws Exception {
+    Path first = Files.writeString(directory.resolve("a file with spaces.txt"), "one");
+    Path second = Files.writeString(directory.resolve("odd #1 & 100% name.txt"), "two");
+    try (Application application = Application.create()) {
+      Window window =
+          application.open(
+              WindowParameters.builder().title("lwjwae :: drop").size(600, 400).build());
+      final var loaded = Loads.expectFinished(window);
+      window.loadResource("test-app/index.html");
+      window.show();
+      loaded.get(30, TimeUnit.SECONDS);
+      BlockingQueue<FileDropEvent> dropped = new LinkedBlockingQueue<>();
+      window.onFileDrop(dropped::add);
+      Loads.eval(
+          window,
+          "lwjwae.files.listen((drop) => window.__dropped = drop.paths.join('|')); undefined;");
+      final String page = window.url();
+      WindowContractTest.awaitTrue(window::isVisible, "the window must show");
+      Thread.sleep(500);
+
+      boolean done = this.dropFiles("lwjwae :: drop", List.of(first, second));
+      Assumptions.assumeTrue(done, "this machine can't drag files in a test");
+
+      FileDropEvent event = dropped.poll(15, TimeUnit.SECONDS);
+      Assertions.assertNotNull(event, "Java hears the drop");
+      Assertions.assertEquals(List.of(first, second), event.paths());
+      Assertions.assertTrue(
+          event.x() > 0 && event.y() > 0 && event.x() < 600 && event.y() < 400, "inside the page");
+      Assertions.assertEquals(
+          first + "|" + second,
+          Loads.awaitValue(window, "window.__dropped"),
+          "and so does the page");
+      Assertions.assertEquals(page, window.url(), "the window doesn't open the file");
     }
   }
 
@@ -1001,6 +1259,65 @@ public abstract class WindowContractTest extends DisplayContractTest {
       }
     }
     throw new AssertionError("No " + type + " event");
+  }
+
+  @Test
+  void childWindowBelongsToItsParentAndClosesWithIt() throws Exception {
+    try (Application application = Application.create()) {
+      Window parent =
+          application.open(WindowParameters.builder().title("lwjwae :: parent").build());
+      parent.show();
+      Window child =
+          application.open(
+              WindowParameters.builder()
+                  .title("lwjwae :: child")
+                  .size(320, 240)
+                  .parent(parent)
+                  .build());
+      child.show();
+      WindowContractTest.awaitTrue(child::isVisible, "the child must show");
+      Assertions.assertEquals(Optional.of(parent), child.parent());
+      Boolean owned = this.isOwnedBy(child, parent);
+      if (owned != null) {
+        Assertions.assertTrue(owned, "the toolkit knows the child belongs to its parent");
+      }
+
+      parent.close();
+
+      WindowContractTest.awaitTrue(child::isClosed, "a child closes with its parent");
+    }
+  }
+
+  @Test
+  void modalWindowKeepsTheUserFromItsParentWhileItIsUp() throws Exception {
+    try (Application application = Application.create()) {
+      Window parent =
+          application.open(WindowParameters.builder().title("lwjwae :: parent").build());
+      parent.show();
+      WindowContractTest.awaitTrue(parent::isVisible, "the parent must show");
+      Window modal =
+          application.open(
+              WindowParameters.builder()
+                  .title("lwjwae :: modal")
+                  .size(320, 240)
+                  .parent(parent)
+                  .modal(true)
+                  .build());
+      modal.show();
+      WindowContractTest.awaitTrue(modal::isVisible, "the modal window must show");
+      Boolean blocked = this.isBlockedByModal(parent);
+      Assumptions.assumeTrue(blocked != null, "this backend test can't tell a blocked window");
+      WindowContractTest.awaitTrue(
+          () -> Boolean.TRUE.equals(this.isBlockedByModal(parent)),
+          "the modal window keeps the user from its parent");
+
+      modal.close();
+
+      WindowContractTest.awaitTrue(
+          () -> Boolean.FALSE.equals(this.isBlockedByModal(parent)),
+          "the parent takes the user again once the modal window is gone");
+      Assertions.assertFalse(parent.isClosed());
+    }
   }
 
   @Test

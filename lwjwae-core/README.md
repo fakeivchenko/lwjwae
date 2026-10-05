@@ -85,7 +85,30 @@ window, releases every thread blocked in `run()`, and refuses every `open` from 
 A page opens and closes windows too. `window.lwjwae.open(options)` takes the same options as
 `WindowParameters` (`title`, `width`, `height`, `x`, `y`, `centered`, `url`, `resource`,
 `decorated`, `closable`, `minimizable`, `maximizable`, `transparent`), shows
-the window, and resolves to its ID. `window.lwjwae.close()` closes the window of the page.
+the window, and resolves to its ID. With `child: true` or `modal: true`, the new window belongs to
+the window of the page. `window.lwjwae.close()` closes the window of the page.
+
+### Child and modal windows
+
+A window can belong to another one, the way a settings window belongs to the main window:
+
+```java
+Window settings =
+    application.open(
+        WindowParameters.builder().title("Settings").size(480, 360).parent(main).modal(true).build());
+settings.loadResource("app/settings.html");
+settings.show();
+```
+
+A child window stays above its parent, opens centered over it unless it has a position, and closes
+with it; `window.parent()` tells which window it belongs to. A modal one also keeps the user from
+its parent while it's shown, as a dialog does, and other windows of the application stay usable.
+
+| Platform | Child window | Modal window |
+|---|---|---|
+| Windows | An owned window: it minimizes with its owner and goes with it. | `EnableWindow` turns the owner off while the window is shown. |
+| macOS | A child window of AppKit, which moves with its parent. | A sheet, which slides out of the title bar of the parent and has no title bar of its own. |
+| GTK 3 and 4 | A transient window, which the window manager keeps above its parent. | A modal window in a window group of the family, so it blocks its parent and leaves the other windows alone. |
 
 ### Placing the window
 
@@ -347,6 +370,81 @@ whatever the system associates with it. It goes through `g_app_info_launch_defau
 Linux, the OpenURI portal inside a sandbox included, `ShellExecuteW` on Windows, and `NSWorkspace`
 on macOS.
 
+### Permissions of a page
+
+`window.permissionHandler(request -> ...)` decides what a page may use that needs the user's
+permission. By default every request is denied, on every platform, and no engine shows a prompt of
+its own: `getUserMedia` fails on the page with `NotAllowedError`. The handler gets a
+`PermissionRequest` with a `kind`, `CAMERA`, `MICROPHONE`, `GEOLOCATION`, or `NOTIFICATIONS`, and
+the `origin` of the page, and answers `PermissionDecision.GRANT` or `DENY`. It runs on the UI
+thread, so it must not wait; one that throws denies. A call for the camera and the microphone
+together arrives as two requests, and both must be granted.
+
+| Platform | What reaches the handler |
+|---|---|
+| Windows | Every kind. |
+| macOS | The camera and the microphone; a grant makes the system ask the user for its own permission, which needs the usage description in `Info.plist`. WKWebView has no hook for the position and notifications. |
+| Linux, GTK 3 and GTK 4 | The camera and the microphone. The position, notifications, and a capture of the screen are always denied. |
+
+### The theme of the desktop
+
+`application.theme()` is `SystemTheme.LIGHT` or `DARK`, as the user set it for the desktop, and
+`application.onThemeChange(theme -> ...)` runs on a virtual thread when the user switches, never
+with the theme that the application already has. A page reads the same through `await
+lwjwae.theme.current()`, which resolves to `"light"` or `"dark"`, and `lwjwae.theme.listen(handler)`,
+which resolves to the function that stops it. The engines of Windows and macOS follow the desktop
+in `prefers-color-scheme` by themselves; the GTK backends make WebKitGTK follow it too.
+
+| Platform | Where the choice comes from |
+|---|---|
+| Windows | `AppsUseLightTheme` of the user in the registry, the "app mode" of the settings, read once a second. |
+| macOS | The appearance of the system, with the notification of the system for a change. |
+| Linux, GTK 3 and GTK 4 | The `color-scheme` of the desktop portal, which the backend also writes into the dark preference of GTK, so that the page and the title bar match. Without a portal, the dark preference or the name of the GTK theme. |
+
+### The icon of a window
+
+`WindowParameters.builder().icon("app/icon.png")` gives a window an icon, from a PNG among the
+resources of the application or from PNG bytes, and `window.icon(...)` changes it later; `null`
+brings the icon of the platform back. Without it, a window has the icon that the packaging gives the
+application, and in a development run the generic one. A 256 pixel square is enough: the platform
+scales it down to every size it needs.
+
+| Platform | What the icon is |
+|---|---|
+| Windows | The icon of the title bar, the taskbar button, and Alt+Tab. |
+| macOS | The icon of the application in the Dock and the switcher, which every window shares: macOS has no icon of a single window. |
+| Linux, GTK 3 | On X11, the icon of the title bar and the taskbar; a window manager may keep the last one after `null`. On Wayland, the compositor takes it from the `.desktop` file. |
+| Linux, GTK 4 | None: GTK 4 has no call for it, and the desktop takes it from the `.desktop` file. |
+
+### Zooming a page
+
+`window.zoom(1.5)` shows the page at 150%, and `window.zoom()` reads the zoom: 1 is 100%, from
+`Window.MINIMUM_ZOOM` (0.25) to `Window.MAXIMUM_ZOOM` (5). The whole page zooms, as in a browser: its
+text, images, and layout grow together, and the page sees a narrower viewport in CSS pixels. The
+zoom belongs to the window and stays through navigations, including to another origin. The user
+can't zoom with Ctrl and the wheel or the keys, on any backend, so only Java sets it. There is no
+call for it on the page.
+
+### Files dropped on a window
+
+`window.onFileDrop(event -> ...)` hears the files that the user drops from the file manager onto the
+page, as a `FileDropEvent`: the `paths`, absolute, in the order that the file manager gave them, the
+`window`, and where the pointer was, `x` and `y`, from the top left of the page. A page hears the
+same through `lwjwae.files.listen(({ paths, x, y }) => ...)`, which resolves to the function that
+stops it. A page can't read paths from the files that the browser gives it, which is why the
+library reads them natively.
+
+A file dropped on a page doesn't open in the window any more: the library takes the drop that the
+page leaves alone. A page that handles `dragover` and `drop` itself keeps its way, and its events
+still come, so a drop zone can light up. A field that edits text keeps its own drop.
+
+| Platform | How it works |
+|---|---|
+| Windows | The script of the page posts the files of every `drop` to the host, which reads their paths; the WebView2 runtime must be 1.0.1264 or later. |
+| macOS | The file URLs on the pasteboard of the drag, which the web view reads as it takes the drop, at the place of the `drop` event of the page. |
+| Linux, GTK 3 | The URI list of the drop; a file that isn't local is left out. |
+| Linux, GTK 4 | The files that the drag offers, read as it comes over the page, at the place of the `drop` event of the page; a file that isn't local is left out. |
+
 ### One instance
 
 `Application.createSingleInstance(parameters, args)` in place of `create` keeps one process of the
@@ -379,6 +477,32 @@ The processes meet on a Unix domain socket named after a hash of the user and
 temporary directory elsewhere, Windows 10 and later included. A lock file next to it lets only one
 of two processes that start at the same moment become the first. The socket file stays when the
 process ends, and the next first start replaces it. `quit()` gives the name up.
+
+### Links and files that the system opens
+
+An application can own a scheme of links, such as `notes://today`, and types of files, such as
+`.note`: the Gradle plugin registers both when it packages the application, from `urlScheme` and
+`fileType`. When the user opens one, `onOpen` hears it as an `OpenEvent`, with the `urls` and the
+absolute paths of the `files`:
+
+```java
+Optional<Application> created = Application.createSingleInstance(parameters, args);
+if (created.isEmpty()) {
+  return;
+}
+try (Application application = created.get()) {
+  application.onOpen(request -> request.files().forEach(Notes::open));
+  ...
+}
+```
+
+On Windows and Linux, the system starts the executable with the link or the file as an argument,
+so pass `args` to `createSingleInstance`, or to `create(parameters, args)`: the links and the files
+among them are the first request, and with a single instance, a later start hands its own to the
+process that runs. On macOS, AppKit hands them to the running process, through
+`application:openURLs:`, and starts it first when it doesn't run. A request that comes before any
+listener waits for the first one. Among arguments, a URI with a scheme of two letters or more is a
+link, and a `file:` URI or a path that exists is a file; a flag and anything else are left out.
 
 Where the platform can't, the call does what it can and the reads say so:
 

@@ -89,7 +89,7 @@ public class JsonUtil {
         case '\b' -> out.append("\\b");
         case '\f' -> out.append("\\f");
         default -> {
-          if (character < 0x20 || character == ' ' || character == ' ') {
+          if (character < 0x20 || character == '\u2028' || character == '\u2029') {
             out.append("\\u%04x".formatted((int) character));
           } else {
             out.append(character);

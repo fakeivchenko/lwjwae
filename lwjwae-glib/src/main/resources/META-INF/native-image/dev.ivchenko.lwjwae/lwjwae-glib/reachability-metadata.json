@@ -59,6 +59,31 @@
       ]
     },
     {
+      "type": "dev.ivchenko.lwjwae.glib.DesktopTheme",
+      "methods": [
+        {
+          "name": "onSignal",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
+        },
+        {
+          "name": "onNotify",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
+        }
+      ]
+    },
+    {
       "type": "dev.ivchenko.lwjwae.glib.PortalShortcuts",
       "methods": [
         {
@@ -457,6 +482,30 @@
           "void*",
           "void*",
           "void*",
+          "void*",
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.glib.DesktopTheme",
+        "method": "onSignal",
+        "returnType": "void",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "void*",
+          "void*",
+          "void*",
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.glib.DesktopTheme",
+        "method": "onNotify",
+        "returnType": "void",
+        "parameterTypes": [
           "void*",
           "void*",
           "void*"

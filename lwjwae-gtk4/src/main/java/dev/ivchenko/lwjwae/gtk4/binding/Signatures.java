@@ -61,7 +61,9 @@ public class Signatures {
   public final FunctionDescriptor GTK_WIDGET_TRANSLATE_COORDINATES =
       FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_DOUBLE, C_DOUBLE, C_POINTER, C_POINTER);
 
-  /** {@code double f(T*)}: {@code gdk_monitor_get_scale}. */
+  /**
+   * {@code double f(T*)}: {@code gdk_monitor_get_scale}, {@code webkit_web_view_get_zoom_level}.
+   */
   public final FunctionDescriptor DOUBLE_POINTER = FunctionDescriptor.of(C_DOUBLE, C_POINTER);
 
   /** {@code T* f(void)}. */
@@ -97,6 +99,10 @@ public class Signatures {
   /** {@code void f(T*, U*, V*)}. */
   public final FunctionDescriptor VOID_POINTER_POINTER_POINTER =
       FunctionDescriptor.ofVoid(C_POINTER, C_POINTER, C_POINTER);
+
+  /** {@code void f(T*, gdouble)}: {@code webkit_web_view_set_zoom_level}. */
+  public final FunctionDescriptor VOID_POINTER_DOUBLE =
+      FunctionDescriptor.ofVoid(C_POINTER, ValueLayout.JAVA_DOUBLE);
 
   /** {@code void f(T*, gint)}. */
   public final FunctionDescriptor VOID_POINTER_INT = FunctionDescriptor.ofVoid(C_POINTER, C_INT);
@@ -142,6 +148,17 @@ public class Signatures {
   /** {@code T* f(U*, V*, W*)}: {@code webkit_web_view_evaluate_javascript_finish}. */
   public final FunctionDescriptor POINTER_POINTER_POINTER_POINTER =
       FunctionDescriptor.of(C_POINTER, C_POINTER, C_POINTER, C_POINTER);
+
+  /** {@code gboolean f(T*, GType)}: {@code gdk_content_formats_contain_gtype}. */
+  public final FunctionDescriptor INT_POINTER_LONG =
+      FunctionDescriptor.of(C_INT, C_POINTER, C_LONG);
+
+  /**
+   * {@code void f(GdkDrop*, GType, int io_priority, GCancellable*, GAsyncReadyCallback, gpointer)}:
+   * {@code gdk_drop_read_value_async}.
+   */
+  public final FunctionDescriptor GDK_DROP_READ_VALUE_ASYNC =
+      FunctionDescriptor.ofVoid(C_POINTER, C_LONG, C_INT, C_POINTER, C_POINTER, C_POINTER);
 
   /** {@code void f(T*, U*, V*, W*)}: {@code gdk_clipboard_read_text_async}. */
   public final FunctionDescriptor VOID_POINTER_X4 =
@@ -269,6 +286,13 @@ public class Signatures {
 
   /** {@code void (*)(GObject*, GParamSpec*, gpointer)}: a {@code notify::} handler. */
   public final FunctionDescriptor NOTIFY_CALLBACK = VOID_POINTER_POINTER_POINTER;
+
+  /**
+   * {@code void (*)(GtkDropControllerMotion*, double x, double y, gpointer)}: {@code enter} of a
+   * controller that follows a drag over a widget.
+   */
+  public final FunctionDescriptor DROP_MOTION_CALLBACK =
+      FunctionDescriptor.ofVoid(C_POINTER, C_DOUBLE, C_DOUBLE, C_POINTER);
 
   /** {@code void (*)(GdkSurface*, gint, gint, gpointer)}: {@code layout} of a surface. */
   public final FunctionDescriptor LAYOUT_CALLBACK =

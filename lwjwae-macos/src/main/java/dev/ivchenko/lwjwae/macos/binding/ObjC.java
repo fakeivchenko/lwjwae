@@ -75,6 +75,8 @@ public class ObjC {
       NativeLibraries.downcall(OBJC, "objc_msgSend", Signatures.MSG_BOOL);
   private final MethodHandle MSG_BOOL_ID =
       NativeLibraries.downcall(OBJC, "objc_msgSend", Signatures.MSG_BOOL_ID);
+  private final MethodHandle MSG_SUPER_BOOL_ID =
+      NativeLibraries.downcall(OBJC, "objc_msgSendSuper", Signatures.MSG_BOOL_ID);
   private final MethodHandle MSG_BOOL_LONG =
       NativeLibraries.downcall(OBJC, "objc_msgSend", Signatures.MSG_BOOL_LONG);
   private final MethodHandle MSG_ID_ID_ID =
@@ -433,7 +435,7 @@ public class ObjC {
     return (MemorySegment) MSG_ID_RECT.invokeExact(receiver, ObjC.sel(selector), rect);
   }
 
-  /** Sends {@code selector} to {@code receiver}: {@code id -[receiver selector:id:id]}. */
+  /** Sends {@code selector} to {@code receiver}: {@code id -[receiver selector:NSRect:id]}. */
   @SneakyThrows
   public MemorySegment sendWithRect(
       MemorySegment receiver, String selector, MemorySegment rect, MemorySegment argument) {
@@ -476,6 +478,25 @@ public class ObjC {
   @SneakyThrows
   public void sendVoid(MemorySegment receiver, String selector, long argument) {
     MSG_VOID_LONG.invokeExact(receiver, ObjC.sel(selector), argument);
+  }
+
+  /**
+   * Sends {@code selector} to {@code receiver}: {@code void -[receiver selector:id:id:id:id]}, four
+   * arguments of the size of a pointer, such as {@code addObserver:selector:name:object:} with the
+   * selector as a pointer.
+   */
+  @SneakyThrows
+  public void sendVoid(
+      MemorySegment receiver,
+      String selector,
+      MemorySegment first,
+      MemorySegment second,
+      MemorySegment third,
+      MemorySegment fourth) {
+    MemorySegment _ =
+        (MemorySegment)
+            MSG_ID_ID_ID_ID_POINTER.invokeExact(
+                receiver, ObjC.sel(selector), first, second, third, fourth);
   }
 
   /**
@@ -559,6 +580,23 @@ public class ObjC {
   @SneakyThrows
   public boolean sendBool(MemorySegment receiver, String selector, long argument) {
     return (boolean) MSG_BOOL_LONG.invokeExact(receiver, ObjC.sel(selector), argument);
+  }
+
+  /**
+   * Sends {@code selector} to the implementation of {@code superclass} for {@code receiver}, as
+   * {@code [super selector:argument]} does in a method of a subclass: {@code BOOL -[super
+   * selector:id]}.
+   */
+  @SneakyThrows
+  public boolean sendSuperBool(
+      MemorySegment receiver, MemorySegment superclass, String selector, MemorySegment argument) {
+    try (Arena arena = Arena.ofConfined()) {
+      // struct objc_super { id receiver; Class super_class; }
+      MemorySegment target = arena.allocate(Signatures.C_POINTER, 2);
+      target.setAtIndex(Signatures.C_POINTER, 0, receiver);
+      target.setAtIndex(Signatures.C_POINTER, 1, superclass);
+      return (boolean) MSG_SUPER_BOOL_ID.invokeExact(target, ObjC.sel(selector), argument);
+    }
   }
 
   /** The one eleven-argument send in the backend. See {@link AppKit#stopRunLoop}. */

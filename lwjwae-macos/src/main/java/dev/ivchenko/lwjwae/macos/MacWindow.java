@@ -25,7 +25,9 @@ import dev.ivchenko.lwjwae.macos.binding.Signatures;
 import dev.ivchenko.lwjwae.macos.binding.WebKit;
 import dev.ivchenko.lwjwae.menu.MenuCommands;
 import dev.ivchenko.lwjwae.menu.MenuRole;
+import dev.ivchenko.lwjwae.permission.PermissionKind;
 import dev.ivchenko.lwjwae.rpc.RpcExchange;
+import dev.ivchenko.lwjwae.util.FileDropUtil;
 import dev.ivchenko.lwjwae.util.MimeTypeUtil;
 import dev.ivchenko.lwjwae.util.ResourceUtil;
 import dev.ivchenko.lwjwae.util.ScriptUtil;
@@ -64,9 +66,44 @@ public class MacWindow extends AbstractWindow {
   private static final String CONTEXT_MENU_FLAG = "__lwjwaeContextMenu";
 
   private static final Map<Long, MacWindow> DELEGATES = new ConcurrentHashMap<>();
+  private static final Map<Long, MacWindow> WEB_VIEWS = new ConcurrentHashMap<>();
+
+  /** What the script of the page posts when files are dropped on it, before where. */
+  private static final String FILE_DROP_MESSAGE = "lwjwae:files";
+
+  /**
+   * Tells the host where files were dropped on the page: AppKit says where in the window, and the
+   * page where in the page, which is what the event reports. It runs first, in the capture phase,
+   * so that a page that stops the event still lets Java hear of the drop. The paths come from the
+   * drag itself, see {@link #onPerformDragOperation}, so a page that posts this without a drag
+   * finds nothing to report.
+   */
+  private static final String FILE_DROP_SCRIPT =
+      """
+      window.addEventListener("drop", (event) => {
+        const types = event.dataTransfer ? Array.from(event.dataTransfer.types) : [];
+        if (!types.includes("Files") && !types.includes("text/uri-list")) return;
+        window.webkit.messageHandlers.%s.postMessage(
+            "%s%s" + Math.round(event.clientX) + "%s" + Math.round(event.clientY));
+      }, true);
+      """
+          .formatted(
+              BridgeProtocol.CHANNEL,
+              FILE_DROP_MESSAGE,
+              BridgeProtocol.SEPARATOR,
+              BridgeProtocol.SEPARATOR);
+
   private static final CallbackRegistry<PendingEvaluation> PENDING_EVALUATIONS =
       new CallbackRegistry<>();
 
+  private static final MemorySegment ON_PERFORM_DRAG_OPERATION =
+      NativeLibraries.upcall(
+          MethodHandles.lookup(),
+          MacWindow.class,
+          "onPerformDragOperation",
+          MethodType.methodType(
+              boolean.class, MemorySegment.class, MemorySegment.class, MemorySegment.class),
+          Signatures.DELEGATE_1_BOOL);
   private static final MemorySegment ON_WINDOW_SHOULD_CLOSE =
       NativeLibraries.upcall(
           MethodHandles.lookup(),
@@ -111,6 +148,21 @@ public class MacWindow extends AbstractWindow {
               MemorySegment.class,
               MemorySegment.class),
           Signatures.DELEGATE_4_ID);
+  private static final MemorySegment ON_MEDIA_CAPTURE =
+      NativeLibraries.upcall(
+          MethodHandles.lookup(),
+          MacWindow.class,
+          "onMediaCapture",
+          MethodType.methodType(
+              void.class,
+              MemorySegment.class,
+              MemorySegment.class,
+              MemorySegment.class,
+              MemorySegment.class,
+              MemorySegment.class,
+              long.class,
+              MemorySegment.class),
+          Signatures.DELEGATE_MEDIA_CAPTURE);
   private static final MemorySegment ON_EVALUATION_COMPLETE =
       NativeLibraries.upcall(
           MethodHandles.lookup(),
@@ -119,6 +171,17 @@ public class MacWindow extends AbstractWindow {
           MethodType.methodType(
               void.class, MemorySegment.class, MemorySegment.class, MemorySegment.class),
           Signatures.COMPLETION_BLOCK);
+
+  /**
+   * {@code WKWebView} with {@code performDragOperation:} of its own, which reads the paths of a
+   * drop of files before WebKit handles it: the page gets the files without paths, and WebKit
+   * offers no delegate method for a drop.
+   */
+  private static final MemorySegment WEB_VIEW_CLASS =
+      ObjC.defineClass(
+          "LwjwaeWebView",
+          WebKit.webViewClass(),
+          Map.of("performDragOperation:", new MethodStub(ON_PERFORM_DRAG_OPERATION, "B@:@")));
 
   private static final MemorySegment DELEGATE_CLASS =
       ObjC.defineClass(
@@ -144,6 +207,10 @@ public class MacWindow extends AbstractWindow {
               Map.entry(
                   "webView:createWebViewWithConfiguration:forNavigationAction:windowFeatures:",
                   new MethodStub(ON_CREATE_WEB_VIEW, "@@:@@@@")),
+              Map.entry(
+                  "webView:requestMediaCapturePermissionForOrigin:initiatedByFrame:"
+                      + "type:decisionHandler:",
+                  new MethodStub(ON_MEDIA_CAPTURE, "v@:@@@q@?")),
               Map.entry("windowDidResize:", new MethodStub(ON_WINDOW_CHANGED, "v@:@")),
               Map.entry("windowDidMove:", new MethodStub(ON_WINDOW_CHANGED, "v@:@")),
               Map.entry("windowDidBecomeKey:", new MethodStub(ON_BECAME_KEY, "v@:@")),
@@ -168,6 +235,10 @@ public class MacWindow extends AbstractWindow {
   private volatile MemorySegment webView;
   private volatile MemorySegment userContentController;
   private volatile MemorySegment delegate;
+
+  /** The paths of the files that AppKit dropped on the web view, until the page says where. */
+  private volatile List<Path> droppedFiles;
+
   private volatile String loading = "about:blank";
   private volatile String reportedFailure;
   private volatile WindowSize minimumSize = WindowSize.NONE;
@@ -178,6 +249,17 @@ public class MacWindow extends AbstractWindow {
   private Boolean fullScreenWanted;
   private final boolean minimizable;
 
+  /** The window that this one belongs to, or {@code null}. */
+  private final MacWindow parentWindow;
+
+  /** Whether this window is a sheet of its parent rather than a child window of it. */
+  private final boolean modal;
+
+  /**
+   * Whether this window is attached to its parent now, as a child window or a sheet. Main thread.
+   */
+  private boolean attached;
+
   /**
    * Creates the window and the web view on the main thread and returns when they exist. The window
    * is hidden until {@link #show()}.
@@ -185,6 +267,8 @@ public class MacWindow extends AbstractWindow {
   MacWindow(MacApplication application, long id, WindowParameters parameters) {
     super(application, id, parameters);
     this.minimizable = parameters.minimizable();
+    this.parentWindow = (MacWindow) parameters.parent();
+    this.modal = parameters.modal();
     this.dispatcher().run(() -> this.createWindow(parameters));
   }
 
@@ -200,7 +284,8 @@ public class MacWindow extends AbstractWindow {
     WebKit.addScriptMessageHandler(controller, newDelegate, BridgeProtocol.CHANNEL);
 
     MemorySegment newWebView =
-        WebKit.webView(parameters.size().width(), parameters.size().height(), configuration);
+        WebKit.webView(
+            WEB_VIEW_CLASS, parameters.size().width(), parameters.size().height(), configuration);
     Foundation.release(configuration);
     WebKit.setNavigationDelegate(newWebView, newDelegate);
     WebKit.setUiDelegate(newWebView, newDelegate);
@@ -233,7 +318,9 @@ public class MacWindow extends AbstractWindow {
     this.delegate = newDelegate;
     this.userContentController = controller;
     this.webView = newWebView;
+    WEB_VIEWS.put(newWebView.address(), this);
     this.window = newWindow;
+    this.injectOnDocumentStart(FILE_DROP_SCRIPT);
     this.injectOnDocumentStart(
         "document.addEventListener('contextmenu', event => { if (!window."
             + CONTEXT_MENU_FLAG
@@ -259,6 +346,22 @@ public class MacWindow extends AbstractWindow {
       styleMask |= AppKit.STYLE_FULL_SIZE_CONTENT_VIEW;
     }
     return styleMask;
+  }
+
+  /** The icon of the application: macOS has no icon of a single window. */
+  @Override
+  protected void presentIcon(byte[] png) {
+    AppKit.setApplicationIcon(png);
+  }
+
+  @Override
+  protected void presentZoom(double factor) {
+    WebKit.setPageZoom(this.webView, factor);
+  }
+
+  @Override
+  protected double currentZoom() {
+    return WebKit.pageZoom(this.webView);
   }
 
   @Override
@@ -677,9 +780,42 @@ public class MacWindow extends AbstractWindow {
     this.dispatcher()
         .run(
             () -> {
-              AppKit.show(this.window());
+              MemorySegment current = this.window();
+              if (this.parentWindow != null && !this.attached && !this.parentWindow.isClosed()) {
+                this.attached = true;
+                if (this.modal) {
+                  // The sheet slides out of the title bar of its parent, which takes no input
+                  // until the sheet ends.
+                  AppKit.beginSheet(this.parentWindow.window(), current);
+                  AppKit.activate();
+                  return;
+                }
+                AppKit.addChildWindow(this.parentWindow.window(), current);
+              }
+              AppKit.show(current);
               AppKit.activate();
             });
+  }
+
+  /**
+   * Takes the window off its parent: ends the sheet, or removes the child window, so that the
+   * parent doesn't keep a window that is gone or hidden. Runs on the main thread.
+   */
+  private void detach() {
+    if (!this.attached) {
+      return;
+    }
+    this.attached = false;
+    MemorySegment parent = this.parentWindow.window;
+    MemorySegment current = this.window;
+    if (parent == null || current == null) {
+      return;
+    }
+    if (this.modal) {
+      AppKit.endSheet(parent, current);
+    } else {
+      AppKit.removeChildWindow(parent, current);
+    }
   }
 
   @Override
@@ -689,7 +825,13 @@ public class MacWindow extends AbstractWindow {
 
   @Override
   public void hide() {
-    this.dispatcher().run(() -> AppKit.hide(this.window()));
+    this.dispatcher()
+        .run(
+            () -> {
+              MemorySegment current = this.window();
+              this.detach();
+              AppKit.hide(current);
+            });
   }
 
   @Override
@@ -707,6 +849,7 @@ public class MacWindow extends AbstractWindow {
             () -> {
               MemorySegment current = this.window;
               if (!this.isClosed() && current != null) {
+                this.detach();
                 AppKit.close(current);
               }
             });
@@ -724,7 +867,8 @@ public class MacWindow extends AbstractWindow {
         .formatted(BridgeProtocol.CHANNEL);
   }
 
-  private MemorySegment window() {
+  /** The native {@code NSWindow}. Call on the main thread. */
+  MemorySegment window() {
     return this.alive(this.window);
   }
 
@@ -747,6 +891,7 @@ public class MacWindow extends AbstractWindow {
    */
   @SuppressWarnings("resource")
   private void handleDestroyed() {
+    this.detach();
     MemorySegment closingDelegate = this.delegate;
     if (closingDelegate != null) {
       DELEGATES.remove(closingDelegate.address());
@@ -754,6 +899,7 @@ public class MacWindow extends AbstractWindow {
 
     MemorySegment closingWebView = this.webView;
     if (closingWebView != null) {
+      WEB_VIEWS.remove(closingWebView.address());
       WebKit.setNavigationDelegate(closingWebView, MemorySegment.NULL);
     }
     if (this.window != null) {
@@ -868,6 +1014,48 @@ public class MacWindow extends AbstractWindow {
       ThrowableUtil.report(t);
     }
     return MemorySegment.NULL;
+  }
+
+  /**
+   * The page asks for the camera, the microphone, or both, and WebKit waits for the decision
+   * handler. Without this method WebKit asks the user itself; here the handler of the window
+   * decides, and a grant still makes the system ask for its own permission of the application.
+   *
+   * <p>Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
+   * binds it by name, so no Java code calls it and the compiler sees a dead private method. {@code
+   * resource}: the window is {@code AutoCloseable}, and a lookup that returns it looks like an
+   * unclosed resource. It is not: the application owns the window and closes it, this method only
+   * borrows it.
+   */
+  @SuppressWarnings({"unused", "resource"})
+  private static void onMediaCapture(
+      MemorySegment self,
+      MemorySegment command,
+      MemorySegment webView,
+      MemorySegment origin,
+      MemorySegment frame,
+      long type,
+      MemorySegment decisionHandler) {
+    boolean granted = false;
+    try {
+      MacWindow window = MacWindow.windowOf(self);
+      if (window != null) {
+        PermissionKind[] kinds =
+            switch ((int) type) {
+              case 0 -> new PermissionKind[] {PermissionKind.CAMERA};
+              case 1 -> new PermissionKind[] {PermissionKind.MICROPHONE};
+              default -> new PermissionKind[] {PermissionKind.CAMERA, PermissionKind.MICROPHONE};
+            };
+        granted = window.permissionRequested(WebKit.securityOrigin(origin), kinds);
+      }
+    } catch (Throwable t) {
+      ThrowableUtil.report(t);
+    }
+    try {
+      WebKit.answerMediaCapture(decisionHandler, granted);
+    } catch (Throwable t) {
+      ThrowableUtil.report(t);
+    }
   }
 
   /**
@@ -1092,6 +1280,47 @@ public class MacWindow extends AbstractWindow {
   }
 
   /**
+   * A drop of files on the page, which the script of the page posted with where it happened: the
+   * window reports the files that AppKit dropped. Without such a drop, there is nothing to report.
+   */
+  private void fileDropMessage(String message) {
+    String[] fields = message.split(BridgeProtocol.SEPARATOR);
+    List<Path> paths = this.droppedFiles;
+    this.droppedFiles = null;
+    if (paths != null && fields.length == 3) {
+      this.filesDropped(paths, Integer.parseInt(fields[1]), Integer.parseInt(fields[2]));
+    }
+  }
+
+  /**
+   * {@code -[NSDraggingDestination performDragOperation:]} of the web view: keeps the paths of the
+   * files that the drag carries, for the {@code drop} event that the page posts once WebKit handled
+   * it, see {@link #fileDropMessage}, and lets WebKit handle the drop as it would.
+   *
+   * <p>Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
+   * binds it by name. {@code resource}: the window is only borrowed.
+   */
+  @SuppressWarnings({"unused", "resource"})
+  private static boolean onPerformDragOperation(
+      MemorySegment self, MemorySegment command, MemorySegment sender) {
+    try {
+      MacWindow window = WEB_VIEWS.get(self.address());
+      if (window != null) {
+        List<Path> paths = FileDropUtil.pathsOfUris(WebKit.draggedFileUrls(sender));
+        window.droppedFiles = paths.isEmpty() ? null : paths;
+      }
+    } catch (Throwable t) {
+      ThrowableUtil.report(t);
+    }
+    try {
+      return ObjC.sendSuperBool(self, WebKit.webViewClass(), "performDragOperation:", sender);
+    } catch (Throwable t) {
+      ThrowableUtil.report(t);
+      return false;
+    }
+  }
+
+  /**
    * Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
    * binds it by name, so no Java code calls it and the compiler sees a dead private method. {@code
    * resource}: the window is {@code AutoCloseable}, and a lookup that returns it looks like an
@@ -1103,8 +1332,11 @@ public class MacWindow extends AbstractWindow {
       MemorySegment self, MemorySegment command, MemorySegment controller, MemorySegment message) {
     try {
       MacWindow window = MacWindow.windowOf(self);
-      if (window != null) {
-        window.handleBridgeMessage(WebKit.messageBody(message));
+      String body = window == null ? null : WebKit.messageBody(message);
+      if (body != null && body.startsWith(FILE_DROP_MESSAGE)) {
+        window.fileDropMessage(body);
+      } else if (body != null) {
+        window.handleBridgeMessage(body);
       }
     } catch (Throwable t) {
       ThrowableUtil.report(t);

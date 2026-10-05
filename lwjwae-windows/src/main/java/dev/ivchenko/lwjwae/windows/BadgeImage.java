@@ -102,15 +102,15 @@ class BadgeImage {
         raw[offset++] = (byte) (pixel >>> 24);
       }
     }
-    Deflater deflater = new Deflater();
-    deflater.setInput(raw);
-    deflater.finish();
     ByteArrayOutputStream compressed = new ByteArrayOutputStream();
-    byte[] buffer = new byte[4096];
-    while (!deflater.finished()) {
-      compressed.write(buffer, 0, deflater.deflate(buffer));
+    try (Deflater deflater = new Deflater()) {
+      deflater.setInput(raw);
+      deflater.finish();
+      byte[] buffer = new byte[4096];
+      while (!deflater.finished()) {
+        compressed.write(buffer, 0, deflater.deflate(buffer));
+      }
     }
-    deflater.end();
 
     ByteArrayOutputStream png = new ByteArrayOutputStream();
     png.writeBytes(new byte[] {(byte) 0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n'});

@@ -39,8 +39,8 @@ class BridgeProtocolTest {
             "window."
                 + BridgeProtocol.PAGE_API
                 + " = { listen, once, emit, open, close, openExternal, call: callRpc, invoke:"
-                + " rpcInvoke, RpcError, window: windowApi, dialog, clipboard, menu, taskbar,"
-                + " store, updates };"));
+                + " rpcInvoke, RpcError, window: windowApi, theme, files, dialog, clipboard, menu,"
+                + " taskbar, store, updates };"));
     for (String reserved :
         List.of(
             BridgeProtocol.EVENT_CALL,
@@ -126,6 +126,15 @@ class BridgeProtocolTest {
     Assertions.assertNull(
         BridgeProtocol.parseWindowParameters(
             String.join(sep, "", "wide", "", "", "", "", "", "", "", "", "", "", "")));
+  }
+
+  @Test
+  void dialogWhoseDirectoryIsNoPathIsMalformed() {
+    String sep = BridgeProtocol.SEPARATOR;
+    Assertions.assertNull(
+        BridgeProtocol.parseOpenDialog(String.join(sep, "", "bad\0dir", "", "", "")));
+    Assertions.assertNull(BridgeProtocol.parseSaveDialog(String.join(sep, "", "bad\0dir", "", "")));
+    Assertions.assertNotNull(BridgeProtocol.parseOpenDialog(String.join(sep, "", "", "", "", "")));
   }
 
   @Test

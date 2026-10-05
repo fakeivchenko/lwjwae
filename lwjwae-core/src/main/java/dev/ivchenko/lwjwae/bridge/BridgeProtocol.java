@@ -1,5 +1,6 @@
 package dev.ivchenko.lwjwae.bridge;
 
+import dev.ivchenko.lwjwae.Window;
 import dev.ivchenko.lwjwae.WindowEdge;
 import dev.ivchenko.lwjwae.WindowParameters;
 import dev.ivchenko.lwjwae.WindowPosition;
@@ -23,6 +24,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -78,6 +80,19 @@ public class BridgeProtocol {
    * width}, {@code height}, {@code x}, {@code y}. {@code window.lwjwae.window.listen} hears it.
    */
   public final String WINDOW_EVENT = "lwjwae:window";
+
+  /**
+   * The event that tells a page the desktop switched theme: its payload is {@code light} or {@code
+   * dark}. The page reads the theme it has now through the {@code theme} action of {@link
+   * #CONTROL_CALL}.
+   */
+  public final String THEME_EVENT = "lwjwae:theme";
+
+  /**
+   * The event that tells a page the user dropped files on it: its payload is JSON, {@code {"paths":
+   * [...], "x": n, "y": n}}, with the absolute paths.
+   */
+  public final String FILES_EVENT = "lwjwae:files";
 
   /**
    * The name under which a page asks for a new window, through {@code window.lwjwae.open(options)}.
@@ -227,6 +242,8 @@ public class BridgeProtocol {
         .replace("${eventCall}", EVENT_CALL)
         .replace("${eventsCall}", EVENTS_CALL)
         .replace("${windowEvent}", WINDOW_EVENT)
+        .replace("${themeEvent}", THEME_EVENT)
+        .replace("${filesEvent}", FILES_EVENT)
         .replace("${openCall}", OPEN_CALL)
         .replace("${closeCall}", CLOSE_CALL)
         .replace("${controlCall}", CONTROL_CALL)
@@ -279,20 +296,30 @@ public class BridgeProtocol {
     return new Event(parts[1], 0, parts[2], parts[0].equals("1"), null);
   }
 
+  /** The same as {@link #parseWindowParameters(String, Window)} for a window of its own. */
+  public WindowParameters parseWindowParameters(String payload) {
+    return BridgeProtocol.parseWindowParameters(payload, null);
+  }
+
   /**
    * Parses the payload of an {@link #OPEN_CALL}: the title, the size, the position, {@code
-   * centered}, the URL, the resource, the four flags of the frame, and {@code transparent},
-   * separated by {@link #SEPARATOR}, an empty field for one that the page left unset, {@code 1} for
-   * a set flag, and {@code 0} for a flag of the frame that the page turned off.
+   * centered}, the URL, the resource, the four flags of the frame, {@code transparent}, {@code
+   * child}, and {@code modal}, separated by {@link #SEPARATOR}, an empty field for one that the
+   * page left unset, {@code 1} for a set flag, and {@code 0} for a flag of the frame that the page
+   * turned off. A payload of an older page, without the last two, opens a window of its own.
    *
+   * @param parent The window of the page, which a child or a modal window belongs to, or {@code
+   *     null} to open a window of its own whatever the page asks.
    * @return The parameters, defaults applied, or {@code null} if the text doesn't have the shape or
    *     a number doesn't parse.
    */
-  public WindowParameters parseWindowParameters(String payload) {
+  public WindowParameters parseWindowParameters(String payload, Window parent) {
     String[] parts = payload.split(SEPARATOR, -1);
-    if (parts.length != 13) {
+    if (parts.length != 13 && parts.length != 15) {
       return null;
     }
+    boolean modal = parts.length == 15 && parts[14].equals("1") && parent != null;
+    boolean child = modal || (parts.length == 15 && parts[13].equals("1") && parent != null);
     try {
       return WindowParameters.builder()
           .title(parts[0])
@@ -309,6 +336,8 @@ public class BridgeProtocol {
           .minimizable(BridgeProtocol.flag(parts[10]))
           .maximizable(BridgeProtocol.flag(parts[11]))
           .transparent(parts[12].equals("1"))
+          .parent(child ? parent : null)
+          .modal(modal)
           .build();
     } catch (NumberFormatException _) {
       return null;
@@ -319,39 +348,49 @@ public class BridgeProtocol {
    * Parses the fields of an open dialog in a {@link #DIALOG_CALL}: the title, the directory, {@code
    * 1} for multiple, {@code 1} for directories, and the kinds of file, see {@link #parseFileTypes}.
    *
-   * @return The parameters, or {@code null} if the text doesn't have the shape.
+   * @return The parameters, or {@code null} if the text doesn't have the shape or the directory
+   *     isn't a path of this platform.
    */
   public OpenDialogParameters parseOpenDialog(String payload) {
     String[] parts = payload.split(SEPARATOR, -1);
     if (parts.length != 5) {
       return null;
     }
-    return OpenDialogParameters.builder()
-        .title(BridgeProtocol.text(parts[0]))
-        .directory(BridgeProtocol.path(parts[1]))
-        .multiple(parts[2].equals("1"))
-        .directories(parts[3].equals("1"))
-        .fileTypes(BridgeProtocol.parseFileTypes(parts[4]))
-        .build();
+    try {
+      return OpenDialogParameters.builder()
+          .title(BridgeProtocol.text(parts[0]))
+          .directory(BridgeProtocol.path(parts[1]))
+          .multiple(parts[2].equals("1"))
+          .directories(parts[3].equals("1"))
+          .fileTypes(BridgeProtocol.parseFileTypes(parts[4]))
+          .build();
+    } catch (InvalidPathException _) {
+      return null;
+    }
   }
 
   /**
    * Parses the fields of a save dialog in a {@link #DIALOG_CALL}: the title, the directory, the
    * file name, and the kinds of file.
    *
-   * @return The parameters, or {@code null} if the text doesn't have the shape.
+   * @return The parameters, or {@code null} if the text doesn't have the shape or the directory
+   *     isn't a path of this platform.
    */
   public SaveDialogParameters parseSaveDialog(String payload) {
     String[] parts = payload.split(SEPARATOR, -1);
     if (parts.length != 4) {
       return null;
     }
-    return SaveDialogParameters.builder()
-        .title(BridgeProtocol.text(parts[0]))
-        .directory(BridgeProtocol.path(parts[1]))
-        .fileName(BridgeProtocol.text(parts[2]))
-        .fileTypes(BridgeProtocol.parseFileTypes(parts[3]))
-        .build();
+    try {
+      return SaveDialogParameters.builder()
+          .title(BridgeProtocol.text(parts[0]))
+          .directory(BridgeProtocol.path(parts[1]))
+          .fileName(BridgeProtocol.text(parts[2]))
+          .fileTypes(BridgeProtocol.parseFileTypes(parts[3]))
+          .build();
+    } catch (InvalidPathException _) {
+      return null;
+    }
   }
 
   /**

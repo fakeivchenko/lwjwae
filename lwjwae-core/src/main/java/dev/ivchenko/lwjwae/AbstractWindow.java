@@ -15,6 +15,7 @@ import dev.ivchenko.lwjwae.dialog.OpenDialogParameters;
 import dev.ivchenko.lwjwae.dialog.SaveDialogParameters;
 import dev.ivchenko.lwjwae.event.Event;
 import dev.ivchenko.lwjwae.event.EventSubscription;
+import dev.ivchenko.lwjwae.event.FileDropEvent;
 import dev.ivchenko.lwjwae.event.LoadEvent;
 import dev.ivchenko.lwjwae.event.WindowEvent;
 import dev.ivchenko.lwjwae.event.WindowEvents;
@@ -29,6 +30,9 @@ import dev.ivchenko.lwjwae.menu.MenuItem;
 import dev.ivchenko.lwjwae.menu.MenuRole;
 import dev.ivchenko.lwjwae.menu.RoleMenuItem;
 import dev.ivchenko.lwjwae.menu.SubmenuItem;
+import dev.ivchenko.lwjwae.permission.PermissionDecision;
+import dev.ivchenko.lwjwae.permission.PermissionKind;
+import dev.ivchenko.lwjwae.permission.PermissionRequest;
 import dev.ivchenko.lwjwae.rpc.RpcCall;
 import dev.ivchenko.lwjwae.rpc.RpcException;
 import dev.ivchenko.lwjwae.rpc.RpcExchange;
@@ -51,6 +55,7 @@ import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.security.SecureRandom;
+import java.util.Arrays;
 import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -113,6 +118,8 @@ public abstract class AbstractWindow implements Window {
   private final Set<DialogCompletion<?>> dialogs = ConcurrentHashMap.newKeySet();
   private final boolean closable;
   private final boolean maximizable;
+  private final Window parent;
+  private final Set<AbstractWindow> children = ConcurrentHashMap.newKeySet();
 
   private volatile MessageRpcCalls messageCalls;
 
@@ -125,6 +132,9 @@ public abstract class AbstractWindow implements Window {
   private volatile boolean closed;
   private volatile CloseAction closeAction = CloseAction.CLOSE;
   private volatile Consumer<String> externalLinkHandler;
+  private volatile Function<PermissionRequest, PermissionDecision> permissionHandler;
+  private volatile EventSubscription themeSubscription;
+  private final List<Consumer<FileDropEvent>> fileDropListeners = new CopyOnWriteArrayList<>();
 
   /**
    * Records the owner and the ID. The subclass creates the native window afterwards.
@@ -139,6 +149,7 @@ public abstract class AbstractWindow implements Window {
     this.id = id;
     this.closable = parameters.closable();
     this.maximizable = parameters.maximizable();
+    this.parent = parameters.parent();
   }
 
   /** The UI thread of the toolkit, the one of the application. */
@@ -154,6 +165,20 @@ public abstract class AbstractWindow implements Window {
   @Override
   public final Application application() {
     return this.application;
+  }
+
+  @Override
+  public final Optional<Window> parent() {
+    return Optional.ofNullable(this.parent);
+  }
+
+  /** Records {@code child}, which closes with this window. The application calls this. */
+  final void adoptChild(AbstractWindow child) {
+    this.children.add(child);
+    // Closed meanwhile: markClosed went through the children before this one was among them.
+    if (this.closed) {
+      child.close();
+    }
   }
 
   @Override
@@ -341,8 +366,7 @@ public abstract class AbstractWindow implements Window {
     ExchangeRpcCall call =
         new ExchangeRpcCall(exchange, name, this, this.application::requireCodec, cors);
     exchange.onCancel(call::cancel);
-    RpcHandler found = handler;
-    HANDLER_EXECUTOR.execute(() -> call.run(found));
+    HANDLER_EXECUTOR.execute(() -> call.run(handler));
   }
 
   /**
@@ -419,6 +443,24 @@ public abstract class AbstractWindow implements Window {
         status, headers, ExchangeRpcCall.errorJson(code, message).getBytes(StandardCharsets.UTF_8));
   }
 
+  /**
+   * The origin of {@code url}, or an empty string for {@code null} and for a URL without one. The
+   * engines tell the page by its URL, or by an origin with a trailing slash.
+   */
+  private static String originOrEmpty(String url) {
+    if (url == null) {
+      return "";
+    }
+    try {
+      URI uri = URI.create(url);
+      return uri.getScheme() == null || uri.getRawAuthority() == null
+          ? ""
+          : uri.getScheme() + "://" + uri.getRawAuthority();
+    } catch (IllegalArgumentException _) {
+      return "";
+    }
+  }
+
   /** {@code scheme://authority} of {@code url}, the way a browser writes an origin. */
   private static String originOf(String url) {
     URI uri = URI.create(url);
@@ -431,6 +473,9 @@ public abstract class AbstractWindow implements Window {
    */
   protected final void installBridge() {
     this.messageCalls = new MessageRpcCalls(this, this.rpcMessageChannel(), this.token);
+    this.themeSubscription =
+        this.application.onThemeChange(
+            theme -> this.pageEvents.send(BridgeProtocol.THEME_EVENT, theme.pageName(), false));
     // Once the window is complete: what the first window event compares with.
     this.dispatcher().post(this.windowEvents::start);
     BridgeCodec codec = this.application.parameters().codec();
@@ -474,9 +519,12 @@ public abstract class AbstractWindow implements Window {
     this.application.deliver(event.name(), event.payload(), event.typed(), this);
   }
 
-  /** {@code window.lwjwae.open}: answers with the ID of the new window. */
+  /**
+   * {@code window.lwjwae.open}: answers with the ID of the new window, a child of this one when the
+   * page asks for a child or a modal window.
+   */
   private void openFromPage(RpcCall call) {
-    WindowParameters parameters = BridgeProtocol.parseWindowParameters(call.text());
+    WindowParameters parameters = BridgeProtocol.parseWindowParameters(call.text(), this);
     if (parameters == null) {
       throw RpcException.badRequest("malformed-window", "Malformed window parameters");
     }
@@ -511,6 +559,7 @@ public abstract class AbstractWindow implements Window {
       case "title-bar-double-click" -> this.titleBarDoubleClicked();
       case "open-external" -> this.leave(argument);
       case "state" -> call.reply(this.dispatcher().call(this::stateJson));
+      case "theme" -> call.reply(this.application.theme().pageName());
       case "progress" -> this.application.progress(AbstractWindow.parseProgress(argument));
       case "badge" -> this.application.badgeCount(AbstractWindow.parseCount(argument));
       default -> throw RpcException.badRequest("malformed-control", "No such action: " + parts[0]);
@@ -637,6 +686,88 @@ public abstract class AbstractWindow implements Window {
   }
 
   @Override
+  public final EventSubscription onFileDrop(Consumer<FileDropEvent> listener) {
+    Objects.requireNonNull(listener, "listener");
+    this.fileDropListeners.add(listener);
+    return () -> this.fileDropListeners.remove(listener);
+  }
+
+  /**
+   * The user dropped files on the page. A backend calls this from the callback that hands it their
+   * paths, on any thread: Java listeners and the page both hear of it. A drop with no file in it is
+   * ignored.
+   *
+   * @param paths The files and folders, as the file manager gave them.
+   * @param x Where the pointer was, from the left edge of the page.
+   * @param y The same from the top edge of the page.
+   */
+  protected final void filesDropped(List<Path> paths, int x, int y) {
+    if (paths.isEmpty() || this.closed) {
+      return;
+    }
+    FileDropEvent event = new FileDropEvent(this, paths, x, y);
+    Map<String, Object> payload = new LinkedHashMap<>();
+    payload.put("paths", event.paths().stream().map(Path::toString).toList());
+    payload.put("x", x);
+    payload.put("y", y);
+    this.pageEvents.send(BridgeProtocol.FILES_EVENT, JsonUtil.write(payload), false);
+    for (Consumer<FileDropEvent> listener : this.fileDropListeners) {
+      HANDLER_EXECUTOR.execute(
+          () -> {
+            try {
+              listener.accept(event);
+            } catch (Throwable t) {
+              ThrowableUtil.report(t);
+            }
+          });
+    }
+  }
+
+  @Override
+  public final double zoom() {
+    this.checkOpen();
+    return this.dispatcher().call(this::currentZoom);
+  }
+
+  @Override
+  public final void zoom(double factor) {
+    this.checkOpen();
+    if (!(factor >= MINIMUM_ZOOM && factor <= MAXIMUM_ZOOM)) {
+      throw new IllegalArgumentException(
+          "The zoom is from " + MINIMUM_ZOOM + " to " + MAXIMUM_ZOOM + ": " + factor);
+    }
+    this.dispatcher().run(() -> this.presentZoom(factor));
+  }
+
+  /** Zooms the page of the web view to {@code factor}, already checked. Called on the UI thread. */
+  protected abstract void presentZoom(double factor);
+
+  /** The zoom that the web view shows now. Called on the UI thread. */
+  protected abstract double currentZoom();
+
+  @Override
+  public final void icon(byte[] png) {
+    this.checkOpen();
+    if (png != null && !AbstractWindow.isPng(png)) {
+      throw new IllegalArgumentException("The icon of a window is a PNG image");
+    }
+    this.dispatcher().run(() -> this.presentIcon(png));
+  }
+
+  /** Whether {@code bytes} start with the signature of a PNG file. */
+  private static boolean isPng(byte[] bytes) {
+    byte[] signature = {(byte) 0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n'};
+    return bytes.length > signature.length
+        && Arrays.equals(bytes, 0, signature.length, signature, 0, signature.length);
+  }
+
+  /**
+   * Shows {@code png}, already checked, as the icon of the window, or the icon of the platform for
+   * {@code null}. Called on the UI thread.
+   */
+  protected abstract void presentIcon(byte[] png);
+
+  @Override
   public final void externalLinkHandler(Consumer<String> handler) {
     this.externalLinkHandler = handler;
   }
@@ -664,6 +795,41 @@ public abstract class AbstractWindow implements Window {
       this.dispatcher().post(() -> this.navigate(url));
     } else if (scheme.equals("http") || scheme.equals("https") || scheme.equals("mailto")) {
       HANDLER_EXECUTOR.execute(() -> this.leaveReporting(url));
+    }
+  }
+
+  @Override
+  public final void permissionHandler(Function<PermissionRequest, PermissionDecision> handler) {
+    this.permissionHandler = handler;
+  }
+
+  /**
+   * The page asked for permissions, and the engine waits for the answer. A backend calls this from
+   * the callback of that request, on the UI thread, and answers the engine with the result.
+   *
+   * @param origin The URL or the origin of the page, or {@code null} where the engine doesn't tell;
+   *     the handler gets the origin of it, {@code scheme://authority}.
+   * @param kinds What the page asks for, all of it at once.
+   * @return {@code true} only if the handler granted every kind; with no handler, or one that
+   *     throws, {@code false}.
+   */
+  protected final boolean permissionRequested(String origin, PermissionKind... kinds) {
+    Function<PermissionRequest, PermissionDecision> handler = this.permissionHandler;
+    if (handler == null || kinds.length == 0) {
+      return false;
+    }
+    try {
+      for (PermissionKind kind : kinds) {
+        PermissionRequest request =
+            new PermissionRequest(kind, AbstractWindow.originOrEmpty(origin));
+        if (handler.apply(request) != PermissionDecision.GRANT) {
+          return false;
+        }
+      }
+      return true;
+    } catch (Throwable t) {
+      ThrowableUtil.report(t);
+      return false;
     }
   }
 
@@ -1141,6 +1307,22 @@ public abstract class AbstractWindow implements Window {
     this.closed = true;
     // Straight after the flag: a thread that sees the window closed must not find it in the list.
     this.application.windowClosed(this);
+    if (this.parent instanceof AbstractWindow owner) {
+      owner.children.remove(this);
+    }
+    // A child closes with its parent, whatever the platform does with it on its own.
+    for (AbstractWindow child : List.copyOf(this.children)) {
+      try {
+        child.close();
+      } catch (Throwable t) {
+        ThrowableUtil.report(t);
+      }
+    }
+    this.children.clear();
+    EventSubscription themeSubscription = this.themeSubscription;
+    if (themeSubscription != null) {
+      themeSubscription.unlisten();
+    }
     this.pageEvents.close();
     this.windowEvents.shutdown();
     this.dialogs.forEach(dialog -> dialog.future().cancel(false));

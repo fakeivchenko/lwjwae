@@ -8,22 +8,30 @@ import dev.ivchenko.lwjwae.dialog.OpenDialogParameters;
 import dev.ivchenko.lwjwae.dialog.SaveDialogParameters;
 import dev.ivchenko.lwjwae.event.Event;
 import dev.ivchenko.lwjwae.event.EventSubscription;
+import dev.ivchenko.lwjwae.event.FileDropEvent;
 import dev.ivchenko.lwjwae.event.LoadEvent;
 import dev.ivchenko.lwjwae.event.LoadState;
 import dev.ivchenko.lwjwae.event.WindowEvent;
 import dev.ivchenko.lwjwae.event.WindowEventType;
+import dev.ivchenko.lwjwae.permission.PermissionDecision;
+import dev.ivchenko.lwjwae.permission.PermissionKind;
+import dev.ivchenko.lwjwae.permission.PermissionRequest;
 import dev.ivchenko.lwjwae.testing.FakeApplication;
 import dev.ivchenko.lwjwae.testing.FakeWindow;
+import dev.ivchenko.lwjwae.testing.Icons;
 import dev.ivchenko.lwjwae.testing.Point;
 import dev.ivchenko.lwjwae.testing.PointCodec;
 import dev.ivchenko.lwjwae.testing.PresentedDialog;
 import dev.ivchenko.lwjwae.testing.RpcReply;
+import dev.ivchenko.lwjwae.theme.SystemTheme;
+import java.awt.Color;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -567,6 +575,180 @@ class AbstractWindowTest {
       window.awaitUiThread();
       Assertions.assertEquals(List.of("app://local/page.html"), window.navigated);
       Assertions.assertNull(handled.poll(200, TimeUnit.MILLISECONDS), "about:blank is dropped");
+    }
+  }
+
+  @Test
+  void themeStartsLightAndEveryChangeReachesJavaAndThePageOnce() throws Exception {
+    try (FakeApplication application = new FakeApplication()) {
+      final FakeWindow window = application.openFake();
+      Assertions.assertEquals(SystemTheme.LIGHT, application.theme());
+
+      BlockingQueue<SystemTheme> heard = new LinkedBlockingQueue<>();
+      final EventSubscription subscription = application.onThemeChange(heard::add);
+      application.changeTheme(SystemTheme.LIGHT);
+      application.changeTheme(SystemTheme.DARK);
+      application.changeTheme(SystemTheme.DARK);
+      Assertions.assertEquals(SystemTheme.DARK, heard.poll(5, TimeUnit.SECONDS));
+      Assertions.assertEquals(SystemTheme.DARK, application.theme());
+      Assertions.assertNull(
+          heard.poll(200, TimeUnit.MILLISECONDS), "a theme that it has already is no change");
+      window.call(1, BridgeProtocol.CONTROL_CALL, "theme");
+      Assertions.assertEquals("dark", window.awaitReply(1).body());
+
+      subscription.unlisten();
+      application.changeTheme(SystemTheme.LIGHT);
+      Assertions.assertNull(
+          heard.poll(200, TimeUnit.MILLISECONDS), "a listener that left is quiet");
+    }
+  }
+
+  @Test
+  void droppedFilesReachEveryListenerWithTheirPaths() throws Exception {
+    try (FakeApplication application = new FakeApplication()) {
+      FakeWindow window = application.openFake();
+      BlockingQueue<FileDropEvent> first = new LinkedBlockingQueue<>();
+      BlockingQueue<FileDropEvent> second = new LinkedBlockingQueue<>();
+      final EventSubscription subscription = window.onFileDrop(first::add);
+      window.onFileDrop(second::add);
+
+      List<Path> paths = List.of(Path.of("/tmp/a.txt"), Path.of("/tmp/some folder"));
+      window.dropFiles(paths, 120, 80);
+      FileDropEvent event = first.poll(5, TimeUnit.SECONDS);
+      Assertions.assertNotNull(event);
+      Assertions.assertEquals(paths, event.paths());
+      Assertions.assertEquals(120, event.x());
+      Assertions.assertEquals(80, event.y());
+      Assertions.assertSame(window, event.window());
+      Assertions.assertNotNull(second.poll(5, TimeUnit.SECONDS), "every listener hears it");
+
+      window.dropFiles(List.of(), 1, 1);
+      Assertions.assertNull(first.poll(200, TimeUnit.MILLISECONDS), "no file, no drop");
+
+      subscription.unlisten();
+      window.dropFiles(paths, 0, 0);
+      Assertions.assertNotNull(second.poll(5, TimeUnit.SECONDS));
+      Assertions.assertNull(
+          first.poll(200, TimeUnit.MILLISECONDS), "a listener that left is quiet");
+    }
+  }
+
+  @Test
+  void zoomIsCheckedAndReachesTheBackend() {
+    try (FakeApplication application = new FakeApplication()) {
+      FakeWindow window = application.openFake();
+      Assertions.assertEquals(1.0, window.zoom(), "a page starts at 100%");
+
+      window.zoom(1.5);
+      Assertions.assertEquals(1.5, window.zoom());
+      window.zoom(Window.MINIMUM_ZOOM);
+      window.zoom(Window.MAXIMUM_ZOOM);
+      Assertions.assertEquals(List.of(1.5, 0.25, 5.0), window.zooms);
+
+      for (double wrong :
+          new double[] {
+            0,
+            -1,
+            Window.MINIMUM_ZOOM - 0.01,
+            Window.MAXIMUM_ZOOM + 0.01,
+            Double.NaN,
+            Double.POSITIVE_INFINITY
+          }) {
+        Assertions.assertThrows(
+            IllegalArgumentException.class, () -> window.zoom(wrong), "zoom " + wrong);
+      }
+      Assertions.assertEquals(3, window.zooms.size(), "a refused zoom reaches nobody");
+
+      window.close();
+      Assertions.assertThrows(IllegalStateException.class, () -> window.zoom(2));
+      Assertions.assertThrows(IllegalStateException.class, window::zoom);
+    }
+  }
+
+  @Test
+  void iconIsPngThatReachesTheBackendAndNullBringsTheDefaultBack() {
+    byte[] png = Icons.circle(64, Color.BLUE);
+    try (FakeApplication application = new FakeApplication()) {
+      FakeWindow window = application.openFake(WindowParameters.builder().icon(png).build());
+      Assertions.assertEquals(1, window.icons.size(), "the icon of the parameters is shown");
+      Assertions.assertArrayEquals(png, window.icons.getFirst());
+
+      byte[] other = Icons.circle(32, Color.RED);
+      window.icon(other);
+      Assertions.assertArrayEquals(other, window.icons.getLast());
+      window.icon((byte[]) null);
+      Assertions.assertNull(window.icons.getLast(), "null is the icon of the platform");
+
+      Assertions.assertThrows(
+          IllegalArgumentException.class, () -> window.icon("not an image".getBytes()));
+      Assertions.assertThrows(IllegalArgumentException.class, () -> window.icon(new byte[3]));
+      Assertions.assertEquals(3, window.icons.size(), "a refused icon reaches nobody");
+
+      Assertions.assertNull(
+          application.openFake().icons.stream().findFirst().orElse(null),
+          "without an icon the backend is told nothing");
+      window.close();
+      Assertions.assertThrows(IllegalStateException.class, () -> window.icon(png));
+    }
+  }
+
+  @Test
+  void permissionsAreDeniedUntilTheHandlerGrantsThem() {
+    try (FakeApplication application = new FakeApplication()) {
+      FakeWindow window = application.openFake();
+      Assertions.assertFalse(
+          window.requestPermission("https://example.com", PermissionKind.CAMERA),
+          "no handler, no permission");
+
+      List<PermissionRequest> seen = new CopyOnWriteArrayList<>();
+      window.permissionHandler(
+          request -> {
+            seen.add(request);
+            return request.kind() == PermissionKind.CAMERA
+                ? PermissionDecision.GRANT
+                : PermissionDecision.DENY;
+          });
+      Assertions.assertTrue(window.requestPermission("https://example.com", PermissionKind.CAMERA));
+      Assertions.assertFalse(
+          window.requestPermission(
+              "https://example.com", PermissionKind.CAMERA, PermissionKind.MICROPHONE),
+          "one denied kind of a pair denies both");
+      Assertions.assertEquals(
+          List.of(
+              new PermissionRequest(PermissionKind.CAMERA, "https://example.com"),
+              new PermissionRequest(PermissionKind.CAMERA, "https://example.com"),
+              new PermissionRequest(PermissionKind.MICROPHONE, "https://example.com")),
+          seen);
+
+      seen.clear();
+      window.permissionHandler(
+          request -> {
+            seen.add(request);
+            return PermissionDecision.DENY;
+          });
+      window.requestPermission("app://local/test-app/page.html?x=1", PermissionKind.CAMERA);
+      window.requestPermission("http://app.localhost/", PermissionKind.CAMERA);
+      window.requestPermission(null, PermissionKind.CAMERA);
+      Assertions.assertEquals(
+          List.of(
+              new PermissionRequest(PermissionKind.CAMERA, "app://local"),
+              new PermissionRequest(PermissionKind.CAMERA, "http://app.localhost"),
+              new PermissionRequest(PermissionKind.CAMERA, "")),
+          seen,
+          "the handler gets the origin of the page, whatever the engine reports");
+
+      window.permissionHandler(
+          _ -> {
+            throw new IllegalStateException("handler failed");
+          });
+      Assertions.assertFalse(
+          window.requestPermission("https://example.com", PermissionKind.CAMERA),
+          "a handler that throws denies");
+
+      window.permissionHandler(null);
+      Assertions.assertFalse(
+          window.requestPermission("https://example.com", PermissionKind.CAMERA),
+          "null brings the default back");
     }
   }
 

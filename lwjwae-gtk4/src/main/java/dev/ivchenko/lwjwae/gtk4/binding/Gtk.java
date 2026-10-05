@@ -124,6 +124,20 @@ public class Gtk {
           GTK, "gtk_window_set_transient_for", Signatures.VOID_POINTER_POINTER);
   private final MethodHandle WINDOW_SET_MODAL =
       NativeLibraries.downcall(GTK, "gtk_window_set_modal", Signatures.VOID_POINTER_INT);
+  private final MethodHandle WINDOW_GET_TRANSIENT_FOR =
+      NativeLibraries.downcall(GTK, "gtk_window_get_transient_for", Signatures.POINTER_POINTER);
+  private final MethodHandle WINDOW_GET_MODAL =
+      NativeLibraries.downcall(GTK, "gtk_window_get_modal", Signatures.INT_POINTER);
+  private final MethodHandle WINDOW_HAS_GROUP =
+      NativeLibraries.downcall(GTK, "gtk_window_has_group", Signatures.INT_POINTER);
+  private final MethodHandle WINDOW_GET_GROUP =
+      NativeLibraries.downcall(GTK, "gtk_window_get_group", Signatures.POINTER_POINTER);
+  private final MethodHandle WINDOW_GROUP_NEW =
+      NativeLibraries.downcall(GTK, "gtk_window_group_new", Signatures.POINTER_VOID);
+  private final MethodHandle WINDOW_GROUP_ADD_WINDOW =
+      NativeLibraries.downcall(GTK, "gtk_window_group_add_window", Signatures.VOID_POINTER_POINTER);
+  private final MethodHandle WINDOW_GROUP_LIST_WINDOWS =
+      NativeLibraries.downcall(GTK, "gtk_window_group_list_windows", Signatures.POINTER_POINTER);
   private final MethodHandle WINDOW_SET_TITLEBAR =
       NativeLibraries.downcall(GTK, "gtk_window_set_titlebar", Signatures.VOID_POINTER_POINTER);
   private final MethodHandle WINDOW_SET_DECORATED =
@@ -263,6 +277,28 @@ public class Gtk {
           GTK, "gtk_event_controller_set_propagation_phase", Signatures.VOID_POINTER_INT);
   private final MethodHandle WIDGET_ADD_CONTROLLER =
       NativeLibraries.downcall(GTK, "gtk_widget_add_controller", Signatures.VOID_POINTER_POINTER);
+  private final MethodHandle DROP_CONTROLLER_MOTION_NEW =
+      NativeLibraries.downcall(GTK, "gtk_drop_controller_motion_new", Signatures.POINTER_VOID);
+  private final MethodHandle DROP_CONTROLLER_MOTION_GET_DROP =
+      NativeLibraries.downcall(
+          GTK, "gtk_drop_controller_motion_get_drop", Signatures.POINTER_POINTER);
+  private final MethodHandle DROP_GET_FORMATS =
+      NativeLibraries.downcall(GTK, "gdk_drop_get_formats", Signatures.POINTER_POINTER);
+  private final MethodHandle CONTENT_FORMATS_CONTAIN_GTYPE =
+      NativeLibraries.downcall(
+          GTK, "gdk_content_formats_contain_gtype", Signatures.INT_POINTER_LONG);
+  private final MethodHandle FILE_LIST_GET_TYPE =
+      NativeLibraries.downcall(GTK, "gdk_file_list_get_type", Signatures.LONG_VOID);
+  private final MethodHandle FILE_LIST_GET_FILES =
+      NativeLibraries.downcall(GTK, "gdk_file_list_get_files", Signatures.POINTER_POINTER);
+  private final MethodHandle DROP_READ_VALUE_ASYNC =
+      NativeLibraries.downcall(
+          GTK, "gdk_drop_read_value_async", Signatures.GDK_DROP_READ_VALUE_ASYNC);
+  private final MethodHandle DROP_READ_VALUE_FINISH =
+      NativeLibraries.downcall(
+          GTK, "gdk_drop_read_value_finish", Signatures.POINTER_POINTER_POINTER_POINTER);
+  private final MethodHandle VALUE_GET_BOXED =
+      NativeLibraries.downcall(GTK, "g_value_get_boxed", Signatures.POINTER_POINTER);
   private final MethodHandle WIDGET_REMOVE_CONTROLLER =
       NativeLibraries.downcall(
           GTK, "gtk_widget_remove_controller", Signatures.VOID_POINTER_POINTER);
@@ -284,6 +320,9 @@ public class Gtk {
 
   /** {@code GTK_PHASE_CAPTURE}: from the window down, before the widget with the focus. */
   private final int PHASE_CAPTURE = 1;
+
+  /** {@code G_PRIORITY_DEFAULT}. */
+  private final int G_PRIORITY_DEFAULT = 0;
 
   /** {@code GTK_ALIGN_START}. */
   private final int ALIGN_START = 1;
@@ -957,6 +996,52 @@ public class Gtk {
     WINDOW_SET_MODAL.invokeExact(window, modal ? 1 : 0);
   }
 
+  /** Calls {@code gtk_window_get_transient_for}: the parent, or {@code NULL}. */
+  @SneakyThrows
+  public MemorySegment windowTransientFor(MemorySegment window) {
+    return (MemorySegment) WINDOW_GET_TRANSIENT_FOR.invokeExact(window);
+  }
+
+  /**
+   * Puts {@code child} into the window group of {@code parent}, which gets a group of its own first
+   * if it's still in the default one: a modal window keeps the user from the windows of its group
+   * alone, and the default group holds every window of the process.
+   */
+  @SneakyThrows
+  public void windowJoinGroupOf(MemorySegment child, MemorySegment parent) {
+    MemorySegment group;
+    if ((int) WINDOW_HAS_GROUP.invokeExact(parent) != 0) {
+      group = (MemorySegment) WINDOW_GET_GROUP.invokeExact(parent);
+    } else {
+      group = (MemorySegment) WINDOW_GROUP_NEW.invokeExact();
+      WINDOW_GROUP_ADD_WINDOW.invokeExact(group, parent);
+      // The windows hold the group from now on.
+      Glib.unref(group);
+    }
+    WINDOW_GROUP_ADD_WINDOW.invokeExact(group, child);
+  }
+
+  /**
+   * Whether a modal window that is transient for {@code parent} is up in its window group, and so
+   * keeps the user from it.
+   */
+  @SneakyThrows
+  public boolean hasModalChild(MemorySegment parent) {
+    if ((int) WINDOW_HAS_GROUP.invokeExact(parent) == 0) {
+      return false;
+    }
+    MemorySegment group = (MemorySegment) WINDOW_GET_GROUP.invokeExact(parent);
+    for (MemorySegment window :
+        Glib.takeListItems((MemorySegment) WINDOW_GROUP_LIST_WINDOWS.invokeExact(group))) {
+      if (Gtk.windowTransientFor(window).equals(parent)
+          && (int) WINDOW_GET_MODAL.invokeExact(window) != 0
+          && Gtk.isWidgetVisible(window)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   /** Whether the default display is one of X11, where a client grabs keys itself. */
   @SneakyThrows
   public boolean isX11() {
@@ -1071,6 +1156,69 @@ public class Gtk {
     }
     WIDGET_ADD_CONTROLLER.invokeExact(window, controller);
     return controller;
+  }
+
+  /**
+   * Adds a controller to {@code widget} that follows a drag over it without taking part in it, so
+   * that the drop target of the widget itself still decides, and calls {@code onEnter} with {@code
+   * userData} when a drag comes in. The widget owns the controller.
+   */
+  @SneakyThrows
+  public MemorySegment addDropMotionController(
+      MemorySegment widget, MemorySegment onEnter, MemorySegment userData) {
+    MemorySegment controller = (MemorySegment) DROP_CONTROLLER_MOTION_NEW.invokeExact();
+    Glib.signalConnect(controller, "enter", onEnter, userData);
+    WIDGET_ADD_CONTROLLER.invokeExact(widget, controller);
+    return controller;
+  }
+
+  /**
+   * The {@code GdkDrop} of the drag that {@code controller} follows, if it offers a list of files,
+   * or {@code NULL}.
+   */
+  @SneakyThrows
+  public MemorySegment dropOfFiles(MemorySegment controller) {
+    MemorySegment drop = (MemorySegment) DROP_CONTROLLER_MOTION_GET_DROP.invokeExact(controller);
+    if (drop.equals(MemorySegment.NULL)) {
+      return MemorySegment.NULL;
+    }
+    MemorySegment formats = (MemorySegment) DROP_GET_FORMATS.invokeExact(drop);
+    long fileList = (long) FILE_LIST_GET_TYPE.invokeExact();
+    return (int) CONTENT_FORMATS_CONTAIN_GTYPE.invokeExact(formats, fileList) != 0
+        ? drop
+        : MemorySegment.NULL;
+  }
+
+  /**
+   * Reads the files of {@code drop} as a {@code GdkFileList}, and calls {@code callback} with
+   * {@code userData} once they are read, on the GTK thread; {@link #dropReadFilesFinish} takes the
+   * paths. The source can hand them over before the drop, as XDND and Wayland let it.
+   */
+  @SneakyThrows
+  public void dropReadFilesAsync(
+      MemorySegment drop, MemorySegment callback, MemorySegment userData) {
+    long fileList = (long) FILE_LIST_GET_TYPE.invokeExact();
+    DROP_READ_VALUE_ASYNC.invokeExact(
+        drop, fileList, G_PRIORITY_DEFAULT, MemorySegment.NULL, callback, userData);
+  }
+
+  /** The local paths of the files that a read of {@code drop} found, empty for none or an error. */
+  @SneakyThrows
+  public List<String> dropReadFilesFinish(MemorySegment drop, MemorySegment result) {
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment error = arena.allocate(Signatures.C_POINTER);
+      error.set(Signatures.C_POINTER, 0, MemorySegment.NULL);
+      MemorySegment value = (MemorySegment) DROP_READ_VALUE_FINISH.invokeExact(drop, result, error);
+      String _ = Glib.takeErrorMessage(error.get(Signatures.C_POINTER, 0));
+      if (value.equals(MemorySegment.NULL)) {
+        return List.of();
+      }
+      MemorySegment list = (MemorySegment) VALUE_GET_BOXED.invokeExact(value);
+      if (list.equals(MemorySegment.NULL)) {
+        return List.of();
+      }
+      return Glib.takeFileListPaths((MemorySegment) FILE_LIST_GET_FILES.invokeExact(list));
+    }
   }
 
   /** Calls {@code gtk_widget_remove_controller}. */

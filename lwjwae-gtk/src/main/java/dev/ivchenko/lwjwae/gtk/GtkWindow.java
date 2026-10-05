@@ -16,6 +16,7 @@ import dev.ivchenko.lwjwae.event.LoadState;
 import dev.ivchenko.lwjwae.foreign.CallbackRegistry;
 import dev.ivchenko.lwjwae.foreign.NativeLibraries;
 import dev.ivchenko.lwjwae.glib.PortalShortcuts;
+import dev.ivchenko.lwjwae.glib.binding.GdkPixbuf;
 import dev.ivchenko.lwjwae.glib.binding.Glib;
 import dev.ivchenko.lwjwae.glib.util.DecorationLayoutUtil;
 import dev.ivchenko.lwjwae.glib.util.WebKitEditingUtil;
@@ -25,12 +26,15 @@ import dev.ivchenko.lwjwae.gtk.binding.Signatures;
 import dev.ivchenko.lwjwae.gtk.binding.WebKit;
 import dev.ivchenko.lwjwae.menu.MenuCommands;
 import dev.ivchenko.lwjwae.menu.MenuRole;
+import dev.ivchenko.lwjwae.permission.PermissionKind;
 import dev.ivchenko.lwjwae.rpc.RpcExchange;
+import dev.ivchenko.lwjwae.util.FileDropUtil;
 import dev.ivchenko.lwjwae.util.ThrowableUtil;
 import java.lang.foreign.MemorySegment;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -102,6 +106,44 @@ public class GtkWindow extends AbstractWindow {
           MethodType.methodType(
               MemorySegment.class, MemorySegment.class, MemorySegment.class, MemorySegment.class),
           Signatures.CREATE_CALLBACK);
+  private static final MemorySegment ON_DRAG_MOTION =
+      NativeLibraries.upcall(
+          MethodHandles.lookup(),
+          GtkWindow.class,
+          "onDragMotion",
+          MethodType.methodType(
+              int.class,
+              MemorySegment.class,
+              MemorySegment.class,
+              int.class,
+              int.class,
+              int.class,
+              MemorySegment.class),
+          Signatures.DRAG_MOTION_CALLBACK);
+  private static final MemorySegment ON_DRAG_DATA_RECEIVED =
+      NativeLibraries.upcall(
+          MethodHandles.lookup(),
+          GtkWindow.class,
+          "onDragDataReceived",
+          MethodType.methodType(
+              void.class,
+              MemorySegment.class,
+              MemorySegment.class,
+              int.class,
+              int.class,
+              MemorySegment.class,
+              int.class,
+              int.class,
+              MemorySegment.class),
+          Signatures.DRAG_DATA_RECEIVED_CALLBACK);
+  private static final MemorySegment ON_PERMISSION_REQUEST =
+      NativeLibraries.upcall(
+          MethodHandles.lookup(),
+          GtkWindow.class,
+          "onPermissionRequest",
+          MethodType.methodType(
+              int.class, MemorySegment.class, MemorySegment.class, MemorySegment.class),
+          Signatures.DELETE_EVENT_CALLBACK);
   private static final MemorySegment ON_CONTEXT_MENU =
       NativeLibraries.upcall(
           MethodHandles.lookup(),
@@ -139,6 +181,11 @@ public class GtkWindow extends AbstractWindow {
 
   private volatile MemorySegment window;
   private volatile MemorySegment webView;
+
+  /** Where the pointer was at the last motion of a drag over the web view. */
+  private volatile int dragX;
+
+  private volatile int dragY;
   private volatile MemorySegment userContentManager;
   private volatile MemorySegment headerBar;
 
@@ -186,6 +233,13 @@ public class GtkWindow extends AbstractWindow {
       Gtk.windowSetPosition(newWindow, Gtk.WIN_POS_CENTER);
     } else if (parameters.hasPosition()) {
       Gtk.windowMove(newWindow, parameters.position().x(), parameters.position().y());
+    } else if (parameters.parent() != null) {
+      Gtk.windowSetPosition(newWindow, Gtk.WIN_POS_CENTER_ON_PARENT);
+    }
+    if (parameters.parent() instanceof GtkWindow parent) {
+      Gtk.windowSetTransientFor(newWindow, parent.window());
+      Gtk.windowJoinGroupOf(newWindow, parent.window());
+      Gtk.windowSetModal(newWindow, parameters.modal());
     }
 
     if (!parameters.decorated()) {
@@ -228,6 +282,11 @@ public class GtkWindow extends AbstractWindow {
       WebKit.setTransparentBackground(newWebView);
     }
     WebKit.setUserAgent(newWebView, this.userAgent(WebKit.userAgent(newWebView)));
+    WebKit.setMediaStreamEnabled(newWebView, true);
+    // Set by the tests of the library only, which run where no camera is.
+    if (Boolean.getBoolean("lwjwae.mockCaptureDevices")) {
+      WebKit.setMockCaptureDevicesEnabled(newWebView, true);
+    }
     MemorySegment newBox = Gtk.boxNew(Gtk.ORIENTATION_VERTICAL, 0);
     Gtk.boxPackStart(newBox, newWebView, true);
     Gtk.containerAdd(newWindow, newBox);
@@ -246,6 +305,9 @@ public class GtkWindow extends AbstractWindow {
     Glib.signalConnect(newWebView, "load-failed", ON_LOAD_FAILED, userData);
     Glib.signalConnect(newWebView, "context-menu", ON_CONTEXT_MENU, userData);
     Glib.signalConnect(newWebView, "create", ON_CREATE, userData);
+    Glib.signalConnect(newWebView, "permission-request", ON_PERMISSION_REQUEST, userData);
+    Glib.signalConnect(newWebView, "drag-motion", ON_DRAG_MOTION, userData);
+    Glib.signalConnect(newWebView, "drag-data-received", ON_DRAG_DATA_RECEIVED, userData);
 
     this.window = newWindow;
     this.webView = newWebView;
@@ -278,6 +340,34 @@ public class GtkWindow extends AbstractWindow {
   @Override
   protected List<WindowEdge> pageResizeEdges() {
     return this.frameless ? List.of(WindowEdge.values()) : List.of();
+  }
+
+  /**
+   * The icon of the title bar and the taskbar on X11; Wayland takes it from the {@code .desktop}.
+   */
+  @Override
+  protected void presentIcon(byte[] png) {
+    if (png == null) {
+      Gtk.windowSetIcon(this.window(), MemorySegment.NULL);
+      Gdk.clearWindowIcons(Gtk.widgetGetWindow(this.window()));
+      return;
+    }
+    MemorySegment pixbuf = GdkPixbuf.decode(png);
+    try {
+      Gtk.windowSetIcon(this.window(), pixbuf);
+    } finally {
+      Glib.unref(pixbuf);
+    }
+  }
+
+  @Override
+  protected void presentZoom(double factor) {
+    WebKit.setZoomLevel(this.webView, factor);
+  }
+
+  @Override
+  protected double currentZoom() {
+    return WebKit.zoomLevel(this.webView);
   }
 
   @Override
@@ -708,7 +798,8 @@ public class GtkWindow extends AbstractWindow {
     this.serveRpc(exchange);
   }
 
-  private MemorySegment window() {
+  /** The native {@code GtkWindow}. Call on the GTK thread. */
+  MemorySegment window() {
     return this.alive(this.window);
   }
 
@@ -901,6 +992,108 @@ public class GtkWindow extends AbstractWindow {
       ThrowableUtil.report(t);
     }
     return MemorySegment.NULL;
+  }
+
+  /**
+   * The pointer moves over the web view with a drag. This only remembers where, and doesn't answer
+   * for the drag: WebKit decides whether the page accepts it.
+   *
+   * <p>Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
+   * binds it by name, so no Java code calls it and the compiler sees a dead private method. {@code
+   * resource}: the window is {@code AutoCloseable}, and a lookup that returns it looks like an
+   * unclosed resource. It is not: the application owns the window and closes it, this method only
+   * borrows it.
+   */
+  @SuppressWarnings({"unused", "resource"})
+  private static int onDragMotion(
+      MemorySegment webView,
+      MemorySegment context,
+      int x,
+      int y,
+      int time,
+      MemorySegment userData) {
+    GtkWindow window = WINDOWS.lookup(userData);
+    if (window != null) {
+      window.dragX = x;
+      window.dragY = y;
+    }
+    return 0;
+  }
+
+  /**
+   * Something was dropped on the web view. WebKit acts on the drop itself, as the page decided;
+   * this handler only reads the URIs of a file drop, and hands the paths to the window.
+   *
+   * <p>Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
+   * binds it by name, so no Java code calls it and the compiler sees a dead private method. {@code
+   * resource}: the window is {@code AutoCloseable}, and a lookup that returns it looks like an
+   * unclosed resource. It is not: the application owns the window and closes it, this method only
+   * borrows it.
+   */
+  @SuppressWarnings({"unused", "resource"})
+  private static void onDragDataReceived(
+      MemorySegment webView,
+      MemorySegment context,
+      int x,
+      int y,
+      MemorySegment selectionData,
+      int info,
+      int time,
+      MemorySegment userData) {
+    try {
+      GtkWindow window = WINDOWS.lookup(userData);
+      if (window != null) {
+        // WebKit asks for the data from its own handler of the drop, and the coordinates that come
+        // with it are not the ones of the pointer; the last motion has them.
+        window.filesDropped(
+            FileDropUtil.pathsOfUris(Gtk.selectionDataUris(selectionData)),
+            window.dragX,
+            window.dragY);
+      }
+    } catch (Throwable t) {
+      ThrowableUtil.report(t);
+    }
+  }
+
+  /**
+   * The page asks for a permission, and WebKit waits for the answer. Only the camera and the
+   * microphone reach the handler; the position, notifications, and a capture of the screen are
+   * denied here, so that the engine never shows a prompt of its own.
+   *
+   * <p>Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
+   * binds it by name, so no Java code calls it and the compiler sees a dead private method. {@code
+   * resource}: the window is {@code AutoCloseable}, and a lookup that returns it looks like an
+   * unclosed resource. It is not: the application owns the window and closes it, this method only
+   * borrows it.
+   */
+  @SuppressWarnings({"unused", "resource"})
+  private static int onPermissionRequest(
+      MemorySegment webView, MemorySegment request, MemorySegment userData) {
+    boolean granted = false;
+    try {
+      GtkWindow window = WINDOWS.lookup(userData);
+      if (window != null
+          && WebKit.isUserMediaRequest(request)
+          && !WebKit.isForDisplayDevice(request)) {
+        List<PermissionKind> kinds = new ArrayList<>();
+        if (WebKit.isForVideoDevice(request)) {
+          kinds.add(PermissionKind.CAMERA);
+        }
+        if (WebKit.isForAudioDevice(request)) {
+          kinds.add(PermissionKind.MICROPHONE);
+        }
+        granted =
+            window.permissionRequested(WebKit.uri(webView), kinds.toArray(PermissionKind[]::new));
+      }
+    } catch (Throwable t) {
+      ThrowableUtil.report(t);
+    }
+    try {
+      WebKit.answerPermissionRequest(request, granted);
+    } catch (Throwable t) {
+      ThrowableUtil.report(t);
+    }
+    return 1;
   }
 
   /**

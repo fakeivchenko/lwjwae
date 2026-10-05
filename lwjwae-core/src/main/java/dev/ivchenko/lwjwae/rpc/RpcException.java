@@ -1,5 +1,6 @@
 package dev.ivchenko.lwjwae.rpc;
 
+import java.io.Serial;
 import lombok.Getter;
 
 /**
@@ -9,6 +10,8 @@ import lombok.Getter;
  */
 @Getter
 public class RpcException extends RuntimeException {
+  @Serial private static final long serialVersionUID = 1L;
+
   private final int status;
   private final String code;
 

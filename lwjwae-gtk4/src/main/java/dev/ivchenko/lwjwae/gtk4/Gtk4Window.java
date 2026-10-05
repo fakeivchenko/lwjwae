@@ -24,12 +24,14 @@ import dev.ivchenko.lwjwae.gtk4.binding.Signatures;
 import dev.ivchenko.lwjwae.gtk4.binding.WebKit;
 import dev.ivchenko.lwjwae.menu.MenuCommands;
 import dev.ivchenko.lwjwae.menu.MenuRole;
+import dev.ivchenko.lwjwae.permission.PermissionKind;
 import dev.ivchenko.lwjwae.rpc.RpcExchange;
 import dev.ivchenko.lwjwae.util.ThrowableUtil;
 import java.lang.foreign.MemorySegment;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -54,6 +56,33 @@ public class Gtk4Window extends AbstractWindow {
   private static final Map<Long, Gtk4Window> BY_WEB_VIEW = new ConcurrentHashMap<>();
   private static final CallbackRegistry<CompletableFuture<String>> PENDING_EVALUATIONS =
       new CallbackRegistry<>();
+  private static final CallbackRegistry<CompletableFuture<List<Path>>> FILE_READS =
+      new CallbackRegistry<>();
+
+  /** What the script of the page posts when files are dropped on it, before where. */
+  private static final String FILE_DROP_MESSAGE = "lwjwae:files";
+
+  /**
+   * Tells the host where files were dropped on the page, which it can't learn from GTK: the drop
+   * target of WebKit takes the drop, and the page hides the paths. It runs first, in the capture
+   * phase, so that a page that stops the event still lets Java hear of the drop. The paths come
+   * from the drag itself, see {@link #onDragEnter}, so a page that posts this without a drag finds
+   * nothing to report.
+   */
+  private static final String FILE_DROP_SCRIPT =
+      """
+      window.addEventListener("drop", (event) => {
+        const types = event.dataTransfer ? Array.from(event.dataTransfer.types) : [];
+        if (!types.includes("Files") && !types.includes("text/uri-list")) return;
+        window.webkit.messageHandlers.%s.postMessage(
+            "%s%s" + Math.round(event.clientX) + "%s" + Math.round(event.clientY));
+      }, true);
+      """
+          .formatted(
+              BridgeProtocol.CHANNEL,
+              FILE_DROP_MESSAGE,
+              BridgeProtocol.SEPARATOR,
+              BridgeProtocol.SEPARATOR);
 
   private static final MemorySegment ON_DESTROY =
       NativeLibraries.upcall(
@@ -120,6 +149,30 @@ public class Gtk4Window extends AbstractWindow {
           MethodType.methodType(
               MemorySegment.class, MemorySegment.class, MemorySegment.class, MemorySegment.class),
           Signatures.CREATE_CALLBACK);
+  private static final MemorySegment ON_DRAG_ENTER =
+      NativeLibraries.upcall(
+          MethodHandles.lookup(),
+          Gtk4Window.class,
+          "onDragEnter",
+          MethodType.methodType(
+              void.class, MemorySegment.class, double.class, double.class, MemorySegment.class),
+          Signatures.DROP_MOTION_CALLBACK);
+  private static final MemorySegment ON_FILES_READ =
+      NativeLibraries.upcall(
+          MethodHandles.lookup(),
+          Gtk4Window.class,
+          "onFilesRead",
+          MethodType.methodType(
+              void.class, MemorySegment.class, MemorySegment.class, MemorySegment.class),
+          Signatures.G_ASYNC_READY_CALLBACK);
+  private static final MemorySegment ON_PERMISSION_REQUEST =
+      NativeLibraries.upcall(
+          MethodHandles.lookup(),
+          Gtk4Window.class,
+          "onPermissionRequest",
+          MethodType.methodType(
+              int.class, MemorySegment.class, MemorySegment.class, MemorySegment.class),
+          Signatures.INT_POINTER_POINTER_POINTER);
   private static final MemorySegment ON_CONTEXT_MENU =
       NativeLibraries.upcall(
           MethodHandles.lookup(),
@@ -163,6 +216,9 @@ public class Gtk4Window extends AbstractWindow {
   private volatile Gtk4MenuBuilder menuBarBuilder;
   private volatile MemorySegment shortcutController;
 
+  /** The files of the drag over the web view, once read, or {@code null} without one. */
+  private volatile CompletableFuture<List<Path>> draggedFiles;
+
   /**
    * Creates the native window on the GTK thread and returns when it exists. The window is hidden
    * until {@link #show()}.
@@ -189,6 +245,11 @@ public class Gtk4Window extends AbstractWindow {
     MemorySegment newWindow = Gtk.windowNew();
     Gtk.windowSetTitle(newWindow, parameters.title());
     Gtk.windowSetDefaultSize(newWindow, parameters.size().width(), parameters.size().height());
+    if (parameters.parent() instanceof Gtk4Window parent) {
+      Gtk.windowSetTransientFor(newWindow, parent.window());
+      Gtk.windowJoinGroupOf(newWindow, parent.window());
+      Gtk.windowSetModal(newWindow, parameters.modal());
+    }
     if (!parameters.decorated() && parameters.transparent()) {
       // No frame at all: its shadow and its edge would outline the whole window around the shape
       // that the page draws.
@@ -210,13 +271,17 @@ public class Gtk4Window extends AbstractWindow {
       Gtk.windowClearBackground(newWindow);
     }
 
-    MemorySegment userData = CallbackRegistry.userData(this.callbackId);
-
     MemorySegment newWebView = WebKit.webViewNew();
     if (parameters.transparent()) {
       WebKit.setTransparentBackground(newWebView);
     }
     WebKit.setUserAgent(newWebView, this.userAgent(WebKit.userAgent(newWebView)));
+    WebKit.setMediaStreamEnabled(newWebView, true);
+    // Set by the tests of the library only, which run where no camera is.
+    if (Boolean.getBoolean("lwjwae.mockCaptureDevices")) {
+      WebKit.setMockCaptureDevicesEnabled(newWebView, true);
+    }
+    MemorySegment userData = CallbackRegistry.userData(this.callbackId);
     // Connect before registering, otherwise early messages race the signal handler.
     MemorySegment manager = WebKit.userContentManager(newWebView);
     Glib.signalConnect(
@@ -238,6 +303,8 @@ public class Gtk4Window extends AbstractWindow {
     Glib.signalConnect(newWebView, "load-failed", ON_LOAD_FAILED, userData);
     Glib.signalConnect(newWebView, "context-menu", ON_CONTEXT_MENU, userData);
     Glib.signalConnect(newWebView, "create", ON_CREATE, userData);
+    Glib.signalConnect(newWebView, "permission-request", ON_PERMISSION_REQUEST, userData);
+    Gtk.addDropMotionController(newWebView, ON_DRAG_ENTER, userData);
 
     this.window = newWindow;
     this.webView = newWebView;
@@ -245,6 +312,7 @@ public class Gtk4Window extends AbstractWindow {
     BY_WEB_VIEW.put(newWebView.address(), this);
     this.userContentManager = manager;
     this.installBridge();
+    this.injectOnDocumentStart(FILE_DROP_SCRIPT);
   }
 
   /**
@@ -266,6 +334,23 @@ public class Gtk4Window extends AbstractWindow {
   @Override
   protected List<WindowEdge> pageResizeEdges() {
     return this.frameless ? List.of(WindowEdge.values()) : List.of();
+  }
+
+  /**
+   * Does nothing: GTK 4 has no call that takes an image for a window, and the desktop takes the
+   * icon from the {@code .desktop} file of the application.
+   */
+  @Override
+  protected void presentIcon(byte[] png) {}
+
+  @Override
+  protected void presentZoom(double factor) {
+    WebKit.setZoomLevel(this.webView, factor);
+  }
+
+  @Override
+  protected double currentZoom() {
+    return WebKit.zoomLevel(this.webView);
   }
 
   @Override
@@ -685,7 +770,8 @@ public class Gtk4Window extends AbstractWindow {
     this.serveRpc(exchange);
   }
 
-  private MemorySegment window() {
+  /** The native {@code GtkWindow}. Call on the GTK thread. */
+  MemorySegment window() {
     return this.alive(this.window);
   }
 
@@ -785,9 +871,9 @@ public class Gtk4Window extends AbstractWindow {
    * The state of the surface changed.
    *
    * <p>Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
-   * binds it by name. {@code resource}: the window is only borrowed.
+   * binds it by name.
    */
-  @SuppressWarnings({"unused", "resource"})
+  @SuppressWarnings("unused")
   private static void onStateNotify(
       MemorySegment surface, MemorySegment property, MemorySegment userData) {
     Gtk4Window.changed(userData);
@@ -797,9 +883,9 @@ public class Gtk4Window extends AbstractWindow {
    * The surface has a new size.
    *
    * <p>Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
-   * binds it by name. {@code resource}: the window is only borrowed.
+   * binds it by name.
    */
-  @SuppressWarnings({"unused", "resource"})
+  @SuppressWarnings("unused")
   private static void onLayout(
       MemorySegment surface, int width, int height, MemorySegment userData) {
     Gtk4Window.changed(userData);
@@ -923,6 +1009,47 @@ public class Gtk4Window extends AbstractWindow {
   }
 
   /**
+   * The page asks for a permission, and WebKit waits for the answer. Only the camera and the
+   * microphone reach the handler; the position, notifications, and a capture of the screen are
+   * denied here, so that the engine never shows a prompt of its own.
+   *
+   * <p>Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
+   * binds it by name, so no Java code calls it and the compiler sees a dead private method. {@code
+   * resource}: the window is {@code AutoCloseable}, and a lookup that returns it looks like an
+   * unclosed resource. It is not: the application owns the window and closes it, this method only
+   * borrows it.
+   */
+  @SuppressWarnings({"unused", "resource"})
+  private static int onPermissionRequest(
+      MemorySegment webView, MemorySegment request, MemorySegment userData) {
+    boolean granted = false;
+    try {
+      Gtk4Window window = WINDOWS.lookup(userData);
+      if (window != null
+          && WebKit.isUserMediaRequest(request)
+          && !WebKit.isForDisplayDevice(request)) {
+        List<PermissionKind> kinds = new ArrayList<>();
+        if (WebKit.isForVideoDevice(request)) {
+          kinds.add(PermissionKind.CAMERA);
+        }
+        if (WebKit.isForAudioDevice(request)) {
+          kinds.add(PermissionKind.MICROPHONE);
+        }
+        granted =
+            window.permissionRequested(WebKit.uri(webView), kinds.toArray(PermissionKind[]::new));
+      }
+    } catch (Throwable t) {
+      ThrowableUtil.report(t);
+    }
+    try {
+      WebKit.answerPermissionRequest(request, granted);
+    } catch (Throwable t) {
+      ThrowableUtil.report(t);
+    }
+    return 1;
+  }
+
+  /**
    * Suppresses the context menu of the engine ("Reload", "View Source") in a shipped application,
    * by returning {@code TRUE}. With the developer tools enabled, the menu stays, because "Inspect
    * Element" lives there. A page can still handle {@code contextmenu} itself either way.
@@ -967,6 +1094,80 @@ public class Gtk4Window extends AbstractWindow {
   }
 
   /**
+   * A drop of files on the page, which the script of the page posted with where it happened: the
+   * window reports the files of the drag that it read, once they are read. Without a drag that
+   * offered files, there is nothing to report.
+   */
+  private void fileDropMessage(String message) {
+    String[] fields = message.split(BridgeProtocol.SEPARATOR);
+    CompletableFuture<List<Path>> files = this.draggedFiles;
+    this.draggedFiles = null;
+    if (files == null || fields.length != 3) {
+      return;
+    }
+    int x = Integer.parseInt(fields[1]);
+    int y = Integer.parseInt(fields[2]);
+    files.whenComplete(
+        (paths, failure) -> {
+          if (failure != null) {
+            ThrowableUtil.report(failure);
+          } else {
+            this.filesDropped(paths, x, y);
+          }
+        });
+  }
+
+  /**
+   * A drag comes over the web view. If it offers files, their paths are read now, while the source
+   * holds them, for the drop that the page reports, see {@link #fileDropMessage}; the drop target
+   * of WebKit reads them again for itself.
+   *
+   * <p>Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
+   * binds it by name. {@code resource}: the window is only borrowed.
+   */
+  @SuppressWarnings({"unused", "resource"})
+  private static void onDragEnter(
+      MemorySegment controller, double x, double y, MemorySegment userData) {
+    try {
+      Gtk4Window window = WINDOWS.lookup(userData);
+      if (window == null) {
+        return;
+      }
+      MemorySegment drop = Gtk.dropOfFiles(controller);
+      if (drop.equals(MemorySegment.NULL)) {
+        window.draggedFiles = null;
+        return;
+      }
+      CompletableFuture<List<Path>> files = new CompletableFuture<>();
+      window.draggedFiles = files;
+      long id = FILE_READS.register(files);
+      Gtk.dropReadFilesAsync(drop, ON_FILES_READ, CallbackRegistry.userData(id));
+    } catch (Throwable t) {
+      ThrowableUtil.report(t);
+    }
+  }
+
+  /**
+   * The files of a drag are read.
+   *
+   * <p>Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
+   * binds it by name.
+   */
+  @SuppressWarnings("unused")
+  private static void onFilesRead(
+      MemorySegment source, MemorySegment result, MemorySegment userData) {
+    CompletableFuture<List<Path>> files = FILE_READS.unregister(userData);
+    if (files == null) {
+      return;
+    }
+    try {
+      files.complete(Gtk.dropReadFilesFinish(source, result).stream().map(Path::of).toList());
+    } catch (Throwable t) {
+      files.completeExceptionally(t);
+    }
+  }
+
+  /**
    * Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
    * binds it by name, so no Java code calls it and the compiler sees a dead private method. {@code
    * resource}: the window is {@code AutoCloseable}, and a lookup that returns it looks like an
@@ -982,7 +1183,12 @@ public class Gtk4Window extends AbstractWindow {
         return;
       }
 
-      window.handleBridgeMessage(WebKit.scriptMessageText(value));
+      String text = WebKit.scriptMessageText(value);
+      if (text.startsWith(FILE_DROP_MESSAGE)) {
+        window.fileDropMessage(text);
+      } else {
+        window.handleBridgeMessage(text);
+      }
     } catch (Throwable t) {
       ThrowableUtil.report(t);
     }
