@@ -82,6 +82,10 @@ public class Signatures {
   /** {@code OSStatus f(T*)}: {@code UnregisterEventHotKey}. */
   public final FunctionDescriptor INT_POINTER = FunctionDescriptor.of(C_INT, C_POINTER);
 
+  /** {@code OSStatus f(T*, U*)}: {@code SecItemCopyMatching}. */
+  public final FunctionDescriptor INT_POINTER_POINTER =
+      FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER);
+
   /**
    * {@code OSStatus RegisterEventHotKey(UInt32, UInt32, EventHotKeyID, EventTargetRef, OptionBits,
    * EventHotKeyRef*)}. The {@code EventHotKeyID} of two {@code UInt32} goes by value in one

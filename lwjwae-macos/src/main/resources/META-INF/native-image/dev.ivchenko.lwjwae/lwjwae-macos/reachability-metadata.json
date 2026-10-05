@@ -732,6 +732,13 @@
           "void*",
           "struct(jdouble,jdouble,jdouble,jdouble)"
         ]
+      },
+      {
+        "returnType": "jint",
+        "parameterTypes": [
+          "void*",
+          "void*"
+        ]
       }
     ],
     "directUpcalls": [

@@ -4,6 +4,7 @@ import dev.ivchenko.lwjwae.macos.binding.AppKit;
 import dev.ivchenko.lwjwae.macos.binding.Carbon;
 import dev.ivchenko.lwjwae.macos.binding.Foundation;
 import dev.ivchenko.lwjwae.macos.binding.ObjC;
+import dev.ivchenko.lwjwae.macos.binding.Security;
 import dev.ivchenko.lwjwae.macos.binding.UserNotifications;
 import dev.ivchenko.lwjwae.macos.binding.WebKit;
 import dev.ivchenko.lwjwae.testing.contract.NativeImageMetadataContractTest;
@@ -42,6 +43,7 @@ class MacNativeImageMetadataTest extends NativeImageMetadataContractTest {
         UserNotifications.class,
         MacNotifier.class,
         Carbon.class,
-        MacShortcuts.class);
+        MacShortcuts.class,
+        Security.class);
   }
 }

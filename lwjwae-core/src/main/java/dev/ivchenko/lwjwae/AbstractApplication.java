@@ -14,6 +14,7 @@ import dev.ivchenko.lwjwae.menu.MenuItem;
 import dev.ivchenko.lwjwae.notification.Notification;
 import dev.ivchenko.lwjwae.notification.NotificationHandle;
 import dev.ivchenko.lwjwae.rpc.RpcHandler;
+import dev.ivchenko.lwjwae.secret.Secrets;
 import dev.ivchenko.lwjwae.shortcut.Shortcut;
 import dev.ivchenko.lwjwae.state.SavedWindowState;
 import dev.ivchenko.lwjwae.state.WindowStateStore;
@@ -123,6 +124,7 @@ public abstract class AbstractApplication implements Application {
   private volatile SystemTheme theme = SystemTheme.LIGHT;
   private volatile Clipboard clipboard;
   private volatile Cookies cookies;
+  private volatile Secrets secrets;
   private volatile List<MenuItem> menu = List.of();
   private volatile TaskbarProgress progress = TaskbarProgress.none();
   private volatile int badgeCount;
@@ -628,6 +630,35 @@ public abstract class AbstractApplication implements Application {
    */
   protected Cookies createCookies() {
     throw new UnsupportedOperationException("No cookies on this backend yet");
+  }
+
+  @Override
+  public final Secrets secrets() {
+    this.checkOpen();
+    String name = this.parameters.name();
+    if (name == null) {
+      throw new IllegalStateException("Secrets need the name of the application");
+    }
+    Secrets current = this.secrets;
+    if (current == null) {
+      synchronized (this) {
+        if (this.secrets == null) {
+          this.secrets = this.createSecrets(name);
+        }
+        current = this.secrets;
+      }
+    }
+    return current;
+  }
+
+  /**
+   * Creates the secrets of the platform for the application named {@code service}, once, on first
+   * use.
+   *
+   * @throws UnsupportedOperationException If this backend has no secrets yet, the default.
+   */
+  protected Secrets createSecrets(String service) {
+    throw new UnsupportedOperationException("The " + this.engine() + " backend has no secrets yet");
   }
 
   @Override

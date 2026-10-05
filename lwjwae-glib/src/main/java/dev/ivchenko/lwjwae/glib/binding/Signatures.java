@@ -164,6 +164,14 @@ public class Signatures {
   public final FunctionDescriptor POINTER_POINTER_INT_POINTER_POINTER_POINTER =
       FunctionDescriptor.of(C_POINTER, C_POINTER, C_INT, C_POINTER, C_POINTER, C_POINTER);
 
+  /** {@code gboolean f(T*, U*, V*, W*)}: {@code secret_password_clearv_sync}. */
+  public final FunctionDescriptor INT_POINTER_X4 =
+      FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_POINTER, C_POINTER);
+
+  /** {@code T* f(U*, V*, W*, X*)}: {@code secret_password_lookupv_sync}. */
+  public final FunctionDescriptor POINTER_POINTER_X4 =
+      FunctionDescriptor.of(C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER);
+
   /**
    * {@code gint f(T*, U*, V*, W*, X*, Y*, Z*)}: {@code g_dbus_connection_register_object} and
    * {@code g_dbus_connection_emit_signal}.

@@ -13,6 +13,7 @@ import dev.ivchenko.lwjwae.macos.binding.AppKit;
 import dev.ivchenko.lwjwae.macos.binding.WebKit;
 import dev.ivchenko.lwjwae.notification.Notification;
 import dev.ivchenko.lwjwae.notification.NotificationHandle;
+import dev.ivchenko.lwjwae.secret.Secrets;
 import dev.ivchenko.lwjwae.shortcut.Shortcut;
 import dev.ivchenko.lwjwae.taskbar.TaskbarProgress;
 import dev.ivchenko.lwjwae.tray.Tray;
@@ -63,6 +64,11 @@ public class MacApplication extends AbstractApplication {
   @Override
   public String engine() {
     return this.dispatcher().call(() -> "WKWebView " + WebKit.version());
+  }
+
+  @Override
+  protected Secrets createSecrets(String service) {
+    return new MacSecrets(service);
   }
 
   @Override
