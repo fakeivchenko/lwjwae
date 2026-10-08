@@ -651,6 +651,15 @@
           "void*",
           "jdouble"
         ]
+      },
+      {
+        "returnType": "jint",
+        "parameterTypes": [
+          "void*",
+          "jint",
+          "jint",
+          "void*"
+        ]
       }
     ]
   }

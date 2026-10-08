@@ -181,6 +181,10 @@ public class Signatures {
   public final FunctionDescriptor INT_POINTER_INT_INT =
       FunctionDescriptor.of(C_INT, C_POINTER, C_INT, C_INT);
 
+  /** {@code BOOL f(LPCWSTR, DWORD, DWORD, PCREDENTIALW*)}: {@code CredReadW}. */
+  public final FunctionDescriptor INT_POINTER_INT_INT_POINTER =
+      FunctionDescriptor.of(C_INT, C_POINTER, C_INT, C_INT, C_POINTER);
+
   /** {@code int f(int)}: {@code GetSystemMetrics}. */
   public final FunctionDescriptor INT_INT = FunctionDescriptor.of(C_INT, C_INT);
 

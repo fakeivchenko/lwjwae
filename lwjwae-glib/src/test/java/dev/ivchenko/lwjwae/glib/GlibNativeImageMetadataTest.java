@@ -4,6 +4,7 @@ import dev.ivchenko.lwjwae.glib.binding.Dbus;
 import dev.ivchenko.lwjwae.glib.binding.GdkPixbuf;
 import dev.ivchenko.lwjwae.glib.binding.GioMenus;
 import dev.ivchenko.lwjwae.glib.binding.Glib;
+import dev.ivchenko.lwjwae.glib.binding.Libsecret;
 import dev.ivchenko.lwjwae.glib.binding.Soup;
 import dev.ivchenko.lwjwae.glib.binding.Unix;
 import dev.ivchenko.lwjwae.glib.binding.X11;
@@ -39,6 +40,7 @@ class GlibNativeImageMetadataTest extends NativeImageMetadataContractTest {
         DesktopTheme.class,
         PortalShortcuts.class,
         Soup.class,
-        WebKitCookies.class);
+        WebKitCookies.class,
+        Libsecret.class);
   }
 }

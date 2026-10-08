@@ -10,6 +10,7 @@ import dev.ivchenko.lwjwae.cookie.Cookies;
 import dev.ivchenko.lwjwae.event.EventSubscription;
 import dev.ivchenko.lwjwae.notification.Notification;
 import dev.ivchenko.lwjwae.notification.NotificationHandle;
+import dev.ivchenko.lwjwae.secret.Secrets;
 import dev.ivchenko.lwjwae.shortcut.Shortcut;
 import dev.ivchenko.lwjwae.taskbar.TaskbarProgress;
 import dev.ivchenko.lwjwae.tray.Tray;
@@ -133,6 +134,11 @@ public class WindowsApplication extends AbstractApplication {
   @Override
   public String engine() {
     return this.dispatcher().call(() -> "WebView2 " + WebView2.browserVersion(this.environment()));
+  }
+
+  @Override
+  protected Secrets createSecrets(String service) {
+    return new WindowsSecrets(service);
   }
 
   @Override

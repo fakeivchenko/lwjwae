@@ -14,6 +14,7 @@ import dev.ivchenko.lwjwae.menu.MenuItem;
 import dev.ivchenko.lwjwae.notification.Notification;
 import dev.ivchenko.lwjwae.notification.NotificationHandle;
 import dev.ivchenko.lwjwae.rpc.RpcHandler;
+import dev.ivchenko.lwjwae.secret.Secrets;
 import dev.ivchenko.lwjwae.shortcut.Shortcut;
 import dev.ivchenko.lwjwae.store.Store;
 import dev.ivchenko.lwjwae.taskbar.TaskbarProgress;
@@ -714,6 +715,26 @@ public interface Application extends AutoCloseable {
    * @throws IllegalStateException If the application is closed.
    */
   Cookies cookies();
+
+  /**
+   * The secrets of the application, such as tokens and passwords, in the store of credentials of
+   * the system, under {@link ApplicationParameters#name()}.
+   *
+   * <p>Platforms:
+   *
+   * <ul>
+   *   <li>Windows: Generic credentials of the Credential Manager, named {@code APPLICATION/KEY}.
+   *   <li>macOS: Generic passwords of the login keychain, with the application as the service and
+   *       the key as the account.
+   *   <li>Linux, GTK 3: Passwords of the Secret Service, GNOME Keyring or KWallet, through
+   *       libsecret, with the application and the key as attributes.
+   *   <li>Linux, GTK 4: As on GTK 3.
+   * </ul>
+   *
+   * @throws IllegalStateException If the application has no name, or is closed.
+   * @throws UnsupportedOperationException If this backend has no secrets yet.
+   */
+  Secrets secrets();
 
   /**
    * The colors that the user chose for the desktop, as of the last change. A page sees the same as

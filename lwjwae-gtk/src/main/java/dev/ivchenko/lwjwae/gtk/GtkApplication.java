@@ -13,6 +13,7 @@ import dev.ivchenko.lwjwae.foreign.NativeLibraries;
 import dev.ivchenko.lwjwae.glib.DesktopServices;
 import dev.ivchenko.lwjwae.glib.DesktopTheme;
 import dev.ivchenko.lwjwae.glib.PortalDialogs;
+import dev.ivchenko.lwjwae.glib.SecretServiceSecrets;
 import dev.ivchenko.lwjwae.glib.StatusNotifierTray;
 import dev.ivchenko.lwjwae.glib.WebKitCookies;
 import dev.ivchenko.lwjwae.glib.X11Shortcuts;
@@ -25,6 +26,7 @@ import dev.ivchenko.lwjwae.gtk.binding.WebKit;
 import dev.ivchenko.lwjwae.notification.Notification;
 import dev.ivchenko.lwjwae.notification.NotificationHandle;
 import dev.ivchenko.lwjwae.rpc.RpcExchange;
+import dev.ivchenko.lwjwae.secret.Secrets;
 import dev.ivchenko.lwjwae.shortcut.Shortcut;
 import dev.ivchenko.lwjwae.taskbar.TaskbarProgress;
 import dev.ivchenko.lwjwae.tray.Tray;
@@ -107,6 +109,11 @@ public class GtkApplication extends AbstractApplication {
   @Override
   public String engine() {
     return "WebKitGTK " + WebKit.version();
+  }
+
+  @Override
+  protected Secrets createSecrets(String service) {
+    return new SecretServiceSecrets(service);
   }
 
   @Override
