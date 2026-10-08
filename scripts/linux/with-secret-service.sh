@@ -15,5 +15,6 @@ keyrings=$(mktemp -d)
 export XDG_DATA_HOME="$keyrings"
 eval "$(printf 'lwjwae' | gnome-keyring-daemon --unlock --components=secrets)"
 export GNOME_KEYRING_CONTROL
-trap 'kill "$GNOME_KEYRING_PID" 2>/dev/null || true; rm -rf "$keyrings"' EXIT
+# Some versions print the PID of the daemon, and some don't; the session bus ends it either way.
+trap 'kill "${GNOME_KEYRING_PID:-}" 2>/dev/null || true; rm -rf "$keyrings"' EXIT
 "$@"

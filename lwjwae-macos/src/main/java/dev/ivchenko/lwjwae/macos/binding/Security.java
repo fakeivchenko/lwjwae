@@ -93,7 +93,11 @@ public class Security {
       MemorySegment value = Foundation.data(data);
       MemorySegment update = ObjC.send(ObjC.cls("NSMutableDictionary"), "dictionary");
       Security.put(update, VALUE_DATA, value);
-      int status = (int) ITEM_UPDATE.invokeExact(query, update);
+      // SecItemUpdate keeps the data as it was for an empty one: the item goes, and comes back.
+      int status =
+          data.length == 0
+              ? Security.deleted((int) ITEM_DELETE.invokeExact(query))
+              : (int) ITEM_UPDATE.invokeExact(query, update);
       if (status == ITEM_NOT_FOUND) {
         Security.put(query, VALUE_DATA, value);
         Security.put(query, ATTRIBUTE_LABEL, Foundation.string(label));
@@ -126,6 +130,19 @@ public class Security {
     } finally {
       ObjC.autoreleasePoolPop(pool);
     }
+  }
+
+  /**
+   * {@code errSecItemNotFound} after a delete that removed the item or found none, which is what
+   * makes the caller add it.
+   *
+   * @throws IllegalStateException If the delete failed for another reason.
+   */
+  private int deleted(int status) {
+    if (status != ITEM_NOT_FOUND) {
+      Security.check("SecItemDelete", status);
+    }
+    return ITEM_NOT_FOUND;
   }
 
   /** An autoreleased query for the generic password of {@code service} and {@code account}. */
