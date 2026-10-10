@@ -6,6 +6,9 @@ import dev.ivchenko.lwjwae.dialog.MessageDialogParameters;
 import dev.ivchenko.lwjwae.dialog.MessageLevel;
 import dev.ivchenko.lwjwae.dialog.OpenDialogParameters;
 import dev.ivchenko.lwjwae.dialog.SaveDialogParameters;
+import dev.ivchenko.lwjwae.download.DownloadDecision;
+import dev.ivchenko.lwjwae.download.DownloadRequest;
+import dev.ivchenko.lwjwae.event.DownloadEvent;
 import dev.ivchenko.lwjwae.event.Event;
 import dev.ivchenko.lwjwae.event.EventSubscription;
 import dev.ivchenko.lwjwae.event.FileDropEvent;
@@ -640,6 +643,53 @@ public interface Window extends AutoCloseable {
    *     handler that throws denies the request. {@code null} brings the default back.
    */
   void permissionHandler(Function<PermissionRequest, PermissionDecision> handler);
+
+  /**
+   * Decides where a download of the page goes: a link with a {@code download} attribute, a file
+   * that the server sends as an attachment or that the engine can't show, and a navigation from
+   * Java to such a file. By default, the file goes to the downloads folder of the user, under the
+   * name that the server suggests, with a number added where a file of that name is there.
+   *
+   * <pre>{@code
+   * window.downloadHandler(request ->
+   *     request.suggestedFileName().endsWith(".pdf")
+   *         ? DownloadDecision.saveTo(reports.resolve(request.suggestedFileName()))
+   *         : DownloadDecision.ask());
+   * }</pre>
+   *
+   * <p>Platforms:
+   *
+   * <ul>
+   *   <li>Windows: Through the {@code DownloadStarting} event of WebView2, which needs the runtime
+   *       1.0.902 or later. The download bubble of Edge never shows.
+   *   <li>macOS: Through {@code WKDownload}, which needs macOS 11.3 or later.
+   *   <li>Linux, GTK 3: Through the {@code decide-destination} signal of {@code WebKitDownload}.
+   *   <li>Linux, GTK 4: As on GTK 3.
+   * </ul>
+   *
+   * @param handler Receives each request on a virtual thread of its own, so it may block, for
+   *     example on a dialog, while the engine waits. A handler that throws or answers {@code null}
+   *     downloads nothing. {@code null} brings the default back.
+   */
+  void downloadHandler(Function<DownloadRequest, DownloadDecision> handler);
+
+  /**
+   * Calls {@code listener} as each download of the page starts, gets on, and ends. A page hears the
+   * same through {@code lwjwae.downloads.listen}.
+   *
+   * @param listener Receives the events on a virtual thread, one after the other.
+   * @return The subscription, to stop listening.
+   */
+  EventSubscription onDownload(Consumer<DownloadEvent> listener);
+
+  /**
+   * Cancels the download {@code id} of a {@link DownloadEvent}, and returns without waiting for the
+   * engine; a {@link dev.ivchenko.lwjwae.download.DownloadState#CANCELED} event follows. A page
+   * cancels with {@code lwjwae.downloads.cancel(id)}.
+   *
+   * @return Whether the download was still going.
+   */
+  boolean cancelDownload(long id);
 
   /**
    * Shows the dialog of the platform that opens files, or folders, over this window, and returns

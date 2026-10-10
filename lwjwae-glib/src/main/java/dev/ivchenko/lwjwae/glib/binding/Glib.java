@@ -40,11 +40,15 @@ public class Glib {
 
   private final VarHandle ERROR_MESSAGE =
       ERROR_LAYOUT.varHandle(MemoryLayout.PathElement.groupElement("message"));
+  private final VarHandle ERROR_CODE =
+      ERROR_LAYOUT.varHandle(MemoryLayout.PathElement.groupElement("code"));
 
   private final MethodHandle MAIN_LOOP_NEW =
       NativeLibraries.downcall(GLIB, "g_main_loop_new", Signatures.POINTER_POINTER_INT);
   private final MethodHandle MAIN_LOOP_RUN =
       NativeLibraries.downcall(GLIB, "g_main_loop_run", Signatures.VOID_POINTER);
+  private final MethodHandle MAIN_CONTEXT_ITERATION =
+      NativeLibraries.downcall(GLIB, "g_main_context_iteration", Signatures.INT_POINTER_INT);
   private final MethodHandle IDLE_ADD =
       NativeLibraries.downcall(GLIB, "g_idle_add", Signatures.INT_POINTER_POINTER);
   private final MethodHandle GETENV =
@@ -146,6 +150,18 @@ public class Glib {
   public void runMainLoop() {
     MemorySegment loop = (MemorySegment) MAIN_LOOP_NEW.invokeExact(MemorySegment.NULL, 0);
     MAIN_LOOP_RUN.invokeExact(loop);
+  }
+
+  /**
+   * Runs one iteration of the default main context on the calling thread, which must be the one
+   * that runs it: a nested loop, as {@code gtk_dialog_run} has, for a callback that must answer
+   * before it returns while the UI keeps going.
+   *
+   * @param mayBlock Whether to wait for an event when none is pending.
+   */
+  @SneakyThrows
+  public void mainContextIteration(boolean mayBlock) {
+    int _ = (int) MAIN_CONTEXT_ITERATION.invokeExact(MemorySegment.NULL, mayBlock ? 1 : 0);
   }
 
   /**
@@ -571,6 +587,16 @@ public class Glib {
     String value = NativeLibraries.string(pointer);
     Glib.free(pointer);
     return value;
+  }
+
+  /** The {@code code} of a borrowed {@code GError}, or 0 for {@code NULL}. */
+  public int errorCode(MemorySegment error) {
+    if (error.equals(MemorySegment.NULL)) {
+      return 0;
+    }
+
+    MemorySegment struct = error.reinterpret(ERROR_LAYOUT.byteSize());
+    return (int) ERROR_CODE.get(struct, 0L);
   }
 
   /** Reads {@code error->message} from a borrowed {@code GError}. */

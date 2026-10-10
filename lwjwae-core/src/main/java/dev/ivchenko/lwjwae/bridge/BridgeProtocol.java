@@ -95,6 +95,14 @@ public class BridgeProtocol {
   public final String FILES_EVENT = "lwjwae:files";
 
   /**
+   * The event that tells a page how a download of its own gets on: its payload is JSON, {@code
+   * {"id": n, "url": "...", "path": "...", "state": "started", "receivedBytes": n, "totalBytes": n,
+   * "failure": ""}}, with the states of {@link dev.ivchenko.lwjwae.download.DownloadState} in
+   * lowercase.
+   */
+  public final String DOWNLOADS_EVENT = "lwjwae:downloads";
+
+  /**
    * The name under which a page asks for a new window, through {@code window.lwjwae.open(options)}.
    * Reserved like {@link #EVENT_CALL}. The payload is what {@link #parseWindowParameters} reads;
    * the promise resolves to the ID of the window.
@@ -244,6 +252,7 @@ public class BridgeProtocol {
         .replace("${windowEvent}", WINDOW_EVENT)
         .replace("${themeEvent}", THEME_EVENT)
         .replace("${filesEvent}", FILES_EVENT)
+        .replace("${downloadsEvent}", DOWNLOADS_EVENT)
         .replace("${openCall}", OPEN_CALL)
         .replace("${closeCall}", CLOSE_CALL)
         .replace("${controlCall}", CONTROL_CALL)

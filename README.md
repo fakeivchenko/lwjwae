@@ -59,8 +59,8 @@ const greeting = await window.greet("Ada");
   Java to the page. With a codec, records and objects cross the bridge as they are.
 - **Native look and feel.** Use the dialogs, menus, tray icon, notifications, and taskbar progress
   of the platform.
-- **The desktop at hand.** Read and write the clipboard, register global shortcuts, and receive the
-  files that the user drops on a window.
+- **The desktop at hand.** Read and write the clipboard, register global shortcuts, receive the
+  files that the user drops on a window, and decide where the downloads of a page go.
 - **Your own links and files.** Register a scheme such as `notes://` and the types of files that
   your application opens. A second start hands its arguments to the running instance.
 - **Storage built in.** Keep data in SQLite, from Java and from the page, with no extra dependency.

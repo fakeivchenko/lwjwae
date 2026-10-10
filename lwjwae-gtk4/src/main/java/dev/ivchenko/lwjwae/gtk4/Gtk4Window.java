@@ -11,6 +11,8 @@ import dev.ivchenko.lwjwae.dialog.DialogCompletion;
 import dev.ivchenko.lwjwae.dialog.MessageDialogParameters;
 import dev.ivchenko.lwjwae.dialog.OpenDialogParameters;
 import dev.ivchenko.lwjwae.dialog.SaveDialogParameters;
+import dev.ivchenko.lwjwae.download.DownloadRequest;
+import dev.ivchenko.lwjwae.download.DownloadState;
 import dev.ivchenko.lwjwae.event.LoadEvent;
 import dev.ivchenko.lwjwae.event.LoadState;
 import dev.ivchenko.lwjwae.foreign.CallbackRegistry;
@@ -30,12 +32,14 @@ import dev.ivchenko.lwjwae.util.ThrowableUtil;
 import java.lang.foreign.MemorySegment;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
+import java.net.URI;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -201,7 +205,63 @@ public class Gtk4Window extends AbstractWindow {
           MethodType.methodType(
               void.class, MemorySegment.class, MemorySegment.class, MemorySegment.class),
           Signatures.SCRIPT_MESSAGE_CALLBACK);
+  private static final MemorySegment ON_DOWNLOAD_STARTED =
+      NativeLibraries.upcall(
+          MethodHandles.lookup(),
+          Gtk4Window.class,
+          "onDownloadStarted",
+          MethodType.methodType(
+              void.class, MemorySegment.class, MemorySegment.class, MemorySegment.class),
+          Signatures.SCRIPT_MESSAGE_CALLBACK);
+  private static final MemorySegment ON_DECIDE_DESTINATION =
+      NativeLibraries.upcall(
+          MethodHandles.lookup(),
+          Gtk4Window.class,
+          "onDecideDestination",
+          MethodType.methodType(
+              int.class, MemorySegment.class, MemorySegment.class, MemorySegment.class),
+          Signatures.INT_POINTER_POINTER_POINTER);
+  private static final MemorySegment ON_DOWNLOAD_RECEIVED_DATA =
+      NativeLibraries.upcall(
+          MethodHandles.lookup(),
+          Gtk4Window.class,
+          "onDownloadReceivedData",
+          MethodType.methodType(void.class, MemorySegment.class, long.class, MemorySegment.class),
+          Signatures.DOWNLOAD_RECEIVED_DATA_CALLBACK);
+  private static final MemorySegment ON_DOWNLOAD_FAILED =
+      NativeLibraries.upcall(
+          MethodHandles.lookup(),
+          Gtk4Window.class,
+          "onDownloadFailed",
+          MethodType.methodType(
+              void.class, MemorySegment.class, MemorySegment.class, MemorySegment.class),
+          Signatures.SCRIPT_MESSAGE_CALLBACK);
+  private static final MemorySegment ON_DOWNLOAD_FINISHED =
+      NativeLibraries.upcall(
+          MethodHandles.lookup(),
+          Gtk4Window.class,
+          "onDownloadFinished",
+          MethodType.methodType(void.class, MemorySegment.class, MemorySegment.class),
+          Signatures.WIDGET_CALLBACK);
+
+  private static final MemorySegment ON_WAKE_UP =
+      NativeLibraries.upcall(
+          MethodHandles.lookup(),
+          Gtk4Window.class,
+          "onWakeUp",
+          MethodType.methodType(int.class, MemorySegment.class),
+          Signatures.G_SOURCE_FUNC);
+
+  /** The objects that emit {@code download-started}, each connected once, for every window. */
+  private static final Set<Long> DOWNLOAD_SOURCES = ConcurrentHashMap.newKeySet();
+
   private final long callbackId;
+
+  /**
+   * The ID of each download of the page that started, by the address of its {@code WebKitDownload}.
+   */
+  private final Map<Long, Long> downloadIds = new ConcurrentHashMap<>();
+
   private final boolean frameless;
 
   private volatile WindowSize minimumSize = WindowSize.NONE;
@@ -310,6 +370,11 @@ public class Gtk4Window extends AbstractWindow {
     this.webView = newWebView;
     this.box = newBox;
     BY_WEB_VIEW.put(newWebView.address(), this);
+    MemorySegment downloadSource = WebKit.downloadSource(newWebView);
+    if (DOWNLOAD_SOURCES.add(downloadSource.address())) {
+      Glib.signalConnect(
+          downloadSource, "download-started", ON_DOWNLOAD_STARTED, MemorySegment.NULL);
+    }
     this.userContentManager = manager;
     this.installBridge();
     this.injectOnDocumentStart(FILE_DROP_SCRIPT);
@@ -811,6 +876,174 @@ public class Gtk4Window extends AbstractWindow {
   }
 
   // --- signal handlers, bound by name from the upcall stubs above; signatures are GTK's ---
+
+  /**
+   * A download started in some web view; it belongs to the window of that web view, which hears its
+   * steps from here on. WebKit emits this on the object that every window shares, so the window is
+   * found by its web view.
+   *
+   * <p>Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
+   * binds it by name. {@code resource}: the window is borrowed, not owned.
+   */
+  @SuppressWarnings({"unused", "resource"})
+  private static void onDownloadStarted(
+      MemorySegment source, MemorySegment download, MemorySegment userData) {
+    try {
+      MemorySegment view = WebKit.downloadWebView(download);
+      Gtk4Window window = view.equals(MemorySegment.NULL) ? null : BY_WEB_VIEW.get(view.address());
+      if (window == null || window.isClosed()) {
+        return;
+      }
+      MemorySegment data = CallbackRegistry.userData(window.callbackId);
+      Glib.signalConnect(download, "decide-destination", ON_DECIDE_DESTINATION, data);
+      Glib.signalConnect(download, "received-data", ON_DOWNLOAD_RECEIVED_DATA, data);
+      Glib.signalConnect(download, "failed", ON_DOWNLOAD_FAILED, data);
+      Glib.signalConnect(download, "finished", ON_DOWNLOAD_FINISHED, data);
+    } catch (Throwable t) {
+      ThrowableUtil.report(t);
+    }
+  }
+
+  /**
+   * WebKit asks where the download goes, and takes the answer when the handler returns. The handler
+   * of the application runs on a virtual thread meanwhile, while the main loop keeps running here,
+   * so the UI stays alive and a dialog that the handler shows works.
+   *
+   * <p>Suppressed warnings: as for {@link #onDownloadStarted}.
+   */
+  @SuppressWarnings({"unused", "resource"})
+  private static int onDecideDestination(
+      MemorySegment download, MemorySegment suggestedFileName, MemorySegment userData) {
+    try {
+      Gtk4Window window = WINDOWS.lookup(userData);
+      if (window == null) {
+        WebKit.downloadCancel(download);
+        return 1;
+      }
+      URI url = Gtk4Window.downloadUrl(download);
+      long totalBytes = WebKit.downloadContentLength(download);
+      DownloadRequest request =
+          new DownloadRequest(
+              url,
+              NativeLibraries.string(suggestedFileName),
+              WebKit.downloadMimeType(download),
+              totalBytes);
+      Optional<Path> path = window.awaitOnMainLoop(window.downloadRequested(request));
+      if (path.isEmpty() || window.isClosed()) {
+        WebKit.downloadCancel(download);
+        return 1;
+      }
+      WebKit.downloadSetDestination(download, path.get());
+      Glib.ref(download);
+      long address = download.address();
+      long id =
+          window.downloadStarted(
+              url,
+              path.get(),
+              totalBytes,
+              () -> {
+                if (window.downloadIds.containsKey(address)) {
+                  WebKit.downloadCancel(download);
+                }
+              });
+      window.downloadIds.put(address, id);
+    } catch (Throwable t) {
+      ThrowableUtil.report(t);
+      WebKit.downloadCancel(download);
+    }
+    return 1;
+  }
+
+  /** Suppressed warnings: as for {@link #onDownloadStarted}. */
+  @SuppressWarnings({"unused", "resource"})
+  private static void onDownloadReceivedData(
+      MemorySegment download, long dataLength, MemorySegment userData) {
+    try {
+      Gtk4Window window = WINDOWS.lookup(userData);
+      Long id = window == null ? null : window.downloadIds.get(download.address());
+      if (id != null) {
+        window.downloadProgressed(
+            id, WebKit.downloadReceivedLength(download), WebKit.downloadContentLength(download));
+      }
+    } catch (Throwable t) {
+      ThrowableUtil.report(t);
+    }
+  }
+
+  /**
+   * The download stopped, canceled or on an error. {@code finished} follows, and finds the download
+   * ended already.
+   *
+   * <p>Suppressed warnings: as for {@link #onDownloadStarted}.
+   */
+  @SuppressWarnings({"unused", "resource"})
+  private static void onDownloadFailed(
+      MemorySegment download, MemorySegment error, MemorySegment userData) {
+    try {
+      Gtk4Window window = WINDOWS.lookup(userData);
+      Long id = window == null ? null : window.downloadIds.get(download.address());
+      if (id != null) {
+        boolean canceled = Glib.errorCode(error) == WebKit.DOWNLOAD_ERROR_CANCELLED_BY_USER;
+        window.downloadEnded(
+            id,
+            canceled ? DownloadState.CANCELED : DownloadState.FAILED,
+            canceled ? "" : Glib.errorMessage(error));
+      }
+    } catch (Throwable t) {
+      ThrowableUtil.report(t);
+    }
+  }
+
+  /**
+   * The download is over, after {@code failed} too; a download that didn't fail completed.
+   *
+   * <p>Suppressed warnings: as for {@link #onDownloadStarted}.
+   */
+  @SuppressWarnings({"unused", "resource"})
+  private static void onDownloadFinished(MemorySegment download, MemorySegment userData) {
+    try {
+      Gtk4Window window = WINDOWS.lookup(userData);
+      Long id = window == null ? null : window.downloadIds.remove(download.address());
+      if (id != null) {
+        window.downloadEnded(id, DownloadState.COMPLETED, "");
+        Glib.unref(download);
+      }
+    } catch (Throwable t) {
+      ThrowableUtil.report(t);
+    }
+  }
+
+  /** The URL of {@code download}, or {@code about:blank} for one that isn't a URI. */
+  private static URI downloadUrl(MemorySegment download) {
+    try {
+      return URI.create(WebKit.downloadUri(download));
+    } catch (IllegalArgumentException | NullPointerException _) {
+      return URI.create("about:blank");
+    }
+  }
+
+  /**
+   * Runs the main loop on this thread until {@code future} completes, and returns its value. Call
+   * on the GTK thread, from a callback that must answer before it returns.
+   */
+  private <T> T awaitOnMainLoop(CompletableFuture<T> future) {
+    // A completion on another thread wakes the loop, which would otherwise wait for an event.
+    future.whenComplete((_, _) -> Glib.idleAdd(ON_WAKE_UP, MemorySegment.NULL));
+    while (!future.isDone()) {
+      Glib.mainContextIteration(true);
+    }
+    return future.join();
+  }
+
+  /**
+   * Does nothing, once: an idle callback that wakes the main loop.
+   *
+   * <p>Suppressed warnings: {@code unused}: reached only through the upcall stub.
+   */
+  @SuppressWarnings("unused")
+  private static int onWakeUp(MemorySegment userData) {
+    return Glib.SOURCE_REMOVE;
+  }
 
   /**
    * The user asked to close the window, from the title bar or the desktop. {@code TRUE} cancels the

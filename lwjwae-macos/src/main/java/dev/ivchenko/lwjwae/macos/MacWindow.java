@@ -11,6 +11,8 @@ import dev.ivchenko.lwjwae.dialog.DialogCompletion;
 import dev.ivchenko.lwjwae.dialog.MessageDialogParameters;
 import dev.ivchenko.lwjwae.dialog.OpenDialogParameters;
 import dev.ivchenko.lwjwae.dialog.SaveDialogParameters;
+import dev.ivchenko.lwjwae.download.DownloadRequest;
+import dev.ivchenko.lwjwae.download.DownloadState;
 import dev.ivchenko.lwjwae.event.LoadEvent;
 import dev.ivchenko.lwjwae.event.LoadState;
 import dev.ivchenko.lwjwae.exception.ResourceNotFoundException;
@@ -36,6 +38,8 @@ import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
+import java.net.URI;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
@@ -134,6 +138,30 @@ public class MacWindow extends AbstractWindow {
       MacWindow.delegateStub("onStartUrlSchemeTask", 2);
   private static final MemorySegment ON_STOP_TASK =
       MacWindow.delegateStub("onStopUrlSchemeTask", 2);
+  private static final MemorySegment ON_DECIDE_NAVIGATION_ACTION =
+      MacWindow.delegateStub("onDecideNavigationAction", 3);
+  private static final MemorySegment ON_DECIDE_NAVIGATION_RESPONSE =
+      MacWindow.delegateStub("onDecideNavigationResponse", 3);
+  private static final MemorySegment ON_BECAME_DOWNLOAD =
+      MacWindow.delegateStub("onBecameDownload", 3);
+  private static final MemorySegment ON_DECIDE_DOWNLOAD_DESTINATION =
+      NativeLibraries.upcall(
+          MethodHandles.lookup(),
+          MacWindow.class,
+          "onDecideDownloadDestination",
+          MethodType.methodType(
+              void.class,
+              MemorySegment.class,
+              MemorySegment.class,
+              MemorySegment.class,
+              MemorySegment.class,
+              MemorySegment.class,
+              MemorySegment.class),
+          Signatures.DELEGATE_4);
+  private static final MemorySegment ON_DOWNLOAD_FINISHED =
+      MacWindow.delegateStub("onDownloadFinished", 1);
+  private static final MemorySegment ON_DOWNLOAD_FAILED =
+      MacWindow.delegateStub("onDownloadFailed", 3);
   private static final MemorySegment ON_CREATE_WEB_VIEW =
       NativeLibraries.upcall(
           MethodHandles.lookup(),
@@ -211,6 +239,25 @@ public class MacWindow extends AbstractWindow {
                   "webView:requestMediaCapturePermissionForOrigin:initiatedByFrame:"
                       + "type:decisionHandler:",
                   new MethodStub(ON_MEDIA_CAPTURE, "v@:@@@q@?")),
+              Map.entry(
+                  "webView:decidePolicyForNavigationAction:decisionHandler:",
+                  new MethodStub(ON_DECIDE_NAVIGATION_ACTION, "v@:@@@?")),
+              Map.entry(
+                  "webView:decidePolicyForNavigationResponse:decisionHandler:",
+                  new MethodStub(ON_DECIDE_NAVIGATION_RESPONSE, "v@:@@@?")),
+              Map.entry(
+                  "webView:navigationAction:didBecomeDownload:",
+                  new MethodStub(ON_BECAME_DOWNLOAD, "v@:@@@")),
+              Map.entry(
+                  "webView:navigationResponse:didBecomeDownload:",
+                  new MethodStub(ON_BECAME_DOWNLOAD, "v@:@@@")),
+              Map.entry(
+                  "download:decideDestinationUsingResponse:suggestedFilename:completionHandler:",
+                  new MethodStub(ON_DECIDE_DOWNLOAD_DESTINATION, "v@:@@@@?")),
+              Map.entry("downloadDidFinish:", new MethodStub(ON_DOWNLOAD_FINISHED, "v@:@")),
+              Map.entry(
+                  "download:didFailWithError:resumeData:",
+                  new MethodStub(ON_DOWNLOAD_FAILED, "v@:@@@")),
               Map.entry("windowDidResize:", new MethodStub(ON_WINDOW_CHANGED, "v@:@")),
               Map.entry("windowDidMove:", new MethodStub(ON_WINDOW_CHANGED, "v@:@")),
               Map.entry("windowDidBecomeKey:", new MethodStub(ON_BECAME_KEY, "v@:@")),
@@ -235,6 +282,9 @@ public class MacWindow extends AbstractWindow {
   private volatile MemorySegment webView;
   private volatile MemorySegment userContentController;
   private volatile MemorySegment delegate;
+
+  /** The ID of each download of the page that started, by the address of its {@code WKDownload}. */
+  private final Map<Long, Long> downloadIds = new ConcurrentHashMap<>();
 
   /** The paths of the files that AppKit dropped on the web view, until the page says where. */
   private volatile List<Path> droppedFiles;
@@ -986,6 +1036,229 @@ public class MacWindow extends AbstractWindow {
 
   // --- LwjwaeDelegate methods; every one receives self and _cmd first, as Objective-C passes them
   // ---
+
+  /**
+   * Lets every navigation go ahead, except a link with a {@code download} attribute, which becomes
+   * a download.
+   *
+   * <p>Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
+   * binds it by name.
+   */
+  @SuppressWarnings("unused")
+  private static void onDecideNavigationAction(
+      MemorySegment self,
+      MemorySegment command,
+      MemorySegment webView,
+      MemorySegment action,
+      MemorySegment decisionHandler) {
+    try {
+      WebKit.answerNavigationAction(action, decisionHandler);
+    } catch (Throwable t) {
+      ThrowableUtil.report(t);
+    }
+  }
+
+  /**
+   * Lets every response show, except one that the web view can't show or that comes as an
+   * attachment, which becomes a download.
+   *
+   * <p>Suppressed warnings: as for {@link #onDecideNavigationAction}.
+   */
+  @SuppressWarnings("unused")
+  private static void onDecideNavigationResponse(
+      MemorySegment self,
+      MemorySegment command,
+      MemorySegment webView,
+      MemorySegment response,
+      MemorySegment decisionHandler) {
+    try {
+      WebKit.answerNavigationResponse(response, decisionHandler);
+    } catch (Throwable t) {
+      ThrowableUtil.report(t);
+    }
+  }
+
+  /**
+   * A navigation became a download: the delegate of the window hears its steps from here on.
+   *
+   * <p>Suppressed warnings: as for {@link #onDecideNavigationAction}.
+   */
+  @SuppressWarnings("unused")
+  private static void onBecameDownload(
+      MemorySegment self,
+      MemorySegment command,
+      MemorySegment webView,
+      MemorySegment navigation,
+      MemorySegment download) {
+    try {
+      WebKit.setDownloadDelegate(download, self);
+    } catch (Throwable t) {
+      ThrowableUtil.report(t);
+    }
+  }
+
+  /**
+   * WebKit asks where the download goes. The handler of the application runs on a virtual thread
+   * meanwhile, while the run loop keeps running here, so the UI stays alive and a dialog that the
+   * handler shows works.
+   *
+   * <p>Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
+   * binds it by name. {@code resource}: the window is borrowed, not owned.
+   */
+  @SuppressWarnings({"unused", "resource"})
+  private static void onDecideDownloadDestination(
+      MemorySegment self,
+      MemorySegment command,
+      MemorySegment download,
+      MemorySegment response,
+      MemorySegment suggestedFileName,
+      MemorySegment completionHandler) {
+    Path destination = null;
+    try {
+      MacWindow window = MacWindow.windowOf(self);
+      if (window != null) {
+        URI url = MacWindow.downloadUrl(download);
+        long totalBytes = WebKit.responseContentLength(response);
+        DownloadRequest request =
+            new DownloadRequest(
+                url,
+                ObjC.isNull(suggestedFileName) ? null : Foundation.string(suggestedFileName),
+                WebKit.responseMimeType(response),
+                totalBytes);
+        Optional<Path> path = window.awaitOnRunLoop(window.downloadRequested(request));
+        if (path.isPresent() && !window.isClosed()) {
+          // WKDownload refuses a file that is there, which the decision replaces.
+          Files.deleteIfExists(path.get());
+          destination = path.get();
+          window.startDownload(download, url, destination, totalBytes);
+        }
+      }
+    } catch (Throwable t) {
+      ThrowableUtil.report(t);
+      destination = null;
+    }
+    try {
+      WebKit.answerDownloadDestination(completionHandler, destination);
+    } catch (Throwable t) {
+      ThrowableUtil.report(t);
+    }
+  }
+
+  /** Suppressed warnings: as for {@link #onDecideDownloadDestination}. */
+  @SuppressWarnings({"unused", "resource"})
+  private static void onDownloadFinished(
+      MemorySegment self, MemorySegment command, MemorySegment download) {
+    try {
+      MacWindow window = MacWindow.windowOf(self);
+      Long id = window == null ? null : window.downloadIds.remove(download.address());
+      if (id != null) {
+        window.downloadEnded(id, DownloadState.COMPLETED, "");
+        Foundation.release(download);
+      }
+    } catch (Throwable t) {
+      ThrowableUtil.report(t);
+    }
+  }
+
+  /** Suppressed warnings: as for {@link #onDecideDownloadDestination}. */
+  @SuppressWarnings({"unused", "resource"})
+  private static void onDownloadFailed(
+      MemorySegment self,
+      MemorySegment command,
+      MemorySegment download,
+      MemorySegment error,
+      MemorySegment resumeData) {
+    try {
+      MacWindow window = MacWindow.windowOf(self);
+      Long id = window == null ? null : window.downloadIds.remove(download.address());
+      if (id != null) {
+        boolean canceled = ObjC.sendLong(error, "code") == WebKit.URL_ERROR_CANCELLED;
+        window.downloadEnded(
+            id,
+            canceled ? DownloadState.CANCELED : DownloadState.FAILED,
+            canceled ? "" : Foundation.errorDescription(error));
+        Foundation.release(download);
+      }
+    } catch (Throwable t) {
+      ThrowableUtil.report(t);
+    }
+  }
+
+  /**
+   * Records a download that has its path, and follows its progress: {@code WKDownload} reports it
+   * only through key-value observation of its {@code NSProgress}, so a virtual thread reads it on
+   * the main thread a few times a second instead, until the download ends.
+   */
+  private void startDownload(MemorySegment download, URI url, Path path, long totalBytes) {
+    Foundation.retain(download);
+    long address = download.address();
+    long id =
+        this.downloadStarted(
+            url,
+            path,
+            totalBytes,
+            () -> {
+              Long current = this.downloadIds.remove(address);
+              if (current != null) {
+                WebKit.cancelDownload(download);
+                this.downloadEnded(current, DownloadState.CANCELED, "");
+                Foundation.release(download);
+              }
+            });
+    this.downloadIds.put(address, id);
+    Thread.ofVirtual()
+        .name("lwjwae-download-progress")
+        .start(
+            () -> {
+              try {
+                while (this.downloadIds.containsKey(address)) {
+                  Thread.sleep(150);
+                  this.dispatcher()
+                      .post(
+                          () -> {
+                            if (this.downloadIds.containsKey(address)) {
+                              this.downloadProgressed(
+                                  id,
+                                  WebKit.downloadReceived(download),
+                                  WebKit.downloadTotal(download));
+                            }
+                          });
+                }
+              } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+              } catch (Throwable t) {
+                ThrowableUtil.report(t);
+              }
+            });
+  }
+
+  /** The URL of {@code download}, or {@code about:blank} for one that isn't a URI. */
+  private static URI downloadUrl(MemorySegment download) {
+    try {
+      return URI.create(WebKit.downloadUrl(download));
+    } catch (IllegalArgumentException | NullPointerException _) {
+      return URI.create("about:blank");
+    }
+  }
+
+  /**
+   * Runs the run loop of the main thread in its default mode until {@code future} completes, and
+   * returns its value. Call on the main thread, from a callback that must answer before it returns.
+   */
+  private <T> T awaitOnRunLoop(CompletableFuture<T> future) {
+    MemorySegment loop = ObjC.send(ObjC.cls("NSRunLoop"), "currentRunLoop");
+    MemorySegment mode = Foundation.string("kCFRunLoopDefaultMode");
+    while (!future.isDone()) {
+      MemorySegment pool = ObjC.autoreleasePoolPush();
+      try {
+        MemorySegment until = ObjC.send(ObjC.cls("NSDate"), "dateWithTimeIntervalSinceNow:", 0.05);
+        ObjC.send(loop, "runMode:beforeDate:", mode, until);
+      } finally {
+        ObjC.autoreleasePoolPop(pool);
+      }
+    }
+    return future.join();
+  }
 
   /**
    * The page asked for a new window, with {@code target="_blank"} or {@code window.open}. No web

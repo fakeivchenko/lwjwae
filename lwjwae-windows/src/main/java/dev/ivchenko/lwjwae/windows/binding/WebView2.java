@@ -150,6 +150,74 @@ public class WebView2 {
       Com.guid("e61670bc-3dce-4177-86d2-c629ae3cb6ac");
   private final int PERMISSION_3_PUT_SAVES_IN_PROFILE = 12;
 
+  // ICoreWebView2_4, the downloads, which came with runtime 1.0.902
+  public final MemorySegment IID_WEBVIEW_4 = Com.guid("20d02d59-6df2-42dc-bd06-f98a694b1302");
+  public final MemorySegment IID_DOWNLOAD_STARTING =
+      Com.guid("efedc989-c396-41ca-83f7-07f845a55724");
+  public final MemorySegment IID_BYTES_RECEIVED_CHANGED =
+      Com.guid("828e8ab6-d94c-4264-9cef-5217170d6251");
+  public final MemorySegment IID_DOWNLOAD_STATE_CHANGED =
+      Com.guid("81336594-7ede-4ba9-bf71-acf0a95b58dd");
+  private final int WEBVIEW_4_ADD_DOWNLOAD_STARTING = 75;
+  private final int DOWNLOAD_STARTING_GET_OPERATION = 3;
+  private final int DOWNLOAD_STARTING_PUT_CANCEL = 5;
+  private final int DOWNLOAD_STARTING_GET_RESULT_FILE_PATH = 6;
+  private final int DOWNLOAD_STARTING_PUT_RESULT_FILE_PATH = 7;
+  private final int DOWNLOAD_STARTING_PUT_HANDLED = 9;
+  private final int DOWNLOAD_STARTING_GET_DEFERRAL = 10;
+  private final int DOWNLOAD_ADD_BYTES_RECEIVED_CHANGED = 3;
+  private final int DOWNLOAD_ADD_STATE_CHANGED = 7;
+  private final int DOWNLOAD_GET_URI = 9;
+  private final int DOWNLOAD_GET_MIME_TYPE = 11;
+  private final int DOWNLOAD_GET_TOTAL_BYTES_TO_RECEIVE = 12;
+  private final int DOWNLOAD_GET_BYTES_RECEIVED = 13;
+  private final int DOWNLOAD_GET_STATE = 16;
+  private final int DOWNLOAD_GET_INTERRUPT_REASON = 17;
+  private final int DOWNLOAD_CANCEL = 18;
+
+  /** {@code COREWEBVIEW2_DOWNLOAD_STATE_INTERRUPTED}. */
+  public final int DOWNLOAD_STATE_INTERRUPTED = 1;
+
+  /** {@code COREWEBVIEW2_DOWNLOAD_STATE_COMPLETED}. */
+  public final int DOWNLOAD_STATE_COMPLETED = 2;
+
+  /** {@code COREWEBVIEW2_DOWNLOAD_INTERRUPT_REASON_USER_CANCELED}. */
+  public final int DOWNLOAD_INTERRUPT_REASON_USER_CANCELED = 26;
+
+  /** {@code COREWEBVIEW2_DOWNLOAD_INTERRUPT_REASON}, by ordinal. */
+  public final List<String> DOWNLOAD_INTERRUPT_REASON =
+      List.of(
+          "NONE",
+          "FILE_FAILED",
+          "FILE_ACCESS_DENIED",
+          "FILE_NO_SPACE",
+          "FILE_NAME_TOO_LONG",
+          "FILE_TOO_LARGE",
+          "FILE_MALICIOUS",
+          "FILE_TRANSIENT_ERROR",
+          "FILE_BLOCKED_BY_POLICY",
+          "FILE_SECURITY_CHECK_FAILED",
+          "FILE_TOO_SHORT",
+          "FILE_HASH_MISMATCH",
+          "NETWORK_FAILED",
+          "NETWORK_TIMEOUT",
+          "NETWORK_DISCONNECTED",
+          "NETWORK_SERVER_DOWN",
+          "NETWORK_INVALID_REQUEST",
+          "SERVER_FAILED",
+          "SERVER_NO_RANGE",
+          "SERVER_BAD_CONTENT",
+          "SERVER_UNAUTHORIZED",
+          "SERVER_CERTIFICATE_PROBLEM",
+          "SERVER_FORBIDDEN",
+          "SERVER_UNEXPECTED_RESPONSE",
+          "SERVER_CONTENT_LENGTH_MISMATCH",
+          "SERVER_CROSS_ORIGIN_REDIRECT",
+          "USER_CANCELED",
+          "USER_SHUTDOWN",
+          "USER_PAUSED",
+          "DOWNLOAD_PROCESS_CRASHED");
+
   /** {@code COREWEBVIEW2_PERMISSION_STATE_ALLOW} and {@code _DENY}. */
   private final int PERMISSION_STATE_ALLOW = 1;
 
@@ -728,6 +796,132 @@ public class WebView2 {
       MemorySegment out = arena.allocate(Signatures.C_INT);
       Com.check(name, Com.call(object, slot, out));
       return out.get(Signatures.C_INT, 0);
+    }
+  }
+
+  // --- downloads ---
+
+  /** Calls {@code ICoreWebView2_4::add_DownloadStarting} on the {@code ICoreWebView2_4}. */
+  public void onDownloadStarting(MemorySegment webView4, MemorySegment handler) {
+    WebView2.addEvent(webView4, WEBVIEW_4_ADD_DOWNLOAD_STARTING, handler, "add_DownloadStarting");
+  }
+
+  /**
+   * The {@code ICoreWebView2DownloadOperation} of a {@code DownloadStarting} event, which the
+   * caller releases.
+   */
+  public MemorySegment downloadOperation(MemorySegment arguments) {
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment out = arena.allocate(Signatures.C_POINTER);
+      Com.check("get_DownloadOperation", Com.call(arguments, DOWNLOAD_STARTING_GET_OPERATION, out));
+      return Com.pointerAt(out);
+    }
+  }
+
+  /** The file that WebView2 would write a download of a {@code DownloadStarting} event to. */
+  public String downloadDefaultPath(MemorySegment arguments) {
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment out = arena.allocate(Signatures.C_POINTER);
+      Com.check(
+          "get_ResultFilePath", Com.call(arguments, DOWNLOAD_STARTING_GET_RESULT_FILE_PATH, out));
+      return Wide.take(Com.pointerAt(out));
+    }
+  }
+
+  /**
+   * Marks a {@code DownloadStarting} event as handled, which keeps the download bubble of Edge
+   * away, and takes its deferral, which the caller completes with {@link #completeDeferral} and
+   * releases: the download waits until then.
+   */
+  public MemorySegment deferDownload(MemorySegment arguments) {
+    Com.check("put_Handled", Com.call(arguments, DOWNLOAD_STARTING_PUT_HANDLED, 1));
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment out = arena.allocate(Signatures.C_POINTER);
+      Com.check("GetDeferral", Com.call(arguments, DOWNLOAD_STARTING_GET_DEFERRAL, out));
+      return Com.pointerAt(out);
+    }
+  }
+
+  /** Answers a {@code DownloadStarting} event with the file to write. */
+  public void setDownloadPath(MemorySegment arguments, String path) {
+    try (Arena arena = Arena.ofConfined()) {
+      Com.check(
+          "put_ResultFilePath",
+          Com.call(arguments, DOWNLOAD_STARTING_PUT_RESULT_FILE_PATH, Wide.allocate(arena, path)));
+    }
+  }
+
+  /** Answers a {@code DownloadStarting} event with no download at all. */
+  public void denyDownload(MemorySegment arguments) {
+    Com.check("put_Cancel", Com.call(arguments, DOWNLOAD_STARTING_PUT_CANCEL, 1));
+  }
+
+  /** Calls {@code add_BytesReceivedChanged} of a download. */
+  public void onDownloadBytesReceived(MemorySegment operation, MemorySegment handler) {
+    WebView2.addEvent(
+        operation, DOWNLOAD_ADD_BYTES_RECEIVED_CHANGED, handler, "add_BytesReceivedChanged");
+  }
+
+  /** Calls {@code add_StateChanged} of a download. */
+  public void onDownloadStateChanged(MemorySegment operation, MemorySegment handler) {
+    WebView2.addEvent(operation, DOWNLOAD_ADD_STATE_CHANGED, handler, "add_StateChanged");
+  }
+
+  /** The URL that a download comes from. */
+  public String downloadUri(MemorySegment operation) {
+    return WebView2.uri(operation, DOWNLOAD_GET_URI);
+  }
+
+  /** The media type that the server sent for a download. */
+  public String downloadMimeType(MemorySegment operation) {
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment out = arena.allocate(Signatures.C_POINTER);
+      Com.check("get_MimeType", Com.call(operation, DOWNLOAD_GET_MIME_TYPE, out));
+      return Wide.take(Com.pointerAt(out));
+    }
+  }
+
+  /** The size of the file of a download, or -1 where the server didn't send it. */
+  public long downloadTotalBytes(MemorySegment operation) {
+    long total =
+        WebView2.int64(operation, DOWNLOAD_GET_TOTAL_BYTES_TO_RECEIVE, "get_TotalBytesToReceive");
+    return total > 0 ? total : -1;
+  }
+
+  /** How much of a download arrived, in bytes. */
+  public long downloadBytesReceived(MemorySegment operation) {
+    return WebView2.int64(operation, DOWNLOAD_GET_BYTES_RECEIVED, "get_BytesReceived");
+  }
+
+  /** {@code COREWEBVIEW2_DOWNLOAD_STATE} of a download. */
+  public int downloadState(MemorySegment operation) {
+    return WebView2.integer(operation, DOWNLOAD_GET_STATE, "get_State");
+  }
+
+  /** Why a download stopped, as a name of {@link #DOWNLOAD_INTERRUPT_REASON}. */
+  public String downloadInterruptReason(MemorySegment operation) {
+    int reason = WebView2.integer(operation, DOWNLOAD_GET_INTERRUPT_REASON, "get_InterruptReason");
+    return reason >= 0 && reason < DOWNLOAD_INTERRUPT_REASON.size()
+        ? DOWNLOAD_INTERRUPT_REASON.get(reason)
+        : "UNKNOWN_" + reason;
+  }
+
+  /** Whether a download stopped because it was canceled. */
+  public boolean isDownloadCanceled(MemorySegment operation) {
+    return WebView2.integer(operation, DOWNLOAD_GET_INTERRUPT_REASON, "get_InterruptReason")
+        == DOWNLOAD_INTERRUPT_REASON_USER_CANCELED;
+  }
+
+  /** Cancels a download, which then changes its state to interrupted. */
+  public void cancelDownload(MemorySegment operation) {
+    Com.check("Cancel", Com.call(operation, DOWNLOAD_CANCEL));
+  }
+
+  private long int64(MemorySegment object, int slot, String name) {
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment out = arena.allocate(Signatures.C_LONG_PTR);
+      Com.check(name, Com.call(object, slot, out));
+      return out.get(Signatures.C_LONG_PTR, 0);
     }
   }
 

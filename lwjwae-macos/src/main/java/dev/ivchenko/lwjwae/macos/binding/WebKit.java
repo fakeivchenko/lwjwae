@@ -5,8 +5,10 @@ import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.SymbolLookup;
 import java.lang.foreign.ValueLayout;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import lombok.experimental.UtilityClass;
@@ -377,5 +379,115 @@ public class WebKit {
   /** Ends the answer of {@code task}. */
   public void taskFinish(MemorySegment task) {
     ObjC.sendVoid(task, "didFinish");
+  }
+
+  // --- downloads, through WKDownload of macOS 11.3 ---
+
+  /** {@code WKNavigationActionPolicyAllow} and {@code WKNavigationResponsePolicyAllow}. */
+  private final long POLICY_ALLOW = 1;
+
+  /** {@code WKNavigationActionPolicyDownload} and {@code WKNavigationResponsePolicyDownload}. */
+  private final long POLICY_DOWNLOAD = 2;
+
+  /** {@code NSURLErrorCancelled}: the code of a download that was canceled. */
+  public final long URL_ERROR_CANCELLED = -999;
+
+  /** Whether this macOS has {@code WKDownload}, which came with macOS 11.3. */
+  public boolean hasDownloads() {
+    return !ObjC.isNull(ObjC.cls("WKDownload"));
+  }
+
+  /**
+   * Answers {@code webView:decidePolicyForNavigationAction:decisionHandler:}: a link with a {@code
+   * download} attribute becomes a download, and every other navigation goes ahead.
+   */
+  public void answerNavigationAction(MemorySegment action, MemorySegment decisionHandler) {
+    boolean download =
+        WebKit.hasDownloads()
+            && ObjC.sendBool(action, "respondsToSelector:", ObjC.sel("shouldPerformDownload"))
+            && ObjC.sendBool(action, "shouldPerformDownload");
+    ObjC.callBlock(decisionHandler, download ? POLICY_DOWNLOAD : POLICY_ALLOW);
+  }
+
+  /**
+   * Answers {@code webView:decidePolicyForNavigationResponse:decisionHandler:}: a response that the
+   * web view can't show, or that the server sends as an attachment, becomes a download, as in a
+   * browser, and every other response goes ahead.
+   */
+  public void answerNavigationResponse(MemorySegment response, MemorySegment decisionHandler) {
+    boolean download = false;
+    if (WebKit.hasDownloads()) {
+      download = !ObjC.sendBool(response, "canShowMIMEType");
+      MemorySegment urlResponse = ObjC.send(response, "response");
+      if (!download
+          && ObjC.sendBool(
+              urlResponse, "respondsToSelector:", ObjC.sel("valueForHTTPHeaderField:"))) {
+        MemorySegment disposition =
+            ObjC.send(
+                urlResponse, "valueForHTTPHeaderField:", Foundation.string("Content-Disposition"));
+        download =
+            !ObjC.isNull(disposition)
+                && Foundation.string(disposition)
+                    .strip()
+                    .toLowerCase(Locale.ROOT)
+                    .startsWith("attachment");
+      }
+    }
+    ObjC.callBlock(decisionHandler, download ? POLICY_DOWNLOAD : POLICY_ALLOW);
+  }
+
+  /** {@code -[WKDownload webView]}: the web view that started {@code download}, or {@code nil}. */
+  public MemorySegment downloadWebView(MemorySegment download) {
+    return ObjC.send(download, "webView");
+  }
+
+  /** The URL that {@code download} comes from. */
+  public String downloadUrl(MemorySegment download) {
+    MemorySegment request = ObjC.send(download, "originalRequest");
+    return ObjC.isNull(request) ? null : Foundation.urlString(ObjC.send(request, "URL"));
+  }
+
+  /** {@code -[NSURLResponse MIMEType]}, or {@code null}. */
+  public String responseMimeType(MemorySegment response) {
+    MemorySegment type = ObjC.send(response, "MIMEType");
+    return ObjC.isNull(type) ? null : Foundation.string(type);
+  }
+
+  /** {@code -[NSURLResponse expectedContentLength]}: -1 where the server didn't send it. */
+  public long responseContentLength(MemorySegment response) {
+    return ObjC.sendLong(response, "expectedContentLength");
+  }
+
+  /** The bytes of {@code download} that arrived, from its {@code NSProgress}. */
+  public long downloadReceived(MemorySegment download) {
+    return ObjC.sendLong(ObjC.send(download, "progress"), "completedUnitCount");
+  }
+
+  /** The size of the file of {@code download} from its {@code NSProgress}, or -1. */
+  public long downloadTotal(MemorySegment download) {
+    long total = ObjC.sendLong(ObjC.send(download, "progress"), "totalUnitCount");
+    return total > 0 ? total : -1;
+  }
+
+  /**
+   * Answers {@code download:decideDestinationUsingResponse:suggestedFilename:completionHandler:}
+   * with the file URL of {@code path}, or {@code nil}, which cancels the download.
+   */
+  public void answerDownloadDestination(MemorySegment completionHandler, Path path) {
+    MemorySegment url =
+        path == null
+            ? MemorySegment.NULL
+            : ObjC.send(ObjC.cls("NSURL"), "fileURLWithPath:", Foundation.string(path.toString()));
+    ObjC.callBlock(completionHandler, url);
+  }
+
+  /** {@code -[WKDownload cancel:]}, without the data to resume it. */
+  public void cancelDownload(MemorySegment download) {
+    ObjC.sendVoid(download, "cancel:", MemorySegment.NULL);
+  }
+
+  /** {@code -[WKDownload setDelegate:]}. The download holds its delegate weakly. */
+  public void setDownloadDelegate(MemorySegment download, MemorySegment delegate) {
+    ObjC.sendVoid(download, "setDelegate:", delegate);
   }
 }

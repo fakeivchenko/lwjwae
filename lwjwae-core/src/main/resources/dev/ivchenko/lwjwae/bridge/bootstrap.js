@@ -530,6 +530,15 @@
         badge: (count) => control("badge", String(Math.round(count || 0))).then(done)
     };
 
+    // The downloads of the page: listen calls the handler with { id, url, path, state, receivedBytes,
+    // totalBytes, failure } for each step, where state is started, progressed, completed, failed, or
+    // canceled, and resolves to the function that stops it; cancel(id) resolves to whether the
+    // download was still going.
+    const downloads = {
+        listen: (handler) => listen("${downloadsEvent}", (event) => handler(JSON.parse(event.payload))),
+        cancel: (id) => control("cancel-download", String(id)).then(({ text }) => text === "1")
+    };
+
     // The SQLite store of the application: query resolves to the rows, execute to
     // { changes, lastInsertRowId }, executeScript to nothing, and transaction to the rows of every
     // statement, all or none of which happen. A refused command or SQL rejects with the code
@@ -563,5 +572,5 @@
         }
     };
 
-    window.${pageApi} = { listen, once, emit, open, close, openExternal, call: callRpc, invoke: rpcInvoke, RpcError, window: windowApi, theme, files, dialog, clipboard, menu, taskbar, store, updates };
+    window.${pageApi} = { listen, once, emit, open, close, openExternal, call: callRpc, invoke: rpcInvoke, RpcError, window: windowApi, theme, files, dialog, clipboard, menu, taskbar, downloads, store, updates };
 })();

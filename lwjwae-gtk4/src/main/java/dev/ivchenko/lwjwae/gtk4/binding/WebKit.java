@@ -7,6 +7,7 @@ import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.SymbolLookup;
 import java.lang.invoke.MethodHandle;
+import java.nio.file.Path;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import lombok.SneakyThrows;
@@ -45,6 +46,9 @@ public class WebKit {
 
   /** {@code WEBKIT_USER_SCRIPT_INJECT_AT_DOCUMENT_START}. */
   private final int INJECT_AT_DOCUMENT_START = 0;
+
+  /** {@code WEBKIT_DOWNLOAD_ERROR_CANCELLED_BY_USER}: the code of a download that was canceled. */
+  public final int DOWNLOAD_ERROR_CANCELLED_BY_USER = 400;
 
   private final MethodHandle WEB_VIEW_NEW =
       NativeLibraries.downcall(WEBKIT, "webkit_web_view_new", Signatures.POINTER_VOID);
@@ -198,6 +202,33 @@ public class WebKit {
 
   private final AtomicBoolean CONTEXT_RETAINED = new AtomicBoolean();
   private final AtomicBoolean SCHEME_REGISTERED = new AtomicBoolean();
+
+  private final MethodHandle WEB_VIEW_GET_DOWNLOAD_SOURCE =
+      NativeLibraries.downcall(
+          WEBKIT, "webkit_web_view_get_network_session", Signatures.POINTER_POINTER);
+  private final MethodHandle DOWNLOAD_GET_WEB_VIEW =
+      NativeLibraries.downcall(WEBKIT, "webkit_download_get_web_view", Signatures.POINTER_POINTER);
+  private final MethodHandle DOWNLOAD_GET_REQUEST =
+      NativeLibraries.downcall(WEBKIT, "webkit_download_get_request", Signatures.POINTER_POINTER);
+  private final MethodHandle DOWNLOAD_GET_RESPONSE =
+      NativeLibraries.downcall(WEBKIT, "webkit_download_get_response", Signatures.POINTER_POINTER);
+  private final MethodHandle URI_RESPONSE_GET_CONTENT_LENGTH =
+      NativeLibraries.downcall(
+          WEBKIT, "webkit_uri_response_get_content_length", Signatures.LONG_POINTER);
+  private final MethodHandle URI_RESPONSE_GET_MIME_TYPE =
+      NativeLibraries.downcall(
+          WEBKIT, "webkit_uri_response_get_mime_type", Signatures.POINTER_POINTER);
+  private final MethodHandle DOWNLOAD_GET_RECEIVED_DATA_LENGTH =
+      NativeLibraries.downcall(
+          WEBKIT, "webkit_download_get_received_data_length", Signatures.LONG_POINTER);
+  private final MethodHandle DOWNLOAD_SET_DESTINATION =
+      NativeLibraries.downcall(
+          WEBKIT, "webkit_download_set_destination", Signatures.VOID_POINTER_POINTER);
+  private final MethodHandle DOWNLOAD_SET_ALLOW_OVERWRITE =
+      NativeLibraries.downcall(
+          WEBKIT, "webkit_download_set_allow_overwrite", Signatures.VOID_POINTER_INT);
+  private final MethodHandle DOWNLOAD_CANCEL =
+      NativeLibraries.downcall(WEBKIT, "webkit_download_cancel", Signatures.VOID_POINTER);
 
   /**
    * Takes one permanent reference to the default {@code WebKitWebContext} and to the default {@code
@@ -603,5 +634,69 @@ public class WebKit {
   public MemorySegment cookieManager() {
     return (MemorySegment)
         COOKIE_MANAGER.invokeExact((MemorySegment) NETWORK_SESSION_GET_DEFAULT.invokeExact());
+  }
+
+  /** The {@code WebKitNetworkSession} of {@code webView}, which emits {@code download-started}. */
+  @SneakyThrows
+  public MemorySegment downloadSource(MemorySegment webView) {
+    return (MemorySegment) WEB_VIEW_GET_DOWNLOAD_SOURCE.invokeExact(webView);
+  }
+
+  /** The web view that started {@code download}, or {@code NULL} for none. */
+  @SneakyThrows
+  public MemorySegment downloadWebView(MemorySegment download) {
+    return (MemorySegment) DOWNLOAD_GET_WEB_VIEW.invokeExact(download);
+  }
+
+  /** The URL that {@code download} comes from. */
+  @SneakyThrows
+  public String downloadUri(MemorySegment download) {
+    MemorySegment request = (MemorySegment) DOWNLOAD_GET_REQUEST.invokeExact(download);
+    return NativeLibraries.string((MemorySegment) URI_REQUEST_GET_URI.invokeExact(request));
+  }
+
+  /** The media type that the server sent for {@code download}, or {@code null} before it did. */
+  @SneakyThrows
+  public String downloadMimeType(MemorySegment download) {
+    MemorySegment response = (MemorySegment) DOWNLOAD_GET_RESPONSE.invokeExact(download);
+    if (response.equals(MemorySegment.NULL)) {
+      return null;
+    }
+    return NativeLibraries.string((MemorySegment) URI_RESPONSE_GET_MIME_TYPE.invokeExact(response));
+  }
+
+  /** The size of the file of {@code download}, or -1 where the server didn't send it. */
+  @SneakyThrows
+  public long downloadContentLength(MemorySegment download) {
+    MemorySegment response = (MemorySegment) DOWNLOAD_GET_RESPONSE.invokeExact(download);
+    if (response.equals(MemorySegment.NULL)) {
+      return -1;
+    }
+    long length = (long) URI_RESPONSE_GET_CONTENT_LENGTH.invokeExact(response);
+    return length > 0 ? length : -1;
+  }
+
+  /** How much of {@code download} arrived, in bytes. */
+  @SneakyThrows
+  public long downloadReceivedLength(MemorySegment download) {
+    return (long) DOWNLOAD_GET_RECEIVED_DATA_LENGTH.invokeExact(download);
+  }
+
+  /**
+   * Sets where {@code download} writes, as an absolute path, which WebKitGTK 6.0 takes, and lets it
+   * replace a file that is there. Call from {@code decide-destination}.
+   */
+  @SneakyThrows
+  public void downloadSetDestination(MemorySegment download, Path destination) {
+    DOWNLOAD_SET_ALLOW_OVERWRITE.invokeExact(download, 1);
+    try (Arena arena = Arena.ofConfined()) {
+      DOWNLOAD_SET_DESTINATION.invokeExact(download, arena.allocateFrom(destination.toString()));
+    }
+  }
+
+  /** Cancels {@code download}, which then fails with {@link #DOWNLOAD_ERROR_CANCELLED_BY_USER}. */
+  @SneakyThrows
+  public void downloadCancel(MemorySegment download) {
+    DOWNLOAD_CANCEL.invokeExact(download);
   }
 }

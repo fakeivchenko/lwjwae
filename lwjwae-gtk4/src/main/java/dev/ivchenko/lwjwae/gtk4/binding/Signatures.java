@@ -341,6 +341,13 @@ public class Signatures {
       FunctionDescriptor.of(C_INT, C_POINTER, C_INT, C_POINTER, C_POINTER, C_POINTER);
 
   /**
+   * {@code void (*)(WebKitDownload*, guint64 data_length, gpointer)}: {@code received-data} of a
+   * download.
+   */
+  public final FunctionDescriptor DOWNLOAD_RECEIVED_DATA_CALLBACK =
+      FunctionDescriptor.ofVoid(C_POINTER, C_LONG, C_POINTER);
+
+  /**
    * {@code void GDBusSignalCallback(GDBusConnection*, const gchar* sender_name, const gchar*
    * object_path, const gchar* interface_name, const gchar* signal_name, GVariant* parameters,
    * gpointer user_data)}.

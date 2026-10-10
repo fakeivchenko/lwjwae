@@ -410,6 +410,34 @@ together arrives as two requests, and both must be granted.
 | macOS | The camera and the microphone; a grant makes the system ask the user for its own permission, which needs the usage description in `Info.plist`. WKWebView has no hook for the position and notifications. |
 | Linux, GTK 3 and GTK 4 | The camera and the microphone. The position, notifications, and a capture of the screen are always denied. |
 
+### Downloads
+
+`window.downloadHandler(request -> ...)` decides where a download of the page goes: a link with a
+`download` attribute, a file that the server sends as an attachment or that the engine can't show,
+and a navigation from Java to such a file. The handler gets a `DownloadRequest` with the `url`, the
+`suggestedFileName`, the `mimeType`, and the `totalBytes`, and answers `DownloadDecision.saveTo(path)`,
+`ask()` for the save dialog of the platform, or `deny()`. It runs on a virtual thread of its own,
+so it can block, for example on a dialog, while the engine waits. Without a handler, the file goes
+to the downloads folder of the user, under the suggested name, with a number added where a file of
+that name is there.
+
+```java
+window.downloadHandler(request -> DownloadDecision.saveTo(exports.resolve(request.suggestedFileName())));
+window.onDownload(event -> System.out.println(event.state() + " " + event.receivedBytes()));
+```
+
+`window.onDownload(event -> ...)` hears each step: `STARTED`, `PROGRESSED` at most about ten times
+a second, and one of `COMPLETED`, `FAILED`, and `CANCELED`, one after the other on a virtual
+thread. `window.cancelDownload(event.id())` cancels one. A page hears the same through
+`lwjwae.downloads.listen(handler)`, with `{ id, url, path, state, receivedBytes, totalBytes,
+failure }`, and cancels with `await lwjwae.downloads.cancel(id)`.
+
+| Platform | How the download is taken |
+|---|---|
+| Windows | The `DownloadStarting` event of `ICoreWebView2_4`, runtime 1.0.902 or later, with a deferral while the handler decides. The download bubble of Edge never shows. |
+| macOS | `WKDownload`, macOS 11.3 or later, with the completion handler of its destination. |
+| Linux, GTK 3 and GTK 4 | The `decide-destination` signal of `WebKitDownload`, with the main loop running while the handler decides. |
+
 ### The theme of the desktop
 
 `application.theme()` is `SystemTheme.LIGHT` or `DARK`, as the user set it for the desktop, and

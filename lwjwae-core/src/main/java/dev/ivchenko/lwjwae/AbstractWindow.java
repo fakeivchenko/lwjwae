@@ -13,6 +13,11 @@ import dev.ivchenko.lwjwae.dialog.DialogCompletion;
 import dev.ivchenko.lwjwae.dialog.MessageDialogParameters;
 import dev.ivchenko.lwjwae.dialog.OpenDialogParameters;
 import dev.ivchenko.lwjwae.dialog.SaveDialogParameters;
+import dev.ivchenko.lwjwae.download.DownloadDecision;
+import dev.ivchenko.lwjwae.download.DownloadRequest;
+import dev.ivchenko.lwjwae.download.DownloadState;
+import dev.ivchenko.lwjwae.download.WindowDownloads;
+import dev.ivchenko.lwjwae.event.DownloadEvent;
 import dev.ivchenko.lwjwae.event.Event;
 import dev.ivchenko.lwjwae.event.EventSubscription;
 import dev.ivchenko.lwjwae.event.FileDropEvent;
@@ -114,6 +119,12 @@ public abstract class AbstractWindow implements Window {
   private final EventListeners listeners = new EventListeners("lwjwae-events");
   private final PageEvents pageEvents = new PageEvents();
   private final WindowEvents windowEvents = new WindowEvents(this, this::sendToPage);
+  private final WindowDownloads downloads =
+      new WindowDownloads(
+          this,
+          json -> this.pageEvents.send(BridgeProtocol.DOWNLOADS_EVENT, json, false),
+          fileName ->
+              this.showSaveDialog(SaveDialogParameters.builder().fileName(fileName).build()));
   private final String token = AbstractWindow.newToken();
   private final Set<DialogCompletion<?>> dialogs = ConcurrentHashMap.newKeySet();
   private final boolean closable;
@@ -535,8 +546,9 @@ public abstract class AbstractWindow implements Window {
 
   /**
    * {@code window.lwjwae.window}: the body is an action and, for some, an argument after {@link
-   * BridgeProtocol#SEPARATOR}. {@code state} answers with JSON; the others answer with nothing once
-   * the window has taken the request.
+   * BridgeProtocol#SEPARATOR}. {@code state} answers with JSON, {@code cancel-download} with {@code
+   * 1} if the download was still going, and the others with nothing once the window has taken the
+   * request.
    */
   private void controlFromPage(RpcCall call) {
     String[] parts = call.text().split(BridgeProtocol.SEPARATOR, 2);
@@ -562,6 +574,7 @@ public abstract class AbstractWindow implements Window {
       case "theme" -> call.reply(this.application.theme().pageName());
       case "progress" -> this.application.progress(AbstractWindow.parseProgress(argument));
       case "badge" -> this.application.badgeCount(AbstractWindow.parseCount(argument));
+      case "cancel-download" -> call.reply(this.cancelDownloadOf(argument) ? "1" : "0");
       default -> throw RpcException.badRequest("malformed-control", "No such action: " + parts[0]);
     }
   }
@@ -577,6 +590,15 @@ public abstract class AbstractWindow implements Window {
       return new TaskbarProgress(state, Double.parseDouble(fields[1]));
     } catch (NumberFormatException _) {
       throw RpcException.badRequest("malformed-progress", "Malformed progress: " + argument);
+    }
+  }
+
+  /** Cancels the download of {@code lwjwae.downloads.cancel}, by the ID that its events carry. */
+  private boolean cancelDownloadOf(String argument) {
+    try {
+      return this.cancelDownload(Long.parseLong(argument));
+    } catch (NumberFormatException _) {
+      throw RpcException.badRequest("malformed-download", "Malformed download: " + argument);
     }
   }
 
@@ -721,6 +743,62 @@ public abstract class AbstractWindow implements Window {
             }
           });
     }
+  }
+
+  @Override
+  public final void downloadHandler(Function<DownloadRequest, DownloadDecision> handler) {
+    this.downloads.handler(handler);
+  }
+
+  @Override
+  public final EventSubscription onDownload(Consumer<DownloadEvent> listener) {
+    return this.downloads.listen(Objects.requireNonNull(listener, "listener"));
+  }
+
+  @Override
+  public final boolean cancelDownload(long id) {
+    return this.downloads.cancel(id, this.dispatcher()::post);
+  }
+
+  /**
+   * The page started a download, and the engine waits to learn where it goes. A backend calls this
+   * from the callback of the engine, on the UI thread, and answers the engine once the future
+   * completes, without blocking the UI thread on it: the handler can show a dialog there.
+   *
+   * @return The file to write, or empty if nothing is downloaded. Never fails.
+   */
+  protected final CompletableFuture<Optional<Path>> downloadRequested(DownloadRequest request) {
+    if (this.closed) {
+      return CompletableFuture.completedFuture(Optional.empty());
+    }
+    return this.downloads.request(request);
+  }
+
+  /**
+   * A download started writing to {@code path}. A backend calls this once the engine took the path.
+   *
+   * @param totalBytes The size of the file, or -1 where the engine doesn't know it.
+   * @param cancel Cancels the download in the engine; it runs on the UI thread.
+   * @return The ID of the download, for the reports that follow.
+   */
+  protected final long downloadStarted(URI url, Path path, long totalBytes, Runnable cancel) {
+    return this.downloads.started(url, path, totalBytes, cancel);
+  }
+
+  /** More of the download {@code id} arrived. A backend calls this as the engine reports it. */
+  protected final void downloadProgressed(long id, long receivedBytes, long totalBytes) {
+    this.downloads.progressed(id, receivedBytes, totalBytes);
+  }
+
+  /**
+   * The download {@code id} ended. A backend calls this once, as the engine reports the end.
+   *
+   * @param state {@link DownloadState#COMPLETED}, {@link DownloadState#FAILED}, or {@link
+   *     DownloadState#CANCELED}.
+   * @param failure What went wrong, for a failure; ignored otherwise.
+   */
+  protected final void downloadEnded(long id, DownloadState state, String failure) {
+    this.downloads.ended(id, state, failure);
   }
 
   @Override
@@ -1325,6 +1403,7 @@ public abstract class AbstractWindow implements Window {
     }
     this.pageEvents.close();
     this.windowEvents.shutdown();
+    this.downloads.shutdown();
     this.dialogs.forEach(dialog -> dialog.future().cancel(false));
     MessageRpcCalls calls = this.messageCalls;
     if (calls != null) {
