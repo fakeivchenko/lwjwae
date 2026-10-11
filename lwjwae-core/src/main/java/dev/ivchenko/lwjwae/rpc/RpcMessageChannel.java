@@ -1,11 +1,11 @@
-package dev.ivchenko.lwjwae.bridge;
+package dev.ivchenko.lwjwae.rpc;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
 
 /**
- * How RPC messages from Java reach the page of a window: the way back of the message channel, see
- * {@link MessageRpcExchange}.
+ * How RPC messages from Java reach the page of a window: the way back of the message channel, which
+ * the bridge of the window writes its answers to.
  *
  * <p>Every engine can evaluate a script, so the default of a window evaluates {@code
  * receive(message)} of the bootstrap. An engine that can post to the page directly supplies its own

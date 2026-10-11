@@ -4,6 +4,8 @@ plugins {
     id("checkstyle")
     id("io.freefair.lombok")
     id("com.diffplug.spotless")
+    id("jacoco")
+    id("org.gradle.test-retry")
 }
 
 description = "GTK 4 + WebKitGTK 6.0 backend for lwjwae (Linux)."
@@ -18,7 +20,7 @@ dependencies {
     testImplementation(testFixtures(project(":lwjwae-glib")))
 
     // JUnit
-    testImplementation(platform("org.junit:junit-bom:6.0.0"))
-    testImplementation("org.junit.jupiter:junit-jupiter")
-    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+    testImplementation(platform(libs.junit.bom))
+    testImplementation(libs.junit.jupiter)
+    testRuntimeOnly(libs.junit.platform.launcher)
 }

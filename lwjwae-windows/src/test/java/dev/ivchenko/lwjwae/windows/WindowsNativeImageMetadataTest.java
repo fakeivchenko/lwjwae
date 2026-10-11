@@ -26,6 +26,11 @@ class WindowsNativeImageMetadataTest extends NativeImageMetadataContractTest {
   }
 
   @Override
+  protected String modulePackage() {
+    return "dev.ivchenko.lwjwae.windows";
+  }
+
+  @Override
   protected String metadataPath() {
     return "META-INF/native-image/dev.ivchenko.lwjwae/lwjwae-windows/reachability-metadata.json";
   }

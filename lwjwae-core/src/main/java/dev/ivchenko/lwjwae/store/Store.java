@@ -202,17 +202,26 @@ public final class Store implements AutoCloseable {
    * calls, such as {@link #lastInsertRowId()} after an insert, is what those calls left. Unlike
    * {@link #inTransaction}, it opens no transaction, so a statement that SQLite refuses inside one,
    * such as {@code VACUUM}, still runs.
+   *
+   * @return What {@code work} returns.
    */
-  <T> T exclusively(Function<Store, T> work) {
+  public <T> T exclusively(Function<Store, T> work) {
     return this.locked(() -> work.apply(this));
   }
 
   /**
-   * Runs {@code work} for a page, under one hold of the store: every statement compiled meanwhile
-   * stays inside the file of the store, see {@link Sqlite#authorizeForPage}. The hold keeps the
-   * statements of Java, which may reach further, out of that time.
+   * Runs {@code work} as the SQL of a page runs, under one hold of the store: every statement
+   * compiled meanwhile keeps to the file of the store. It may not attach another file, write a copy
+   * elsewhere with {@code VACUUM INTO}, or run a {@code PRAGMA} that changes where or how SQLite
+   * writes; such a statement fails with a {@link StoreFailedException}. The hold keeps the
+   * statements of other threads, which may reach further, out of that time.
+   *
+   * <p>{@code lwjwae.store} of a page runs here, and so can SQL that the application takes from
+   * anyone it doesn't trust as far as the file system.
+   *
+   * @return What {@code work} returns.
    */
-  <T> T forPage(Function<Store, T> work) {
+  public <T> T forPage(Function<Store, T> work) {
     return this.locked(
         () -> {
           this.database.authorizeForPages(true);

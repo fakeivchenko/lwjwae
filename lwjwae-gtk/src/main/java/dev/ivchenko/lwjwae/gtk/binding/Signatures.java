@@ -36,17 +36,11 @@ public class Signatures {
   /** {@code T* f(void)}. */
   public final FunctionDescriptor POINTER_VOID = FunctionDescriptor.of(C_POINTER);
 
-  /** {@code gint f(void)}. */
-  public final FunctionDescriptor INT_VOID = FunctionDescriptor.of(C_INT);
-
   /** {@code void f(T*)}. */
   public final FunctionDescriptor VOID_POINTER = FunctionDescriptor.ofVoid(C_POINTER);
 
   /** {@code T* f(U*)}. */
   public final FunctionDescriptor POINTER_POINTER = FunctionDescriptor.of(C_POINTER, C_POINTER);
-
-  /** {@code T* f(gsize)}. */
-  public final FunctionDescriptor POINTER_LONG = FunctionDescriptor.of(C_POINTER, C_LONG);
 
   /** {@code T* f(gint)}. */
   public final FunctionDescriptor POINTER_INT = FunctionDescriptor.of(C_POINTER, C_INT);
@@ -87,24 +81,9 @@ public class Signatures {
   /** {@code gsize f(void)}: {@code gdk_wayland_display_get_type}. */
   public final FunctionDescriptor LONG_VOID = FunctionDescriptor.of(C_LONG);
 
-  /** {@code gboolean f(T*, GType)}: {@code g_type_check_instance_is_a}. */
-  public final FunctionDescriptor INT_POINTER_LONG =
-      FunctionDescriptor.of(C_INT, C_POINTER, C_LONG);
-
-  /** {@code guint64 f(T*)}: {@code webkit_download_get_received_data_length}. */
-  public final FunctionDescriptor LONG_POINTER = FunctionDescriptor.of(C_LONG, C_POINTER);
-
   /** {@code void f(T*, U*, V*)}. */
   public final FunctionDescriptor VOID_POINTER_POINTER_POINTER =
       FunctionDescriptor.ofVoid(C_POINTER, C_POINTER, C_POINTER);
-
-  /** {@code void f(T*, gdouble)}: {@code webkit_web_view_set_zoom_level}. */
-  public final FunctionDescriptor VOID_POINTER_DOUBLE =
-      FunctionDescriptor.ofVoid(C_POINTER, ValueLayout.JAVA_DOUBLE);
-
-  /** {@code gdouble f(T*)}: {@code webkit_web_view_get_zoom_level}. */
-  public final FunctionDescriptor DOUBLE_POINTER =
-      FunctionDescriptor.of(ValueLayout.JAVA_DOUBLE, C_POINTER);
 
   /** {@code void f(T*, gint)}. */
   public final FunctionDescriptor VOID_POINTER_INT = FunctionDescriptor.ofVoid(C_POINTER, C_INT);
@@ -140,37 +119,13 @@ public class Signatures {
   public final FunctionDescriptor VOID_POINTER_POINTER_LONG_POINTER =
       FunctionDescriptor.ofVoid(C_POINTER, C_POINTER, C_LONG, C_POINTER);
 
-  /** {@code T* f(U*, gssize, V*)}: {@code g_memory_input_stream_new_from_data}. */
-  public final FunctionDescriptor POINTER_POINTER_LONG_POINTER =
-      FunctionDescriptor.of(C_POINTER, C_POINTER, C_LONG, C_POINTER);
-
-  /** {@code T* f(GQuark, gint, const gchar*)}: {@code g_error_new_literal}. */
-  public final FunctionDescriptor POINTER_INT_INT_POINTER =
-      FunctionDescriptor.of(C_POINTER, C_INT, C_INT, C_POINTER);
-
   /** {@code T* f(U*, V*, W*)}: {@code webkit_web_view_evaluate_javascript_finish}. */
   public final FunctionDescriptor POINTER_POINTER_POINTER_POINTER =
       FunctionDescriptor.of(C_POINTER, C_POINTER, C_POINTER, C_POINTER);
 
-  /** {@code void f(T*, U*, V*, W*, X*)}: {@code webkit_web_context_register_uri_scheme}. */
-  public final FunctionDescriptor VOID_POINTER_X5 =
-      FunctionDescriptor.ofVoid(C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER);
-
   /** {@code T* f(const gchar*, const gchar*, gint)}: {@code app_indicator_new}. */
   public final FunctionDescriptor POINTER_POINTER_POINTER_INT =
       FunctionDescriptor.of(C_POINTER, C_POINTER, C_POINTER, C_INT);
-
-  /** {@code T* f(U*, gsize)}: {@code g_variant_new_tuple}, {@code g_variant_get_child_value}. */
-  public final FunctionDescriptor POINTER_POINTER_LONG =
-      FunctionDescriptor.of(C_POINTER, C_POINTER, C_LONG);
-
-  /** {@code T* f(U*, V*, gsize)}: {@code g_variant_new_array}. */
-  public final FunctionDescriptor POINTER_POINTER_POINTER_LONG =
-      FunctionDescriptor.of(C_POINTER, C_POINTER, C_POINTER, C_LONG);
-
-  /** {@code T* f(gint, U*, V*)}: {@code g_bus_get_sync}. */
-  public final FunctionDescriptor POINTER_INT_POINTER_POINTER =
-      FunctionDescriptor.of(C_POINTER, C_INT, C_POINTER, C_POINTER);
 
   /** {@code void f(T*, U*, gboolean, gboolean, guint)}: {@code gtk_box_pack_start}. */
   public final FunctionDescriptor VOID_POINTER_POINTER_INT_INT_INT =
@@ -197,49 +152,6 @@ public class Signatures {
    */
   public final FunctionDescriptor GTK_MENU_POPUP_AT_RECT =
       FunctionDescriptor.ofVoid(C_POINTER, C_POINTER, C_POINTER, C_INT, C_INT, C_POINTER);
-
-  /**
-   * {@code gulong g_signal_connect_data(gpointer, const gchar*, GCallback, gpointer,
-   * GClosureNotify, GConnectFlags)}.
-   */
-  public final FunctionDescriptor G_SIGNAL_CONNECT_DATA =
-      FunctionDescriptor.of(C_LONG, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_INT);
-
-  /**
-   * {@code GVariant* g_dbus_connection_call_sync(GDBusConnection*, const gchar* bus_name, const
-   * gchar* object_path, const gchar* interface_name, const gchar* method_name, GVariant*
-   * parameters, const GVariantType* reply_type, GDBusCallFlags, gint timeout_msec, GCancellable*,
-   * GError**)}.
-   */
-  public final FunctionDescriptor G_DBUS_CONNECTION_CALL_SYNC =
-      FunctionDescriptor.of(
-          C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER,
-          C_INT, C_INT, C_POINTER, C_POINTER);
-
-  /**
-   * {@code guint g_dbus_connection_signal_subscribe(GDBusConnection*, const gchar* sender, const
-   * gchar* interface_name, const gchar* member, const gchar* object_path, const gchar* arg0,
-   * GDBusSignalFlags, GDBusSignalCallback, gpointer, GDestroyNotify)}.
-   */
-  public final FunctionDescriptor G_DBUS_CONNECTION_SIGNAL_SUBSCRIBE =
-      FunctionDescriptor.of(
-          C_INT, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_INT, C_POINTER,
-          C_POINTER, C_POINTER);
-
-  /**
-   * {@code WebKitUserScript* webkit_user_script_new(const gchar*, WebKitUserContentInjectedFrames,
-   * WebKitUserScriptInjectionTime, const gchar* const*, const gchar* const*)}.
-   */
-  public final FunctionDescriptor WEBKIT_USER_SCRIPT_NEW =
-      FunctionDescriptor.of(C_POINTER, C_POINTER, C_INT, C_INT, C_POINTER, C_POINTER);
-
-  /**
-   * {@code void webkit_web_view_evaluate_javascript(WebKitWebView*, const char*, gssize, const
-   * char*, const char*, GCancellable*, GAsyncReadyCallback, gpointer)}.
-   */
-  public final FunctionDescriptor WEBKIT_EVALUATE_JAVASCRIPT =
-      FunctionDescriptor.ofVoid(
-          C_POINTER, C_POINTER, C_LONG, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER);
 
   // --- callbacks (upcalls) ---
 
@@ -335,13 +247,4 @@ public class Signatures {
    */
   public final FunctionDescriptor DOWNLOAD_RECEIVED_DATA_CALLBACK =
       FunctionDescriptor.ofVoid(C_POINTER, C_LONG, C_POINTER);
-
-  /**
-   * {@code void GDBusSignalCallback(GDBusConnection*, const gchar* sender_name, const gchar*
-   * object_path, const gchar* interface_name, const gchar* signal_name, GVariant* parameters,
-   * gpointer user_data)}.
-   */
-  public final FunctionDescriptor G_DBUS_SIGNAL_CALLBACK =
-      FunctionDescriptor.ofVoid(
-          C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER);
 }

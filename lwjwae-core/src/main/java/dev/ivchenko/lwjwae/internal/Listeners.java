@@ -1,5 +1,6 @@
-package dev.ivchenko.lwjwae.event;
+package dev.ivchenko.lwjwae.internal;
 
+import dev.ivchenko.lwjwae.event.EventSubscription;
 import dev.ivchenko.lwjwae.util.ThrowableUtil;
 import java.util.List;
 import java.util.Map;

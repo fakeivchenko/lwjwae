@@ -32,7 +32,13 @@ public abstract class GlibDispatcher extends EventLoopDispatcher {
 
   private final long callbackId;
 
-  /** Creates the dispatcher; its thread is named {@code threadName} and starts on first use. */
+  /**
+   * Creates the dispatcher; its thread is named {@code threadName} and starts on first use.
+   *
+   * <p>Suppressed warnings: {@code this-escape}: the registry only keeps the dispatcher for the
+   * callback of the main loop, which comes no sooner than the first task, after construction.
+   */
+  @SuppressWarnings("this-escape")
   protected GlibDispatcher(String threadName) {
     super(threadName);
     this.callbackId = DISPATCHERS.register(this);

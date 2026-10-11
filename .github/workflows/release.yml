@@ -5,8 +5,9 @@ on:
   push:
     branches: [release]
 
+# Read for everything but the job that tags the release.
 permissions:
-  contents: write
+  contents: read
 
 # A release always runs to the end.
 concurrency:
@@ -31,18 +32,18 @@ jobs:
       version_tag: ${{ steps.semver.outputs.version_tag }}
       is_tagged: ${{ steps.semver.outputs.is_tagged }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - uses: actions/setup-java@v6
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
           distribution: temurin
           java-version: 25
-      - uses: gradle/actions/setup-gradle@v6
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
 
       - name: Calculate semantic version
         id: semver
-        uses: paulhatch/semantic-version@v6.0.3
+        uses: paulhatch/semantic-version@502226b17e3e242e4befd0a45690fcbb27dd1373 # v6.0.3
         with:
           tag_prefix: v
           major_pattern: '/!:|BREAKING CHANGE:/'
@@ -67,15 +68,17 @@ jobs:
     name: Publish
     runs-on: ubuntu-24.04
     needs: version
+    permissions:
+      contents: write
     env:
       PROJECT_VERSION: ${{ needs.version.outputs.version }}
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-java@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
           distribution: temurin
           java-version: 25
-      - uses: gradle/actions/setup-gradle@v6
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
 
       - name: Publish to the Maven repository
         env:
@@ -87,7 +90,7 @@ jobs:
       # the released commit touches .github/workflows/*.
       - name: Tag and GitHub release
         if: needs.version.outputs.is_tagged != 'true'
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           tag_name: ${{ needs.version.outputs.version_tag }}
           target_commitish: ${{ github.sha }}

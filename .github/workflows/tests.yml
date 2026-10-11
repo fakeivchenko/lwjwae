@@ -1,10 +1,25 @@
 name: Tests
 
-# Runs on its own for every push to dev, and as a step of the release workflow.
+# Every push to dev and every pull request into it, a step of the release workflow, and a run by
+# hand, which can pick one platform and some of the display tests, for a fix that only a runner can
+# check, such as one for macOS.
 on:
   push:
     branches: [dev]
+  pull_request:
+    branches: [dev]
   workflow_call:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: The platform to test
+        type: choice
+        options: [all, linux, windows, macos]
+        default: all
+      tests:
+        description: The display tests to run, as Gradle's --tests takes them; empty for all
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -23,6 +38,8 @@ env:
   WEBKIT_DISABLE_COMPOSITING_MODE: "1"
   # GTK 4 draws with OpenGL or Vulkan by default; Xvfb has neither.
   GSK_RENDERER: cairo
+  # The display tests that a run by hand asks for, read by the steps through the environment.
+  TESTS: ${{ inputs.tests }}
 
 jobs:
   # Formatting fails fast, before any machine opens a window. Checkstyle only warns, as Google's
@@ -33,17 +50,17 @@ jobs:
     # A test that hangs fails the job, rather than holding a runner for six hours.
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-java@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
           distribution: temurin
           java-version: 25
-      - uses: gradle/actions/setup-gradle@v6
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
       - name: Spotless and Checkstyle
         run: ./gradlew spotlessCheck checkstyleMain checkstyleTest checkstyleTestFixtures
       - name: Checkstyle reports
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: checkstyle-reports
           path: '**/build/reports/checkstyle/'
@@ -52,6 +69,7 @@ jobs:
   test-linux:
     name: Tests (Linux ${{ matrix.arch }})
     needs: style
+    if: inputs.platform == '' || inputs.platform == 'all' || inputs.platform == 'linux'
     runs-on: ${{ matrix.runner }}
     # A test that hangs fails the job, rather than holding a runner for six hours.
     timeout-minutes: 30
@@ -64,22 +82,16 @@ jobs:
           - runner: ubuntu-24.04-arm
             arch: arm64
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-java@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
           distribution: temurin
           java-version: 25
-      - uses: gradle/actions/setup-gradle@v6
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
 
-      # dunst is the notification server: the bus starts it on the first notification, through the
-      # activation file that the package installs.
-      - name: Install GTK 3 and 4, WebKitGTK, Xvfb, a window manager, a notification server, a keyring, and a portal
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libgtk-3-0t64 libwebkit2gtk-4.1-0 libgtk-4-1 libwebkitgtk-6.0-4 imagemagick xvfb openbox dbus-daemon dunst xdg-desktop-portal xdg-desktop-portal-gtk gsettings-desktop-schemas libglib2.0-bin dconf-gsettings-backend python3-gi gir1.2-gtk-3.0 xdotool gnome-keyring
-          # The portal of the desktop, which serves the color scheme to the theme tests.
-          sudo mkdir -p /etc/xdg-desktop-portal
-          printf '[preferred]\ndefault=gtk\n' | sudo tee /etc/xdg-desktop-portal/portals.conf
+      # The same script as Dockerfile.test, so that a run in Docker sees what this job sees.
+      - name: Install GTK 3 and 4, WebKitGTK, displays, a notification server, a keyring, and a portal
+        run: sudo scripts/linux/install-test-packages.sh
 
       - name: Headless tests
         run: ./gradlew test
@@ -95,25 +107,79 @@ jobs:
       # have someone to answer them.
       - name: Display tests under Xvfb
         id: display
-        run: xvfb-run -a dbus-run-session -- scripts/linux/with-secret-service.sh scripts/linux/with-window-manager.sh ./gradlew displayTest -Dlwjwae.requireDisplay=true -Dlwjwae.screenshots=true
+        run: >-
+          xvfb-run -a dbus-run-session -- scripts/linux/with-secret-service.sh
+          scripts/linux/with-window-manager.sh
+          ./gradlew displayTest ${TESTS:+--tests "$TESTS"}
+          -Dlwjwae.requireDisplay=true -Dlwjwae.screenshots=true
+
+      # The application of the smoke test on the module path, where only the exported API is there.
+      - name: Smoke test on the module path
+        run: xvfb-run -a dbus-run-session -- ./gradlew :lwjwae-smoke:run
 
       - name: Screenshots
         # Only after the display tests ran: a failure before them has no pictures to upload.
         if: always() && steps.display.outcome != 'skipped'
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: screenshots-linux-${{ matrix.arch }}
           path: '**/build/screenshots/'
           if-no-files-found: error
 
-      - name: Jars and Javadoc
-        run: ./gradlew assemble javadoc
+      - name: Jars, Javadoc, and coverage
+        run: ./gradlew assemble javadoc jacocoTestReport
+
+      - name: Coverage
+        if: matrix.arch == 'x86_64'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: coverage-linux
+          path: '**/build/reports/jacoco/'
 
       - name: Test reports
         if: failure()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: test-reports-linux-${{ matrix.arch }}
+          path: |
+            **/build/reports/tests/
+            **/build/test-results/
+
+  # The display tests of both GTK backends on Wayland, under a headless Weston. Report only for now:
+  # GTK 3 on Weston doesn't restore a maximized window to its size, and doesn't report the change,
+  # and a screenshot can't see a Wayland window; the job shows what Wayland does without failing the
+  # build over it.
+  test-wayland:
+    name: Tests (Linux Wayland)
+    needs: style
+    if: inputs.platform == '' || inputs.platform == 'all' || inputs.platform == 'linux'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: 25
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+      - name: Install the packages of the tests
+        run: sudo scripts/linux/install-test-packages.sh
+      - name: Allow the WebKitGTK 6.0 sandbox
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      # Xvfb stays for the notification server, which the session bus starts on X11; the tests
+      # alone see the Wayland display.
+      - name: Display tests on Wayland
+        run: >-
+          xvfb-run -a dbus-run-session -- scripts/linux/with-secret-service.sh
+          scripts/linux/with-wayland.sh
+          ./gradlew :lwjwae-gtk:displayTest :lwjwae-gtk4:displayTest ${TESTS:+--tests "$TESTS"}
+          -Dlwjwae.requireDisplay=true
+      - name: Test reports
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: test-reports-wayland
           path: |
             **/build/reports/tests/
             **/build/test-results/
@@ -121,16 +187,17 @@ jobs:
   test-windows:
     name: Tests (Windows)
     needs: style
+    if: inputs.platform == '' || inputs.platform == 'all' || inputs.platform == 'windows'
     runs-on: windows-2025
     # A test that hangs fails the job, rather than holding a runner for six hours.
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-java@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
           distribution: temurin
           java-version: 25
-      - uses: gradle/actions/setup-gradle@v6
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
 
       - name: Headless tests
         run: ./gradlew test
@@ -138,12 +205,17 @@ jobs:
       # The session of the runner has a desktop, so WebView2 can attach; no Xvfb equivalent needed.
       - name: Display tests
         id: display
-        run: ./gradlew displayTest "-Dlwjwae.requireDisplay=true" "-Dlwjwae.screenshots=true"
+        run: |
+          $tests = if ($env:TESTS) { @('--tests', $env:TESTS) } else { @() }
+          ./gradlew displayTest @tests "-Dlwjwae.requireDisplay=true" "-Dlwjwae.screenshots=true"
+
+      - name: Smoke test on the module path
+        run: ./gradlew :lwjwae-smoke:run
 
       - name: Screenshots
         # Only after the display tests ran: a failure before them has no pictures to upload.
         if: always() && steps.display.outcome != 'skipped'
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: screenshots-windows
           path: '**/build/screenshots/'
@@ -151,7 +223,7 @@ jobs:
 
       - name: Test reports
         if: failure()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: test-reports-windows
           path: |
@@ -161,6 +233,7 @@ jobs:
   test-macos:
     name: Tests (macOS ${{ matrix.arch }})
     needs: style
+    if: inputs.platform == '' || inputs.platform == 'all' || inputs.platform == 'macos'
     runs-on: ${{ matrix.runner }}
     # A test that hangs fails the job, rather than holding a runner for six hours.
     timeout-minutes: 30
@@ -173,12 +246,12 @@ jobs:
           - runner: macos-15-intel
             arch: x86_64
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-java@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
           distribution: temurin
           java-version: 25
-      - uses: gradle/actions/setup-gradle@v6
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
 
       - name: Headless tests
         run: ./gradlew test
@@ -186,12 +259,17 @@ jobs:
       # The session of the runner has a window server, so AppKit windows come up without any display setup.
       - name: Display tests
         id: display
-        run: ./gradlew displayTest -Dlwjwae.requireDisplay=true -Dlwjwae.screenshots=true
+        run: >-
+          ./gradlew displayTest ${TESTS:+--tests "$TESTS"}
+          -Dlwjwae.requireDisplay=true -Dlwjwae.screenshots=true
+
+      - name: Smoke test on the module path
+        run: ./gradlew :lwjwae-smoke:run
 
       - name: Screenshots
         # Only after the display tests ran: a failure before them has no pictures to upload.
         if: always() && steps.display.outcome != 'skipped'
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: screenshots-macos-${{ matrix.arch }}
           path: '**/build/screenshots/'
@@ -199,10 +277,62 @@ jobs:
 
       - name: Test reports
         if: failure()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: test-reports-macos-${{ matrix.arch }}
           path: |
             **/build/reports/tests/
             **/build/test-results/
 
+  # The smoke application as a native executable on each platform, which runs every way of the
+  # bridge once: a native call or a callback that the reachability metadata misses fails only here.
+  native:
+    name: Native image (${{ matrix.name }})
+    needs: style
+    # A run by hand for one platform leaves the native images out.
+    if: inputs.platform == '' || inputs.platform == 'all'
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            name: Linux
+          - runner: windows-2025
+            name: Windows
+          - runner: macos-15
+            name: macOS
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Sets up the C toolchain too: MSVC on Windows, Xcode on macOS.
+      - uses: graalvm/setup-graalvm@27b360dbb857524eaf0b4c4cef364d38e5b4f173 # v1.6.7
+        with:
+          java-version: 25
+          distribution: graalvm-community
+          native-image-job-reports: true
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+
+      - name: Install the packages of the tests
+        if: runner.os == 'Linux'
+        run: |
+          sudo scripts/linux/install-test-packages.sh
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
+      - name: Build the smoke application
+        run: ./gradlew :lwjwae-smoke:nativeCompile
+
+      # The executable exits with 0 once every way of the bridge answered, with 1 otherwise.
+      - name: Run it on GTK 3 and GTK 4
+        if: runner.os == 'Linux'
+        run: |
+          for backend in gtk3-webkit2gtk-4.1 gtk4-webkitgtk-6.0; do
+            xvfb-run -a dbus-run-session -- lwjwae-smoke/build/native/nativeCompile/lwjwae-smoke \
+              "-Dlwjwae.backend=$backend"
+          done
+      - name: Run it
+        if: runner.os == 'Windows'
+        run: ./lwjwae-smoke/build/native/nativeCompile/lwjwae-smoke.exe
+      - name: Run it
+        if: runner.os == 'macOS'
+        run: ./lwjwae-smoke/build/native/nativeCompile/lwjwae-smoke

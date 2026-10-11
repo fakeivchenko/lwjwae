@@ -1,5 +1,6 @@
-package dev.ivchenko.lwjwae.store;
+package dev.ivchenko.lwjwae.internal;
 
+import dev.ivchenko.lwjwae.store.Store;
 import dev.ivchenko.lwjwae.util.JsonUtil;
 import java.util.ArrayList;
 import java.util.Base64;

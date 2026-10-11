@@ -1,6 +1,9 @@
-package dev.ivchenko.lwjwae.event;
+package dev.ivchenko.lwjwae.internal;
 
 import dev.ivchenko.lwjwae.Window;
+import dev.ivchenko.lwjwae.event.EventSubscription;
+import dev.ivchenko.lwjwae.event.WindowEvent;
+import dev.ivchenko.lwjwae.event.WindowEventType;
 import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;

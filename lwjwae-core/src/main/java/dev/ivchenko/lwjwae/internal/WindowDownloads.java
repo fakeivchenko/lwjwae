@@ -1,19 +1,24 @@
-package dev.ivchenko.lwjwae.download;
+package dev.ivchenko.lwjwae.internal;
 
 import dev.ivchenko.lwjwae.Window;
+import dev.ivchenko.lwjwae.download.DownloadAction;
+import dev.ivchenko.lwjwae.download.DownloadDecision;
+import dev.ivchenko.lwjwae.download.DownloadRequest;
+import dev.ivchenko.lwjwae.download.DownloadState;
 import dev.ivchenko.lwjwae.event.DownloadEvent;
 import dev.ivchenko.lwjwae.event.EventSubscription;
-import dev.ivchenko.lwjwae.event.Listeners;
 import dev.ivchenko.lwjwae.util.JsonUtil;
 import dev.ivchenko.lwjwae.util.PlatformUtil;
 import dev.ivchenko.lwjwae.util.ThrowableUtil;
 import java.io.IOException;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -51,6 +56,18 @@ public final class WindowDownloads {
 
   /** The shortest time between two {@link DownloadState#PROGRESSED} events of a download. */
   private static final long PROGRESS_INTERVAL_NANOS = 100_000_000L;
+
+  /**
+   * The longest name of a file, in bytes of UTF-8, short of the 255 that the file systems of Linux
+   * and macOS take, with room for the number that {@link #unique} adds.
+   */
+  private static final int NAME_BYTES = 200;
+
+  /** The names that Windows keeps for devices, whatever their extension. */
+  private static final Set<String> WINDOWS_DEVICES =
+      Set.of(
+          "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7",
+          "COM8", "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9");
 
   /** The files of the downloads folder that this process claimed and whose download goes on. */
   private static final Set<Path> CLAIMED = ConcurrentHashMap.newKeySet();
@@ -311,11 +328,56 @@ public final class WindowDownloads {
     return Optional.empty();
   }
 
-  /** The last part of {@code suggested}, without the separators of a path, which a server sends. */
-  private static String fileName(String suggested) {
+  /**
+   * A name for a file of {@code suggested}, which a server sends and which may be anything: the
+   * last part of it as a path, with every character that a file system of Windows, macOS, or Linux
+   * refuses replaced by {@code _}, without the dots and spaces that Windows drops from the end, and
+   * short enough for every file system, the extension kept.
+   */
+  static String fileName(String suggested) {
     String name = suggested.replace('\\', '/');
-    name = name.substring(name.lastIndexOf('/') + 1).strip();
-    return name.isEmpty() || name.equals(".") || name.equals("..") ? "download" : name;
+    name = name.substring(name.lastIndexOf('/') + 1);
+    StringBuilder safe = new StringBuilder(name.length());
+    name.codePoints()
+        .forEach(
+            c ->
+                safe.appendCodePoint(
+                    c < 0x20 || c == 0x7f || "<>:\"|?*".indexOf(c) >= 0 ? '_' : c));
+    name = safe.toString().strip().replaceAll("[. ]+$", "");
+    if (name.isEmpty() || name.chars().allMatch(c -> c == '.')) {
+      return "download";
+    }
+    if (WINDOWS_DEVICES.contains(name.split("\\.", 2)[0].toUpperCase(Locale.ROOT))) {
+      name = "_" + name;
+    }
+    return WindowDownloads.shortened(name);
+  }
+
+  /**
+   * {@code name} cut to {@link #NAME_BYTES} bytes of UTF-8, at a whole character, with its
+   * extension kept where it's short.
+   */
+  private static String shortened(String name) {
+    if (name.getBytes(StandardCharsets.UTF_8).length <= NAME_BYTES) {
+      return name;
+    }
+    int dot = name.lastIndexOf('.');
+    String extension = dot > 0 && name.length() - dot <= 16 ? name.substring(dot) : "";
+    String stem = extension.isEmpty() ? name : name.substring(0, dot);
+    int budget = NAME_BYTES - extension.getBytes(StandardCharsets.UTF_8).length;
+    StringBuilder cut = new StringBuilder();
+    int used = 0;
+    for (int i = 0; i < stem.length(); ) {
+      int c = stem.codePointAt(i);
+      int bytes = new String(Character.toChars(c)).getBytes(StandardCharsets.UTF_8).length;
+      if (used + bytes > budget) {
+        break;
+      }
+      cut.appendCodePoint(c);
+      used += bytes;
+      i += Character.charCount(c);
+    }
+    return cut + extension;
   }
 
   /**

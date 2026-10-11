@@ -10,17 +10,21 @@ import java.lang.invoke.MethodHandle;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import lombok.SneakyThrows;
 import lombok.experimental.UtilityClass;
 
 /**
- * Bindings to the {@code SoupCookie} of libsoup 3, which WebKitGTK 4.1 and 6.0 both take and give,
- * and to the {@code GDateTime} of its expiry.
+ * Bindings to the {@code SoupCookie} and the {@code SoupMessageHeaders} of libsoup 3, which
+ * WebKitGTK 4.1 and 6.0 both take and give, and to the {@code GDateTime} of the expiry of a cookie.
  */
 @UtilityClass
 public class Soup {
   private final SymbolLookup SOUP = NativeLibraries.load("libsoup-3.0.so.0", "libsoup-3.0.so");
   private final SymbolLookup GLIB = NativeLibraries.load("libglib-2.0.so.0", "libglib-2.0.so");
+
+  /** {@code SOUP_MESSAGE_HEADERS_RESPONSE}: the headers of an answer. */
+  private final int MESSAGE_HEADERS_RESPONSE = 1;
 
   /** {@code SOUP_SAME_SITE_POLICY_NONE}, {@code _LAX}, {@code _STRICT}. */
   private final int SAME_SITE_NONE = 0;
@@ -65,6 +69,40 @@ public class Soup {
       NativeLibraries.downcall(GLIB, "g_date_time_unref", Signatures.VOID_POINTER);
   private final MethodHandle LIST_FREE =
       NativeLibraries.downcall(GLIB, "g_list_free", Signatures.VOID_POINTER);
+  private final MethodHandle MESSAGE_HEADERS_GET_ONE =
+      NativeLibraries.downcall(
+          SOUP, "soup_message_headers_get_one", Signatures.POINTER_POINTER_POINTER);
+  private final MethodHandle MESSAGE_HEADERS_NEW =
+      NativeLibraries.downcall(SOUP, "soup_message_headers_new", Signatures.POINTER_INT);
+  private final MethodHandle MESSAGE_HEADERS_APPEND =
+      NativeLibraries.downcall(
+          SOUP, "soup_message_headers_append", Signatures.VOID_POINTER_POINTER_POINTER);
+
+  /** The header {@code name} of a {@code SoupMessageHeaders}, or {@code null}. */
+  @SneakyThrows
+  public String messageHeader(MemorySegment headers, String name) {
+    try (Arena arena = Arena.ofConfined()) {
+      return NativeLibraries.string(
+          (MemorySegment) MESSAGE_HEADERS_GET_ONE.invokeExact(headers, arena.allocateFrom(name)));
+    }
+  }
+
+  /**
+   * A new {@code SoupMessageHeaders} of an answer with {@code headers}, which the caller hands to
+   * the function that takes it over.
+   */
+  @SneakyThrows
+  public MemorySegment messageHeaders(Map<String, String> headers) {
+    MemorySegment created =
+        (MemorySegment) MESSAGE_HEADERS_NEW.invokeExact(MESSAGE_HEADERS_RESPONSE);
+    try (Arena arena = Arena.ofConfined()) {
+      for (Map.Entry<String, String> header : headers.entrySet()) {
+        MESSAGE_HEADERS_APPEND.invokeExact(
+            created, arena.allocateFrom(header.getKey()), arena.allocateFrom(header.getValue()));
+      }
+    }
+    return created;
+  }
 
   /** A new {@code SoupCookie} of {@code cookie}, which the caller frees with {@link #free}. */
   @SneakyThrows

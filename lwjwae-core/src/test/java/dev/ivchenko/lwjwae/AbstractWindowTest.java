@@ -636,7 +636,7 @@ class AbstractWindowTest {
   }
 
   @Test
-  void dropsReachASlowListenerOneAfterTheOtherInOrder() throws Exception {
+  void dropsReachSlowListenerOneAfterTheOtherInOrder() throws Exception {
     try (FakeApplication application = new FakeApplication()) {
       FakeWindow window = application.openFake();
       BlockingQueue<Integer> heard = new LinkedBlockingQueue<>();

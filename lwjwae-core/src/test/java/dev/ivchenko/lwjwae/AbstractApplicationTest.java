@@ -134,6 +134,11 @@ class AbstractApplicationTest {
         IllegalArgumentException.class, () -> Notification.builder().title(" ").build());
   }
 
+  /**
+   * Suppressed warnings: {@code try}: the test closes the tray inside its block on purpose: the
+   * close is what lets {@code run()} return.
+   */
+  @SuppressWarnings("try")
   @Test
   void closingTheLastTrayIconWithNoWindowReleasesRun() throws Exception {
     try (FakeApplication application = new FakeApplication();

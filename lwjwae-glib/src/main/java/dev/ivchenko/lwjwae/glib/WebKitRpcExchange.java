@@ -2,6 +2,7 @@ package dev.ivchenko.lwjwae.glib;
 
 import dev.ivchenko.lwjwae.glib.binding.Glib;
 import dev.ivchenko.lwjwae.glib.binding.Unix;
+import dev.ivchenko.lwjwae.glib.binding.WebKitGtk;
 import dev.ivchenko.lwjwae.rpc.RpcExchange;
 import dev.ivchenko.lwjwae.ui.UiDispatcher;
 import java.lang.foreign.MemorySegment;
@@ -16,12 +17,9 @@ import java.util.Map;
  * the backpressure of the stream. A page that abandons the call makes WebKit drop the stream, which
  * closes the read end, and the next write fails with {@code EPIPE}: that is how the handler learns
  * of it. WebKit doesn't report the cancellation any sooner, so {@link #onCancel} never fires.
- *
- * <p>The two libraries of WebKitGTK have the request under the same names, but a process may load
- * only the one of its toolkit, so a backend reads the request through its own binding and hands the
- * answer back through {@link #finish}.
  */
-public abstract class WebKitRpcExchange implements RpcExchange {
+final class WebKitRpcExchange implements RpcExchange {
+  private final WebKitGtk webKit;
   private final UiDispatcher dispatcher;
   private final MemorySegment request;
   private final String method;
@@ -37,29 +35,22 @@ public abstract class WebKitRpcExchange implements RpcExchange {
   /**
    * Takes a reference to {@code request}; runs on the GTK thread, in the scheme handler.
    *
-   * @param method The method of the request, or {@code null} for {@code GET}.
-   * @param token The {@link #TOKEN_HEADER} of the request, or {@code null} without one.
-   * @param bodyStream The {@code GInputStream} of the body, which this exchange owns, or {@code
-   *     NULL} without one.
+   * @param webKit The binding of the WebKitGTK that the process loaded.
+   * @param path The path of the request, or of the resource that a large file streams.
    */
-  protected WebKitRpcExchange(
-      UiDispatcher dispatcher,
-      MemorySegment request,
-      String path,
-      String method,
-      String origin,
-      String token,
-      String contentType,
-      MemorySegment bodyStream) {
+  WebKitRpcExchange(WebKitGtk webKit, UiDispatcher dispatcher, MemorySegment request, String path) {
+    this.webKit = webKit;
     this.dispatcher = dispatcher;
     this.request = request;
     Glib.ref(request);
-    this.method = method == null ? "GET" : method;
+    String requestMethod = webKit.uriSchemeRequestMethod(request);
+    this.method = requestMethod == null ? "GET" : requestMethod;
     this.path = path;
-    this.origin = origin;
-    this.token = token;
-    this.contentType = contentType;
-    this.bodyStream = bodyStream;
+    this.origin = webKit.uriSchemeRequestHeader(request, "Origin");
+    this.token = webKit.uriSchemeRequestHeader(request, TOKEN_HEADER);
+    this.contentType = webKit.uriSchemeRequestHeader(request, "Content-Type");
+    // The GInputStream of the body, which this exchange owns, or NULL without one.
+    this.bodyStream = webKit.uriSchemeRequestBody(request);
   }
 
   @Override
@@ -104,7 +95,7 @@ public abstract class WebKitRpcExchange implements RpcExchange {
     this.dispatcher.run(
         () -> {
           MemorySegment stream = Unix.inputStream(pipe[0]);
-          this.finish(this.request, stream, status, headers);
+          this.webKit.uriSchemeRequestFinishWithStream(this.request, stream, status, headers);
           Glib.unref(stream);
           Glib.unref(this.request);
         });
@@ -122,11 +113,4 @@ public abstract class WebKitRpcExchange implements RpcExchange {
 
   @Override
   public void onCancel(Runnable action) {}
-
-  /**
-   * Calls {@code webkit_uri_scheme_request_finish_with_response} of the library of the backend for
-   * {@code request}, with {@code stream} as the body. Runs on the GTK thread.
-   */
-  protected abstract void finish(
-      MemorySegment request, MemorySegment stream, int status, Map<String, String> headers);
 }

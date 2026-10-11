@@ -1,6 +1,7 @@
-package dev.ivchenko.lwjwae.store;
+package dev.ivchenko.lwjwae.internal;
 
 import dev.ivchenko.lwjwae.exception.StoreFailedException;
+import dev.ivchenko.lwjwae.store.Store;
 import dev.ivchenko.lwjwae.util.JsonUtil;
 import java.nio.file.Files;
 import java.nio.file.Path;

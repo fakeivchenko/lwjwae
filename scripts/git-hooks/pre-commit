@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+#
+# Refuses a commit whose Java the formatter would change, the check that the Style job of CI runs
+# first, so that a push doesn't fail on it. Opt in once per clone:
+#
+#   git config core.hooksPath scripts/git-hooks
+#
+# The check runs on the machine; with LWJWAE_HOOK_IN_DOCKER=1, it runs in the test image instead,
+# through scripts/linux/test-in-docker.sh. `./gradlew spotlessApply` fixes what it finds, and
+# `git commit --no-verify` skips it.
+#
+set -euo pipefail
+root=$(git rev-parse --show-toplevel)
+if ! git diff --cached --name-only --diff-filter=ACMR | grep -q '\.java$'; then
+    exit 0
+fi
+if [ -n "${LWJWAE_HOOK_IN_DOCKER:-}" ]; then
+    "$root/scripts/linux/test-in-docker.sh" spotlessCheck
+else
+    "$root/gradlew" -p "$root" --quiet spotlessCheck
+fi

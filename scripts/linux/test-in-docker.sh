@@ -13,12 +13,17 @@
 # seccomp and the system paths stay unconfined because the web processes of WebKitGTK 6.0 run in a
 # bubblewrap sandbox, which needs user namespaces and a /proc of its own, and Docker's defaults
 # forbid both. LWJWAE_DOCKER_TIMEOUT caps
-# the run (default 20 minutes), so a hung test ends instead of blocking.
+# the run (default 20 minutes), so a hung test ends instead of blocking. LWJWAE_WAYLAND=1 runs the
+# tasks on a Wayland display of Weston instead of on Xvfb, as the Wayland job of CI does.
 #
 set -euo pipefail
 root=$(cd "$(dirname "$0")/../.." && pwd)
 image=lwjwae-test
 timeout=${LWJWAE_DOCKER_TIMEOUT:-1200}
+display=scripts/linux/with-window-manager.sh
+if [ -n "${LWJWAE_WAYLAND:-}" ]; then
+    display=scripts/linux/with-wayland.sh
+fi
 if [ $# -eq 0 ]; then
     set -- displayTest -Dlwjwae.requireDisplay=true -Dlwjwae.screenshots=true
 fi
@@ -35,7 +40,7 @@ docker run --rm \
     "$image" bash -c '
         rsync -a --exclude build --exclude .gradle --exclude .git /src/ /work/
         status=0
-        timeout '"$timeout"' xvfb-run -a dbus-run-session -- scripts/linux/with-secret-service.sh scripts/linux/with-window-manager.sh ./gradlew --no-daemon --console=plain --continue "$@" || status=$?
+        timeout '"$timeout"' xvfb-run -a dbus-run-session -- scripts/linux/with-secret-service.sh '"$display"' ./gradlew --no-daemon --console=plain --continue "$@" || status=$?
         [ $status -eq 124 ] && echo "Timed out after '"$timeout"' s"
         for module in */build; do
             name=${module%/build}

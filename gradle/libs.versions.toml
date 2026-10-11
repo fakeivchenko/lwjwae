@@ -1,0 +1,29 @@
+# Every version of the build in one place, where Dependabot reads and updates them. A tool that a
+# plugin downloads by version, such as Lombok or Checkstyle, has a library entry too, so that
+# Dependabot sees it.
+
+[versions]
+checkstyle = "11.1.0"
+google-java-format = "1.33.0"
+jacoco = "0.8.15"
+jackson = "2.22.2"
+jqwik = "1.10.2"
+junit = "6.0.0"
+lombok = "1.18.48"
+
+[libraries]
+checkstyle = { module = "com.puppycrawl.tools:checkstyle", version.ref = "checkstyle" }
+google-java-format = { module = "com.google.googlejavaformat:google-java-format", version.ref = "google-java-format" }
+jacoco-agent = { module = "org.jacoco:org.jacoco.agent", version.ref = "jacoco" }
+jackson-databind = { module = "com.fasterxml.jackson.core:jackson-databind", version.ref = "jackson" }
+jqwik = { module = "net.jqwik:jqwik", version.ref = "jqwik" }
+junit-bom = { module = "org.junit:junit-bom", version.ref = "junit" }
+junit-jupiter = { module = "org.junit.jupiter:junit-jupiter" }
+junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }
+lombok = { module = "org.projectlombok:lombok", version.ref = "lombok" }
+
+[plugins]
+graalvm-native = { id = "org.graalvm.buildtools.native", version = "1.1.14" }
+lombok = { id = "io.freefair.lombok", version = "9.5.0" }
+spotless = { id = "com.diffplug.spotless", version = "8.2.1" }
+test-retry = { id = "org.gradle.test-retry", version = "1.6.6" }

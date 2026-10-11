@@ -28,65 +28,8 @@
           ]
         },
         {
-          "name": "onBridgeMessage",
-          "parameterTypes": [
-            "java.lang.foreign.MemorySegment",
-            "java.lang.foreign.MemorySegment",
-            "java.lang.foreign.MemorySegment"
-          ]
-        },
-        {
-          "name": "onCreate",
-          "parameterTypes": [
-            "java.lang.foreign.MemorySegment",
-            "java.lang.foreign.MemorySegment",
-            "java.lang.foreign.MemorySegment"
-          ]
-        },
-        {
-          "name": "onPermissionRequest",
-          "parameterTypes": [
-            "java.lang.foreign.MemorySegment",
-            "java.lang.foreign.MemorySegment",
-            "java.lang.foreign.MemorySegment"
-          ]
-        },
-        {
           "name": "onDeleteEvent",
           "parameterTypes": [
-            "java.lang.foreign.MemorySegment",
-            "java.lang.foreign.MemorySegment",
-            "java.lang.foreign.MemorySegment"
-          ]
-        },
-        {
-          "name": "onDestroy",
-          "parameterTypes": [
-            "java.lang.foreign.MemorySegment",
-            "java.lang.foreign.MemorySegment"
-          ]
-        },
-        {
-          "name": "onEvaluationReady",
-          "parameterTypes": [
-            "java.lang.foreign.MemorySegment",
-            "java.lang.foreign.MemorySegment",
-            "java.lang.foreign.MemorySegment"
-          ]
-        },
-        {
-          "name": "onLoadChanged",
-          "parameterTypes": [
-            "java.lang.foreign.MemorySegment",
-            "int",
-            "java.lang.foreign.MemorySegment"
-          ]
-        },
-        {
-          "name": "onLoadFailed",
-          "parameterTypes": [
-            "java.lang.foreign.MemorySegment",
-            "int",
             "java.lang.foreign.MemorySegment",
             "java.lang.foreign.MemorySegment",
             "java.lang.foreign.MemorySegment"
@@ -99,64 +42,12 @@
             "java.lang.foreign.MemorySegment",
             "java.lang.foreign.MemorySegment"
           ]
-        },
-        {
-          "name": "onDownloadStarted",
-          "parameterTypes": [
-            "java.lang.foreign.MemorySegment",
-            "java.lang.foreign.MemorySegment",
-            "java.lang.foreign.MemorySegment"
-          ]
-        },
-        {
-          "name": "onDecideDestination",
-          "parameterTypes": [
-            "java.lang.foreign.MemorySegment",
-            "java.lang.foreign.MemorySegment",
-            "java.lang.foreign.MemorySegment"
-          ]
-        },
-        {
-          "name": "onDownloadReceivedData",
-          "parameterTypes": [
-            "java.lang.foreign.MemorySegment",
-            "long",
-            "java.lang.foreign.MemorySegment"
-          ]
-        },
-        {
-          "name": "onDownloadFailed",
-          "parameterTypes": [
-            "java.lang.foreign.MemorySegment",
-            "java.lang.foreign.MemorySegment",
-            "java.lang.foreign.MemorySegment"
-          ]
-        },
-        {
-          "name": "onDownloadFinished",
-          "parameterTypes": [
-            "java.lang.foreign.MemorySegment",
-            "java.lang.foreign.MemorySegment"
-          ]
-        },
-        {
-          "name": "onWakeUp",
-          "parameterTypes": [
-            "java.lang.foreign.MemorySegment"
-          ]
         }
       ]
     },
     {
       "type": "dev.ivchenko.lwjwae.gtk.GtkApplication",
       "methods": [
-        {
-          "name": "onResourceRequest",
-          "parameterTypes": [
-            "java.lang.foreign.MemorySegment",
-            "java.lang.foreign.MemorySegment"
-          ]
-        },
         {
           "name": "onXlibEvent",
           "parameterTypes": [
@@ -475,66 +366,6 @@
       },
       {
         "class": "dev.ivchenko.lwjwae.gtk.GtkWindow",
-        "method": "onBridgeMessage",
-        "returnType": "void",
-        "parameterTypes": [
-          "void*",
-          "void*",
-          "void*"
-        ]
-      },
-      {
-        "class": "dev.ivchenko.lwjwae.gtk.GtkWindow",
-        "method": "onDestroy",
-        "returnType": "void",
-        "parameterTypes": [
-          "void*",
-          "void*"
-        ]
-      },
-      {
-        "class": "dev.ivchenko.lwjwae.gtk.GtkWindow",
-        "method": "onLoadFailed",
-        "returnType": "jint",
-        "parameterTypes": [
-          "void*",
-          "jint",
-          "void*",
-          "void*",
-          "void*"
-        ]
-      },
-      {
-        "class": "dev.ivchenko.lwjwae.gtk.GtkWindow",
-        "method": "onLoadChanged",
-        "returnType": "void",
-        "parameterTypes": [
-          "void*",
-          "jint",
-          "void*"
-        ]
-      },
-      {
-        "class": "dev.ivchenko.lwjwae.gtk.GtkApplication",
-        "method": "onResourceRequest",
-        "returnType": "void",
-        "parameterTypes": [
-          "void*",
-          "void*"
-        ]
-      },
-      {
-        "class": "dev.ivchenko.lwjwae.gtk.GtkWindow",
-        "method": "onEvaluationReady",
-        "returnType": "void",
-        "parameterTypes": [
-          "void*",
-          "void*",
-          "void*"
-        ]
-      },
-      {
-        "class": "dev.ivchenko.lwjwae.gtk.GtkWindow",
         "method": "onContextMenu",
         "returnType": "jint",
         "parameterTypes": [
@@ -595,26 +426,6 @@
         ]
       },
       {
-        "class": "dev.ivchenko.lwjwae.gtk.GtkWindow",
-        "method": "onCreate",
-        "returnType": "void*",
-        "parameterTypes": [
-          "void*",
-          "void*",
-          "void*"
-        ]
-      },
-      {
-        "class": "dev.ivchenko.lwjwae.gtk.GtkWindow",
-        "method": "onPermissionRequest",
-        "returnType": "jint",
-        "parameterTypes": [
-          "void*",
-          "void*",
-          "void*"
-        ]
-      },
-      {
         "class": "dev.ivchenko.lwjwae.gtk.GtkDialogs",
         "method": "onResponse",
         "returnType": "void",
@@ -640,63 +451,6 @@
         "returnType": "void",
         "parameterTypes": [
           "void*",
-          "void*"
-        ]
-      },
-      {
-        "class": "dev.ivchenko.lwjwae.gtk.GtkWindow",
-        "method": "onDownloadStarted",
-        "returnType": "void",
-        "parameterTypes": [
-          "void*",
-          "void*",
-          "void*"
-        ]
-      },
-      {
-        "class": "dev.ivchenko.lwjwae.gtk.GtkWindow",
-        "method": "onDecideDestination",
-        "returnType": "jint",
-        "parameterTypes": [
-          "void*",
-          "void*",
-          "void*"
-        ]
-      },
-      {
-        "class": "dev.ivchenko.lwjwae.gtk.GtkWindow",
-        "method": "onDownloadReceivedData",
-        "returnType": "void",
-        "parameterTypes": [
-          "void*",
-          "jlong",
-          "void*"
-        ]
-      },
-      {
-        "class": "dev.ivchenko.lwjwae.gtk.GtkWindow",
-        "method": "onDownloadFailed",
-        "returnType": "void",
-        "parameterTypes": [
-          "void*",
-          "void*",
-          "void*"
-        ]
-      },
-      {
-        "class": "dev.ivchenko.lwjwae.gtk.GtkWindow",
-        "method": "onDownloadFinished",
-        "returnType": "void",
-        "parameterTypes": [
-          "void*",
-          "void*"
-        ]
-      },
-      {
-        "class": "dev.ivchenko.lwjwae.gtk.GtkWindow",
-        "method": "onWakeUp",
-        "returnType": "jint",
-        "parameterTypes": [
           "void*"
         ]
       }

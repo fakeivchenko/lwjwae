@@ -1,6 +1,6 @@
 package dev.ivchenko.lwjwae.windows;
 
-import dev.ivchenko.lwjwae.bridge.RpcMessageChannel;
+import dev.ivchenko.lwjwae.rpc.RpcMessageChannel;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
 

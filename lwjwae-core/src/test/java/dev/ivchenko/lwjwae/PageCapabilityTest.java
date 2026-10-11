@@ -73,7 +73,7 @@ class PageCapabilityTest {
   }
 
   @Test
-  void dropsReachJavaButNotAPageWithoutFiles() throws Exception {
+  void dropsReachJavaButNotPageWithoutFiles() throws Exception {
     try (FakeApplication application = new FakeApplication(ApplicationParameters.createDefault())) {
       FakeWindow window = application.openFake();
       BlockingQueue<FileDropEvent> heard = new LinkedBlockingQueue<>();

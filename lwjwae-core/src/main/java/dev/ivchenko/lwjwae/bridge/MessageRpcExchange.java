@@ -2,6 +2,7 @@ package dev.ivchenko.lwjwae.bridge;
 
 import dev.ivchenko.lwjwae.Window;
 import dev.ivchenko.lwjwae.rpc.RpcExchange;
+import dev.ivchenko.lwjwae.rpc.RpcMessageChannel;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.Locale;

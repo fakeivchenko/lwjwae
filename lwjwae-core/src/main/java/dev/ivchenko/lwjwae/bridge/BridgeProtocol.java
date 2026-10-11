@@ -149,7 +149,7 @@ public class BridgeProtocol {
   /**
    * The name under which a page uses the store of the application, through {@code
    * window.lwjwae.store}. Reserved like {@link #EVENT_CALL}. The body is a command of {@link
-   * dev.ivchenko.lwjwae.store.StorePageCommands} as JSON, and the answer its result as JSON.
+   * dev.ivchenko.lwjwae.internal.StorePageCommands} as JSON, and the answer its result as JSON.
    */
   public final String STORE_CALL = "lwjwae:store";
 

@@ -1,7 +1,11 @@
-package dev.ivchenko.lwjwae.download;
+package dev.ivchenko.lwjwae.internal;
 
+import dev.ivchenko.lwjwae.download.DownloadDecision;
+import dev.ivchenko.lwjwae.download.DownloadRequest;
+import dev.ivchenko.lwjwae.download.DownloadState;
 import dev.ivchenko.lwjwae.event.DownloadEvent;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -95,6 +99,19 @@ class WindowDownloadsTest {
   }
 
   @Test
+  void nameOfTheServerBecomesOneThatEveryFileSystemTakes() {
+    Assertions.assertEquals("report.pdf", WindowDownloads.fileName("../../etc/report.pdf"));
+    Assertions.assertEquals("a_b_c_.txt", WindowDownloads.fileName("a<b>c?.txt"));
+    Assertions.assertEquals("notes", WindowDownloads.fileName("notes. . ."));
+    Assertions.assertEquals("_con.txt", WindowDownloads.fileName("con.txt"));
+    Assertions.assertEquals("download", WindowDownloads.fileName(" .. "));
+
+    String longName = WindowDownloads.fileName("é".repeat(300) + ".pdf");
+    Assertions.assertTrue(longName.endsWith(".pdf"), "the extension stays");
+    Assertions.assertTrue(longName.getBytes(StandardCharsets.UTF_8).length <= 200, longName);
+  }
+
+  @Test
   void claimedNameStaysTakenUntilItsDownloadEnds(@TempDir Path directory) throws Exception {
     Path first = WindowDownloads.unique(directory, "notes.txt");
     // As WebKit on macOS needs: the backend removes the file before the engine writes it.
@@ -135,8 +152,7 @@ class WindowDownloadsTest {
   }
 
   @Test
-  void closingRemovesTheClaimedFileOfADownloadThatNeverStarted(@TempDir Path directory)
-      throws Exception {
+  void closingRemovesTheClaimedFileOfAnUnstartedDownload(@TempDir Path directory) throws Exception {
     WindowDownloads downloads = this.downloads(directory);
     Path decided = downloads.request(REQUEST).get().orElseThrow();
 

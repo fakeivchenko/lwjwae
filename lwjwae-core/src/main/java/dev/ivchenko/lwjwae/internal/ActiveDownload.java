@@ -1,4 +1,4 @@
-package dev.ivchenko.lwjwae.download;
+package dev.ivchenko.lwjwae.internal;
 
 import java.net.URI;
 import java.nio.file.Path;

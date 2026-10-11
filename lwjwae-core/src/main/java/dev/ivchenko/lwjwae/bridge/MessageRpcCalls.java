@@ -1,6 +1,7 @@
 package dev.ivchenko.lwjwae.bridge;
 
 import dev.ivchenko.lwjwae.Window;
+import dev.ivchenko.lwjwae.rpc.RpcMessageChannel;
 import dev.ivchenko.lwjwae.util.ThrowableUtil;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;

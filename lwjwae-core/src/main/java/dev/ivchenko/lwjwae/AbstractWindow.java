@@ -6,7 +6,6 @@ import dev.ivchenko.lwjwae.bridge.MessageRpcCalls;
 import dev.ivchenko.lwjwae.bridge.MessageRpcExchange;
 import dev.ivchenko.lwjwae.bridge.PageEvents;
 import dev.ivchenko.lwjwae.bridge.PageMenu;
-import dev.ivchenko.lwjwae.bridge.RpcMessageChannel;
 import dev.ivchenko.lwjwae.bridge.codec.BridgeCodec;
 import dev.ivchenko.lwjwae.clipboard.Clipboard;
 import dev.ivchenko.lwjwae.dialog.DialogCompletion;
@@ -16,19 +15,20 @@ import dev.ivchenko.lwjwae.dialog.SaveDialogParameters;
 import dev.ivchenko.lwjwae.download.DownloadDecision;
 import dev.ivchenko.lwjwae.download.DownloadRequest;
 import dev.ivchenko.lwjwae.download.DownloadState;
-import dev.ivchenko.lwjwae.download.WindowDownloads;
 import dev.ivchenko.lwjwae.event.DownloadEvent;
 import dev.ivchenko.lwjwae.event.Event;
 import dev.ivchenko.lwjwae.event.EventSubscription;
 import dev.ivchenko.lwjwae.event.FileDropEvent;
-import dev.ivchenko.lwjwae.event.Listeners;
 import dev.ivchenko.lwjwae.event.LoadEvent;
 import dev.ivchenko.lwjwae.event.WindowEvent;
-import dev.ivchenko.lwjwae.event.WindowEvents;
 import dev.ivchenko.lwjwae.exception.ConstraintViolatedException;
 import dev.ivchenko.lwjwae.exception.StoreFailedException;
 import dev.ivchenko.lwjwae.exception.UpdateDownloadFailedException;
 import dev.ivchenko.lwjwae.exception.UpdateRejectedException;
+import dev.ivchenko.lwjwae.internal.Listeners;
+import dev.ivchenko.lwjwae.internal.StorePageCommands;
+import dev.ivchenko.lwjwae.internal.WindowDownloads;
+import dev.ivchenko.lwjwae.internal.WindowEvents;
 import dev.ivchenko.lwjwae.menu.ActionMenuItem;
 import dev.ivchenko.lwjwae.menu.CheckMenuItem;
 import dev.ivchenko.lwjwae.menu.MenuCommands;
@@ -43,7 +43,7 @@ import dev.ivchenko.lwjwae.rpc.RpcCall;
 import dev.ivchenko.lwjwae.rpc.RpcException;
 import dev.ivchenko.lwjwae.rpc.RpcExchange;
 import dev.ivchenko.lwjwae.rpc.RpcHandler;
-import dev.ivchenko.lwjwae.store.StorePageCommands;
+import dev.ivchenko.lwjwae.rpc.RpcMessageChannel;
 import dev.ivchenko.lwjwae.taskbar.ProgressState;
 import dev.ivchenko.lwjwae.taskbar.TaskbarProgress;
 import dev.ivchenko.lwjwae.ui.UiDispatcher;
@@ -156,11 +156,16 @@ public abstract class AbstractWindow implements Window {
   /**
    * Records the owner and the ID. The subclass creates the native window afterwards.
    *
+   * <p>Suppressed warnings: {@code this-escape}: the window events and the downloads keep the
+   * window, as the source of what they report, and call nothing of it before it reports something,
+   * which a window does only once the subclass created it.
+   *
    * @param application The application that opens the window.
    * @param id The ID that {@link AbstractApplication#createWindow} was given.
    * @param parameters What the window starts with; the core keeps the parts of the frame that it
    *     acts on itself.
    */
+  @SuppressWarnings("this-escape")
   protected AbstractWindow(AbstractApplication application, long id, WindowParameters parameters) {
     this.application = Objects.requireNonNull(application, "application");
     this.id = id;
@@ -453,7 +458,8 @@ public abstract class AbstractWindow implements Window {
   /**
    * Refuses the call of the page unless the application granted {@code capability}.
    *
-   * @throws RpcException With status 403 and code {@code capability}, which names it.
+   * @throws RpcException If the application didn't grant it, with status 403 and code {@code
+   *     capability}.
    */
   private void require(PageCapability capability) {
     if (!this.allows(capability)) {
