@@ -1,6 +1,6 @@
 package dev.ivchenko.lwjwae.permission;
 
-/** What a page asks the user for, see {@link dev.ivchenko.lwjwae.Window#permissionHandler}. */
+/** What a page asks the user for, see {@link dev.ivchenko.lwjwae.WebView#permissionHandler}. */
 public enum PermissionKind {
   /** A video input, with {@code getUserMedia({ video: true })}. */
   CAMERA,

@@ -16,9 +16,7 @@ public enum DownloadState {
   /** The download stopped on an error, such as a lost connection or a full disk. */
   FAILED,
 
-  /**
-   * The download was canceled, by {@link dev.ivchenko.lwjwae.Window#cancelDownload} or the page.
-   */
+  /** The download was canceled, by {@link Downloads#cancel} or the page. */
   CANCELED;
 
   /** The name that a page sees, such as {@code started}. */

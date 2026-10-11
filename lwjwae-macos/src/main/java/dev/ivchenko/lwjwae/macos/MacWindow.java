@@ -65,7 +65,7 @@ public class MacWindow extends AbstractWindow {
   /**
    * The page-side switch that the context menu script reads. The engine has no setting to suppress
    * its menu, so a user script cancels {@code contextmenu} unless this global is set, which {@link
-   * #devToolsEnabled} does, because "Inspect Element" lives in that menu.
+   * #presentDevTools} does, because "Inspect Element" lives in that menu.
    */
   private static final String CONTEXT_MENU_FLAG = "__lwjwaeContextMenu";
 
@@ -747,21 +747,17 @@ public class MacWindow extends AbstractWindow {
   }
 
   @Override
-  public boolean isDevToolsEnabled() {
-    return this.dispatcher().call(() -> WebKit.isDeveloperExtrasEnabled(this.webView()));
+  protected boolean currentDevTools() {
+    return WebKit.isDeveloperExtrasEnabled(this.view());
   }
 
   @Override
-  public void devToolsEnabled(boolean devToolsEnabled) {
-    this.dispatcher()
-        .run(
-            () -> {
-              WebKit.setDeveloperExtrasEnabled(this.webView(), devToolsEnabled);
-              // Once for documents loaded from now on, once for the document already on screen.
-              String flag = "window." + CONTEXT_MENU_FLAG + " = " + devToolsEnabled + ";";
-              this.injectOnDocumentStart(flag);
-              this.eval(flag);
-            });
+  protected void presentDevTools(boolean enabled) {
+    WebKit.setDeveloperExtrasEnabled(this.view(), enabled);
+    // Once for documents loaded from now on, once for the document already on screen.
+    String flag = "window." + CONTEXT_MENU_FLAG + " = " + enabled + ";";
+    this.injectOnDocumentStart(flag);
+    this.eval(flag);
   }
 
   @Override
@@ -772,7 +768,7 @@ public class MacWindow extends AbstractWindow {
             () -> {
               this.loading = url;
               this.reportedFailure = null;
-              WebKit.loadUrl(this.webView(), url);
+              WebKit.loadUrl(this.view(), url);
             });
   }
 
@@ -781,7 +777,7 @@ public class MacWindow extends AbstractWindow {
     return this.dispatcher()
         .call(
             () -> {
-              String url = WebKit.url(this.webView());
+              String url = WebKit.url(this.view());
               return url == null ? "about:blank" : url;
             });
   }
@@ -793,7 +789,7 @@ public class MacWindow extends AbstractWindow {
         .run(
             () -> {
               this.reportedFailure = null;
-              WebKit.loadHtml(this.webView(), html, this.resourceUrl(""));
+              WebKit.loadHtml(this.view(), html, this.resourceUrl(""));
             });
   }
 
@@ -817,7 +813,7 @@ public class MacWindow extends AbstractWindow {
                 Arena arena = Arena.ofAuto();
                 long id = PENDING_EVALUATIONS.register(new PendingEvaluation(result, arena));
                 WebKit.evaluateJavaScript(
-                    this.webView(), wrapped, ObjC.block(arena, ON_EVALUATION_COMPLETE, id));
+                    this.view(), wrapped, ObjC.block(arena, ON_EVALUATION_COMPLETE, id));
               } catch (Throwable t) {
                 result.completeExceptionally(t);
               }
@@ -922,7 +918,7 @@ public class MacWindow extends AbstractWindow {
     return this.alive(this.window);
   }
 
-  private MemorySegment webView() {
+  private MemorySegment view() {
     return this.alive(this.webView);
   }
 

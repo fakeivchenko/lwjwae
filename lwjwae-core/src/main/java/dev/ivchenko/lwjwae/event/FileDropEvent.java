@@ -6,7 +6,7 @@ import java.util.List;
 
 /**
  * The user dropped files from the file manager of the desktop onto the page of a window, see {@link
- * Window#onFileDrop}.
+ * dev.ivchenko.lwjwae.WebView#onFileDrop}.
  *
  * <p>Platforms:
  *

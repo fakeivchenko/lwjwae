@@ -25,15 +25,17 @@ class Gtk4NotificationTest extends NotificationContractTest {
       CountDownLatch second = new CountDownLatch(1);
       FreedesktopNotification notification =
           (FreedesktopNotification)
-              application.showNotification(
-                  Notification.builder()
-                      .title("lwjwae :: actions")
-                      .actions(
-                          List.of(
-                              new NotificationAction("First", () -> {}),
-                              new NotificationAction("Second", second::countDown)))
-                      .onActivate(activated::countDown)
-                      .build());
+              application
+                  .notifications()
+                  .show(
+                      Notification.builder()
+                          .title("lwjwae :: actions")
+                          .actions(
+                              List.of(
+                                  new NotificationAction("First", () -> {}),
+                                  new NotificationAction("Second", second::countDown)))
+                          .onActivate(activated::countDown)
+                          .build());
 
       notification.simulateAction("default");
       notification.simulateAction("action-1");
@@ -48,8 +50,9 @@ class Gtk4NotificationTest extends NotificationContractTest {
     try (Application application = Application.create()) {
       FreedesktopNotification notification =
           (FreedesktopNotification)
-              application.showNotification(
-                  Notification.builder().title("lwjwae :: dismiss").build());
+              application
+                  .notifications()
+                  .show(Notification.builder().title("lwjwae :: dismiss").build());
 
       notification.simulateDismiss();
       Assertions.assertTrue(notification.isClosed());

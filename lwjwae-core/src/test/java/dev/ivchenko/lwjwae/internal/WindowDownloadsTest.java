@@ -31,13 +31,15 @@ class WindowDownloadsTest {
   private final List<String> page = new CopyOnWriteArrayList<>();
 
   private WindowDownloads downloads(Optional<Path> asked) {
-    return new WindowDownloads(null, this.page::add, _ -> CompletableFuture.completedFuture(asked));
+    return new WindowDownloads(
+        null, Runnable::run, this.page::add, _ -> CompletableFuture.completedFuture(asked));
   }
 
   /** Downloads that go to {@code folder} without a handler, and that never ask. */
   private WindowDownloads downloads(Path folder) {
     return new WindowDownloads(
         null,
+        Runnable::run,
         this.page::add,
         _ -> CompletableFuture.completedFuture(Optional.empty()),
         () -> folder);
@@ -60,6 +62,7 @@ class WindowDownloadsTest {
     WindowDownloads downloads =
         new WindowDownloads(
             null,
+            Runnable::run,
             this.page::add,
             name -> {
               proposed.add(name);
@@ -212,11 +215,11 @@ class WindowDownloadsTest {
     AtomicInteger canceled = new AtomicInteger();
     long id = downloads.started(URL, directory.resolve("x"), -1, canceled::incrementAndGet);
 
-    Assertions.assertTrue(downloads.cancel(id, Runnable::run));
+    Assertions.assertTrue(downloads.cancel(id));
     Assertions.assertEquals(1, canceled.get());
     downloads.ended(id, DownloadState.CANCELED, "");
-    Assertions.assertFalse(downloads.cancel(id, Runnable::run));
-    Assertions.assertFalse(downloads.cancel(id + 1, Runnable::run));
+    Assertions.assertFalse(downloads.cancel(id));
+    Assertions.assertFalse(downloads.cancel(id + 1));
     Assertions.assertEquals(1, canceled.get());
   }
 }

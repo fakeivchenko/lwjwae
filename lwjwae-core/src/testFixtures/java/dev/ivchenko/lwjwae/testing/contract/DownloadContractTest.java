@@ -100,13 +100,15 @@ public abstract class DownloadContractTest extends DisplayContractTest {
     try (Application application = Application.create(PageGrants.every())) {
       Window window = this.openWithPage(application);
       BlockingQueue<DownloadRequest> asked = new LinkedBlockingQueue<>();
-      window.downloadHandler(
-          request -> {
-            asked.add(request);
-            return DownloadDecision.saveTo(target);
-          });
+      window
+          .downloads()
+          .handler(
+              request -> {
+                asked.add(request);
+                return DownloadDecision.saveTo(target);
+              });
       BlockingQueue<DownloadEvent> events = new LinkedBlockingQueue<>();
-      window.onDownload(events::add);
+      window.downloads().listen(events::add);
 
       String url = this.url("/report.bin");
       window.navigate(url);
@@ -140,9 +142,9 @@ public abstract class DownloadContractTest extends DisplayContractTest {
     Path target = Files.writeString(directory.resolve("report.bin"), "stale");
     try (Application application = Application.create(PageGrants.every())) {
       Window window = this.openWithPage(application);
-      window.downloadHandler(_ -> DownloadDecision.saveTo(target));
+      window.downloads().handler(_ -> DownloadDecision.saveTo(target));
       BlockingQueue<DownloadEvent> events = new LinkedBlockingQueue<>();
-      window.onDownload(events::add);
+      window.downloads().listen(events::add);
 
       window.navigate(this.url("/report.bin"));
 
@@ -161,13 +163,15 @@ public abstract class DownloadContractTest extends DisplayContractTest {
     try (Application application = Application.create(PageGrants.every())) {
       Window window = this.openWithPage(application);
       BlockingQueue<DownloadRequest> asked = new LinkedBlockingQueue<>();
-      window.downloadHandler(
-          request -> {
-            asked.add(request);
-            return DownloadDecision.deny();
-          });
+      window
+          .downloads()
+          .handler(
+              request -> {
+                asked.add(request);
+                return DownloadDecision.deny();
+              });
       List<DownloadEvent> events = new CopyOnWriteArrayList<>();
-      window.onDownload(events::add);
+      window.downloads().listen(events::add);
 
       window.navigate(this.url("/report.bin"));
 
@@ -185,9 +189,9 @@ public abstract class DownloadContractTest extends DisplayContractTest {
   void canceledDownloadEndsCanceled(@TempDir Path directory) throws Exception {
     try (Application application = Application.create(PageGrants.every())) {
       Window window = this.openWithPage(application);
-      window.downloadHandler(request -> DownloadDecision.saveTo(directory.resolve("slow.bin")));
+      window.downloads().handler(request -> DownloadDecision.saveTo(directory.resolve("slow.bin")));
       BlockingQueue<DownloadEvent> events = new LinkedBlockingQueue<>();
-      window.onDownload(events::add);
+      window.downloads().listen(events::add);
 
       window.navigate(this.url("/slow.bin"));
 
@@ -209,7 +213,7 @@ public abstract class DownloadContractTest extends DisplayContractTest {
           "the page cancels a download that is still going");
       List<DownloadEvent> heard = DownloadContractTest.untilEnd(events);
       Assertions.assertEquals(DownloadState.CANCELED, heard.getLast().state(), heard.toString());
-      Assertions.assertFalse(window.cancelDownload(started.id()), "an ended download is gone");
+      Assertions.assertFalse(window.downloads().cancel(started.id()), "an ended download is gone");
     }
   }
 

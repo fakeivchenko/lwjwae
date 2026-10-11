@@ -236,7 +236,7 @@ and serializes every result as JSON. So `eval(script)` doesn't send the script a
 
 ## Developer tools
 
-`devToolsEnabled(true)` sets `AreDevToolsEnabled` and `AreDefaultContextMenusEnabled` on the
+`WebView.devToolsEnabled(true)` sets `AreDevToolsEnabled` and `AreDefaultContextMenusEnabled` on the
 `ICoreWebView2Settings`. A shipped application wants neither: the menu offers "Reload", "View
 source", and "Inspect". With the tools on, the menu stays, because "Inspect" lives there.
 `isDevToolsEnabled()` reads `AreDevToolsEnabled` back.
@@ -263,7 +263,7 @@ keeps `Application.run()` going, so an application can live in the tray with no 
 
 ## Notifications
 
-`Application.showNotification(Notification)` shows a toast, through a
+`Notifications.show(Notification)` shows a toast, through a
 [`WindowsNotifier`](src/main/java/dev/ivchenko/lwjwae/windows/WindowsNotifier.java) created on the
 first notification. Toasts are a Windows Runtime API, and the Windows Runtime is COM: a runtime
 object is called by vtable slot as WebView2 is, from [`binding.Toasts`](src/main/java/dev/ivchenko/lwjwae/windows/binding/Toasts.java),

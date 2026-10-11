@@ -8,17 +8,15 @@ import dev.ivchenko.lwjwae.event.EventSubscription;
 import dev.ivchenko.lwjwae.event.OpenEvent;
 import dev.ivchenko.lwjwae.event.SecondInstanceEvent;
 import dev.ivchenko.lwjwae.exception.BackendNotAvailableException;
-import dev.ivchenko.lwjwae.exception.ShortcutUnavailableException;
 import dev.ivchenko.lwjwae.instance.InstanceLock;
 import dev.ivchenko.lwjwae.menu.MenuItem;
-import dev.ivchenko.lwjwae.notification.Notification;
-import dev.ivchenko.lwjwae.notification.NotificationHandle;
+import dev.ivchenko.lwjwae.notification.Notifications;
 import dev.ivchenko.lwjwae.rpc.RpcHandler;
 import dev.ivchenko.lwjwae.secret.Secrets;
-import dev.ivchenko.lwjwae.shortcut.Shortcut;
+import dev.ivchenko.lwjwae.shortcut.GlobalShortcuts;
 import dev.ivchenko.lwjwae.store.Store;
-import dev.ivchenko.lwjwae.taskbar.TaskbarProgress;
-import dev.ivchenko.lwjwae.theme.SystemTheme;
+import dev.ivchenko.lwjwae.taskbar.Taskbar;
+import dev.ivchenko.lwjwae.theme.Theme;
 import dev.ivchenko.lwjwae.tray.Tray;
 import dev.ivchenko.lwjwae.tray.TrayIcon;
 import dev.ivchenko.lwjwae.tray.TrayMenuItem;
@@ -487,8 +485,8 @@ public interface Application extends AutoCloseable {
   /**
    * Sets the menu bar of the application: a {@link dev.ivchenko.lwjwae.menu.SubmenuItem} for each
    * menu of the bar, in order. Every window shows it, the ones already open and the ones opened
-   * later, unless it has a menu of its own, see {@link Window#menu(List)}. An empty list takes the
-   * bar away.
+   * later, unless it has a menu of its own, see {@link dev.ivchenko.lwjwae.menu.Menus#bar(List)}.
+   * An empty list takes the bar away.
    *
    * <pre>{@code
    * application.menu(
@@ -584,111 +582,22 @@ public interface Application extends AutoCloseable {
   Updater updater();
 
   /**
-   * Shows {@code progress} on the icon of the application in the taskbar or the Dock, until the
-   * next call; {@link TaskbarProgress#none()} takes it away. The progress belongs to the
-   * application, and every window of it shows it where the platform shows one per window.
-   *
-   * <p>Platforms:
-   *
-   * <ul>
-   *   <li>Windows: The button of every window in the taskbar, through {@code ITaskbarList3}, in
-   *       green, yellow for {@link dev.ivchenko.lwjwae.taskbar.ProgressState#PAUSED}, and red for
-   *       {@link dev.ivchenko.lwjwae.taskbar.ProgressState#ERROR}; a window opened later shows it
-   *       too.
-   *   <li>macOS: A bar over the icon in the Dock, the same in every state; an indeterminate one
-   *       stands still, since the Dock draws the icon only when it changes.
-   *   <li>Linux, GTK 3: The {@code com.canonical.Unity.LauncherEntry} signal over D-Bus, for the
-   *       desktop entry named after the program, {@code NAME.desktop}, as the Gradle plugin of
-   *       lwjwae installs it. The task manager of KDE Plasma and the dock of Ubuntu show it; an
-   *       indeterminate one shows no bar, and an error asks for attention.
-   *   <li>Linux, GTK 4: As on GTK 3.
-   * </ul>
-   *
-   * @throws IllegalStateException If the application is closed.
+   * The progress and the count on the icon of the application in the taskbar or the Dock. A page
+   * reaches them as {@code lwjwae.taskbar}.
    */
-  void progress(TaskbarProgress progress);
+  Taskbar taskbar();
 
-  /** Shows the progress {@code value}, from 0 to 1, on the icon: {@link TaskbarProgress#of}. */
-  default void progress(double value) {
-    this.progress(TaskbarProgress.of(value));
-  }
+  /** The desktop notifications of the application. */
+  Notifications notifications();
 
-  /** The progress on the icon of the application. */
-  TaskbarProgress progress();
+  /** The shortcuts of the application that work whichever application has the keyboard. */
+  GlobalShortcuts shortcuts();
 
   /**
-   * Shows {@code count} on the icon of the application in the taskbar or the Dock, such as the
-   * number of unread messages, until the next call; 0 takes it away.
-   *
-   * <p>Platforms:
-   *
-   * <ul>
-   *   <li>Windows: A red circle with the number over the button of every window in the taskbar,
-   *       through {@code SetOverlayIcon}; {@code 9+} from 10 on. The taskbar shows it only with its
-   *       small buttons off, which is the default.
-   *   <li>macOS: The badge of the icon in the Dock.
-   *   <li>Linux, GTK 3: The count of {@code com.canonical.Unity.LauncherEntry}, as for {@link
-   *       #progress(TaskbarProgress)}.
-   *   <li>Linux, GTK 4: As on GTK 3.
-   * </ul>
-   *
-   * @throws IllegalArgumentException If {@code count} is negative.
-   * @throws IllegalStateException If the application is closed.
+   * The colors that the user chose for the desktop, light or dark, and their changes. A page
+   * reaches them as {@code lwjwae.theme}.
    */
-  void badgeCount(int count);
-
-  /** The count on the icon of the application, 0 for none. */
-  int badgeCount();
-
-  /**
-   * Runs {@code handler} whenever the user presses {@code shortcut}, whichever application has the
-   * keyboard, until the returned handle gives the shortcut back or the application closes.
-   *
-   * <p>The shortcut belongs to the application while it is bound: the key press goes to the
-   * handler, not to the application in front. The handler runs off the UI thread, like a handler of
-   * the tray, so it may block or call back into a window, often {@link Window#focus()}.
-   *
-   * <pre>{@code
-   * application.globalShortcut("CmdOrCtrl+Shift+Space", window::focus);
-   * }</pre>
-   *
-   * <p>Platforms:
-   *
-   * <ul>
-   *   <li>Windows: {@code RegisterHotKey}. A shortcut that another application holds throws, and so
-   *       does one that Windows keeps, such as {@code Win+L}. Holding the keys down runs the
-   *       handler once.
-   *   <li>macOS: {@code RegisterEventHotKey} of Carbon, which needs no permission of the user. A
-   *       shortcut of the system, such as {@code Command+Space} for Spotlight, may still go to the
-   *       system first.
-   *   <li>Linux, GTK 3: X11: a grab of the key on the root window, which throws when another client
-   *       holds it. Wayland: the {@code GlobalShortcuts} portal, which KDE Plasma and GNOME 48 and
-   *       later have. The desktop asks the user to confirm the shortcuts the first time and may let
-   *       the user pick other keys; the call returns before that, and a shortcut that the user
-   *       turns down never runs. Without the portal, the call throws {@link
-   *       UnsupportedOperationException}. {@link Window#focus()} from the handler brings the window
-   *       to the front where the portal hands on the activation token of the press, as GNOME does;
-   *       KDE Plasma hands none on, and the window only asks for attention in the task bar.
-   *   <li>Linux, GTK 4: As on GTK 3.
-   * </ul>
-   *
-   * @return The handle that gives the shortcut back. Giving it back twice is harmless.
-   * @throws ShortcutUnavailableException If another application, or this one, holds the shortcut.
-   * @throws UnsupportedOperationException If the desktop has no global shortcuts, or the backend
-   *     has none yet.
-   * @throws IllegalStateException If the application is closed.
-   */
-  EventSubscription globalShortcut(Shortcut shortcut, Runnable handler);
-
-  /**
-   * Runs {@code handler} whenever the user presses {@code shortcut}, written as {@link
-   * Shortcut#parse} reads it, such as {@code Ctrl+Shift+K}.
-   *
-   * @throws IllegalArgumentException If the text isn't a shortcut.
-   */
-  default EventSubscription globalShortcut(String shortcut, Runnable handler) {
-    return this.globalShortcut(Shortcut.parse(shortcut), handler);
-  }
+  Theme theme();
 
   /**
    * The clipboard of the desktop.
@@ -735,70 +644,6 @@ public interface Application extends AutoCloseable {
    * @throws UnsupportedOperationException If this backend has no secrets yet.
    */
   Secrets secrets();
-
-  /**
-   * The colors that the user chose for the desktop, as of the last change. A page sees the same as
-   * {@code lwjwae.theme.current()}, and as {@code prefers-color-scheme} where its engine follows
-   * the desktop.
-   *
-   * <p>Platforms:
-   *
-   * <ul>
-   *   <li>Windows: {@code AppsUseLightTheme} of the user in the registry, the "app mode" of the
-   *       settings.
-   *   <li>macOS: The appearance of the system, light or dark.
-   *   <li>Linux, GTK 3: The {@code color-scheme} of the desktop portal, and without a portal the
-   *       dark preference or the name of the GTK theme.
-   *   <li>Linux, GTK 4: As on GTK 3.
-   * </ul>
-   *
-   * @return {@link SystemTheme#LIGHT} where the desktop makes no choice.
-   * @throws IllegalStateException If the application is closed.
-   */
-  SystemTheme theme();
-
-  /**
-   * Calls {@code listener} when the user switches the desktop between light and dark, and never
-   * with the theme that it already has. Pages hear the same through {@code lwjwae.theme.listen}.
-   *
-   * @param listener Receives the new theme on a virtual thread, in the order of the changes.
-   * @return The subscription, to stop listening.
-   */
-  EventSubscription onThemeChange(Consumer<SystemTheme> listener);
-
-  /**
-   * Shows a desktop notification and returns the handle that takes it back.
-   *
-   * <p>The notification belongs to the application. It stays when every window is closed, but it
-   * doesn't keep {@link #run()} running, and it goes away with the application, because its buttons
-   * and its {@code onActivate} handler go with it.
-   *
-   * <p>Platforms:
-   *
-   * <ul>
-   *   <li>Windows: A toast, filed under an ID made from {@link ApplicationParameters#name()} that
-   *       the library registers for the user. A toast that times out moves to Notification Center,
-   *       where it can still be clicked, and under Do Not Disturb every toast goes there at once.
-   *   <li>macOS: Only for an application packaged as an {@code .app} bundle with an identifier:
-   *       under the {@code java} launcher or as a bare executable, the call throws. The first
-   *       notification asks the user for permission; after a no, every call throws until the user
-   *       allows them in System Settings.
-   *   <li>Linux, GTK 3: Through {@code org.freedesktop.Notifications} over D-Bus; without a session
-   *       bus or a notification server, the call throws. How much of the image and the buttons
-   *       shows is up to the server.
-   *   <li>Linux, GTK 4: As on GTK 3.
-   * </ul>
-   *
-   * @throws UnsupportedOperationException If this backend has no notifications yet, or the desktop
-   *     has nothing that shows them.
-   * @throws IllegalStateException If the application is closed.
-   */
-  NotificationHandle showNotification(Notification notification);
-
-  /** Shows a notification of {@code title} and {@code body}, and nothing else. */
-  default NotificationHandle showNotification(String title, String body) {
-    return this.showNotification(Notification.of(title, body));
-  }
 
   /**
    * Listens to the starts of other processes of the application, when it was created by {@link

@@ -288,7 +288,7 @@ public class Gtk4Window extends WebKitGtkWindow {
    * that was never shown, and has no allocation yet, answers with it.
    */
   private int[] contentSize() {
-    int[] allocated = Gtk.widgetSize(this.webView());
+    int[] allocated = Gtk.widgetSize(this.view());
     return allocated[0] > 0 ? allocated : Gtk.windowGetDefaultSize(this.window());
   }
 
@@ -381,7 +381,7 @@ public class Gtk4Window extends WebKitGtkWindow {
   protected void presentContextMenu(
       MenuCommands commands, WindowPosition place, DialogCompletion<Integer> picked) {
     MemorySegment current = this.windowIfAny();
-    MemorySegment view = this.webViewIfAny();
+    MemorySegment view = this.viewIfAny();
     if (current == null || view == null) {
       picked.complete(0);
       return;
@@ -468,7 +468,7 @@ public class Gtk4Window extends WebKitGtkWindow {
         .run(
             () ->
                 Gtk.widgetSetSizeRequest(
-                    this.webView(), width > 0 ? width : -1, height > 0 ? height : -1));
+                    this.view(), width > 0 ? width : -1, height > 0 ? height : -1));
   }
 
   /** Always {@link WindowSize#NONE}: GTK 4 has no maximum size. */

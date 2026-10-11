@@ -4,8 +4,7 @@ import java.net.URI;
 import java.util.Objects;
 
 /**
- * A download that a page started, before it writes anything, see {@link
- * dev.ivchenko.lwjwae.Window#downloadHandler}.
+ * A download that a page started, before it writes anything, see {@link Downloads#handler}.
  *
  * @param url Where the file comes from.
  * @param suggestedFileName The name that the server or the page proposes, from the {@code

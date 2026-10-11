@@ -5,8 +5,7 @@ import java.util.List;
 import lombok.Builder;
 
 /**
- * What a dialog that opens files or folders asks for, see {@link
- * dev.ivchenko.lwjwae.Window#showOpenDialog}.
+ * What a dialog that opens files or folders asks for, see {@link Dialogs#open}.
  *
  * <p>Platforms:
  *

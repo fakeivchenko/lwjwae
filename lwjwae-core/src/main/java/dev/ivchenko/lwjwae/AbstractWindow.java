@@ -5,17 +5,16 @@ import dev.ivchenko.lwjwae.bridge.ExchangeRpcCall;
 import dev.ivchenko.lwjwae.bridge.MessageRpcCalls;
 import dev.ivchenko.lwjwae.bridge.MessageRpcExchange;
 import dev.ivchenko.lwjwae.bridge.PageEvents;
-import dev.ivchenko.lwjwae.bridge.PageMenu;
 import dev.ivchenko.lwjwae.bridge.codec.BridgeCodec;
 import dev.ivchenko.lwjwae.clipboard.Clipboard;
 import dev.ivchenko.lwjwae.dialog.DialogCompletion;
+import dev.ivchenko.lwjwae.dialog.Dialogs;
 import dev.ivchenko.lwjwae.dialog.MessageDialogParameters;
 import dev.ivchenko.lwjwae.dialog.OpenDialogParameters;
 import dev.ivchenko.lwjwae.dialog.SaveDialogParameters;
-import dev.ivchenko.lwjwae.download.DownloadDecision;
 import dev.ivchenko.lwjwae.download.DownloadRequest;
 import dev.ivchenko.lwjwae.download.DownloadState;
-import dev.ivchenko.lwjwae.event.DownloadEvent;
+import dev.ivchenko.lwjwae.download.Downloads;
 import dev.ivchenko.lwjwae.event.Event;
 import dev.ivchenko.lwjwae.event.EventSubscription;
 import dev.ivchenko.lwjwae.event.FileDropEvent;
@@ -29,16 +28,11 @@ import dev.ivchenko.lwjwae.internal.Listeners;
 import dev.ivchenko.lwjwae.internal.StorePageCommands;
 import dev.ivchenko.lwjwae.internal.WindowDownloads;
 import dev.ivchenko.lwjwae.internal.WindowEvents;
-import dev.ivchenko.lwjwae.menu.ActionMenuItem;
-import dev.ivchenko.lwjwae.menu.CheckMenuItem;
 import dev.ivchenko.lwjwae.menu.MenuCommands;
 import dev.ivchenko.lwjwae.menu.MenuItem;
 import dev.ivchenko.lwjwae.menu.MenuRole;
-import dev.ivchenko.lwjwae.menu.RoleMenuItem;
-import dev.ivchenko.lwjwae.menu.SubmenuItem;
-import dev.ivchenko.lwjwae.permission.PermissionDecision;
+import dev.ivchenko.lwjwae.menu.Menus;
 import dev.ivchenko.lwjwae.permission.PermissionKind;
-import dev.ivchenko.lwjwae.permission.PermissionRequest;
 import dev.ivchenko.lwjwae.rpc.RpcCall;
 import dev.ivchenko.lwjwae.rpc.RpcException;
 import dev.ivchenko.lwjwae.rpc.RpcExchange;
@@ -50,7 +44,6 @@ import dev.ivchenko.lwjwae.ui.UiDispatcher;
 import dev.ivchenko.lwjwae.update.DownloadedUpdate;
 import dev.ivchenko.lwjwae.update.Update;
 import dev.ivchenko.lwjwae.update.Updater;
-import dev.ivchenko.lwjwae.util.HandlerUtil;
 import dev.ivchenko.lwjwae.util.JsonUtil;
 import dev.ivchenko.lwjwae.util.ResourceUtil;
 import dev.ivchenko.lwjwae.util.ScriptUtil;
@@ -80,7 +73,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
-import java.util.stream.Collectors;
 
 /**
  * The toolkit-independent half of a window: listener bookkeeping, the closed state, and the whole
@@ -121,18 +113,22 @@ public abstract class AbstractWindow implements Window {
   private final EventListeners listeners = new EventListeners("lwjwae-events");
   private final PageEvents pageEvents = new PageEvents();
   private final WindowEvents windowEvents = new WindowEvents(this, this::sendToPage);
+  private final WindowDialogs dialogs = new WindowDialogs(this);
+  private final WindowMenus menus = new WindowMenus(this);
+  private final WindowWebView webView = new WindowWebView(this);
   private final WindowDownloads downloads =
       new WindowDownloads(
           this,
+          // Read at each cancel: the application is set after the fields.
+          task -> this.dispatcher().post(task),
           json -> {
             if (this.allows(PageCapability.DOWNLOADS)) {
               this.pageEvents.send(BridgeProtocol.DOWNLOADS_EVENT, json, false);
             }
           },
-          fileName ->
-              this.showSaveDialog(SaveDialogParameters.builder().fileName(fileName).build()));
+          fileName -> this.dialogs.save(SaveDialogParameters.builder().fileName(fileName).build()));
   private final String token = AbstractWindow.newToken();
-  private final Set<DialogCompletion<?>> dialogs = ConcurrentHashMap.newKeySet();
+  private final Set<DialogCompletion<?>> openDialogs = ConcurrentHashMap.newKeySet();
   private final boolean closable;
   private final boolean maximizable;
   private final Window parent;
@@ -140,25 +136,17 @@ public abstract class AbstractWindow implements Window {
 
   private volatile MessageRpcCalls messageCalls;
 
-  /** The menu bar of this window alone, or {@code null} for the one of the application. */
-  private volatile List<MenuItem> ownMenu;
-
-  private volatile MenuCommands menuBar = MenuCommands.empty();
-  private volatile MenuCommands contextMenu;
-
   private volatile boolean closed;
   private volatile CloseAction closeAction = CloseAction.CLOSE;
-  private volatile Consumer<String> externalLinkHandler;
-  private volatile Function<PermissionRequest, PermissionDecision> permissionHandler;
   private volatile EventSubscription themeSubscription;
-  private final Listeners<FileDropEvent> fileDropListeners = new Listeners<>("lwjwae-file-drop");
 
   /**
    * Records the owner and the ID. The subclass creates the native window afterwards.
    *
-   * <p>Suppressed warnings: {@code this-escape}: the window events and the downloads keep the
-   * window, as the source of what they report, and call nothing of it before it reports something,
-   * which a window does only once the subclass created it.
+   * <p>Suppressed warnings: {@code this-escape}: the window events, the downloads, and the other
+   * groups of the window keep the window, as the source of what they report or the target of what
+   * they do, and call nothing of it before they are used, which happens only once the subclass
+   * created it.
    *
    * @param application The application that opens the window.
    * @param id The ID that {@link AbstractApplication#createWindow} was given.
@@ -192,6 +180,26 @@ public abstract class AbstractWindow implements Window {
   @Override
   public final Optional<Window> parent() {
     return Optional.ofNullable(this.parent);
+  }
+
+  @Override
+  public final Dialogs dialogs() {
+    return this.dialogs;
+  }
+
+  @Override
+  public final Menus menus() {
+    return this.menus;
+  }
+
+  @Override
+  public final Downloads downloads() {
+    return this.downloads;
+  }
+
+  @Override
+  public final WebView webView() {
+    return this.webView;
   }
 
   /** Records {@code child}, which closes with this window. The application calls this. */
@@ -442,8 +450,8 @@ public abstract class AbstractWindow implements Window {
       case BridgeProtocol.CONTROL_CALL -> this::controlFromPage;
       case BridgeProtocol.CLIPBOARD_CALL ->
           this.needing(PageCapability.CLIPBOARD, this::clipboardFromPage);
-      case BridgeProtocol.DIALOG_CALL -> this.needing(PageCapability.DIALOGS, this::dialogFromPage);
-      case BridgeProtocol.MENU_CALL -> this::menuFromPage;
+      case BridgeProtocol.DIALOG_CALL -> this.needing(PageCapability.DIALOGS, this.dialogs::serve);
+      case BridgeProtocol.MENU_CALL -> this.menus::serve;
       case BridgeProtocol.STORE_CALL -> this.needing(PageCapability.STORE, this::storeFromPage);
       case BridgeProtocol.UPDATE_CALL -> this.needing(PageCapability.UPDATES, this::updateFromPage);
       default -> null;
@@ -461,7 +469,7 @@ public abstract class AbstractWindow implements Window {
    * @throws RpcException If the application didn't grant it, with status 403 and code {@code
    *     capability}.
    */
-  private void require(PageCapability capability) {
+  final void require(PageCapability capability) {
     if (!this.allows(capability)) {
       LOG.log(
           System.Logger.Level.WARNING,
@@ -518,24 +526,6 @@ public abstract class AbstractWindow implements Window {
         status, headers, ExchangeRpcCall.errorJson(code, message).getBytes(StandardCharsets.UTF_8));
   }
 
-  /**
-   * The origin of {@code url}, or an empty string for {@code null} and for a URL without one. The
-   * engines tell the page by its URL, or by an origin with a trailing slash.
-   */
-  private static String originOrEmpty(String url) {
-    if (url == null) {
-      return "";
-    }
-    try {
-      URI uri = URI.create(url);
-      return uri.getScheme() == null || uri.getRawAuthority() == null
-          ? ""
-          : uri.getScheme() + "://" + uri.getRawAuthority();
-    } catch (IllegalArgumentException _) {
-      return "";
-    }
-  }
-
   /** {@code scheme://authority} of {@code url}, the way a browser writes an origin. */
   private static String originOf(String url) {
     URI uri = URI.create(url);
@@ -549,8 +539,10 @@ public abstract class AbstractWindow implements Window {
   protected final void installBridge() {
     this.messageCalls = new MessageRpcCalls(this, this.rpcMessageChannel(), this.token);
     this.themeSubscription =
-        this.application.onThemeChange(
-            theme -> this.pageEvents.send(BridgeProtocol.THEME_EVENT, theme.pageName(), false));
+        this.application
+            .theme()
+            .onChange(
+                theme -> this.pageEvents.send(BridgeProtocol.THEME_EVENT, theme.pageName(), false));
     // Once the window is complete: what the first window event compares with.
     this.dispatcher().post(this.windowEvents::start);
     BridgeCodec codec = this.application.parameters().codec();
@@ -642,11 +634,12 @@ public abstract class AbstractWindow implements Window {
         this.beginResize(edge);
       }
       case "title-bar-double-click" -> this.titleBarDoubleClicked();
-      case "open-external" -> this.leave(argument);
+      case "open-external" -> this.webView.leave(argument);
       case "state" -> call.reply(this.dispatcher().call(this::stateJson));
-      case "theme" -> call.reply(this.application.theme().pageName());
-      case "progress" -> this.application.progress(AbstractWindow.parseProgress(argument));
-      case "badge" -> this.application.badgeCount(AbstractWindow.parseCount(argument));
+      case "theme" -> call.reply(this.application.theme().current().pageName());
+      case "progress" ->
+          this.application.taskbar().progress(AbstractWindow.parseProgress(argument));
+      case "badge" -> this.application.taskbar().badgeCount(AbstractWindow.parseCount(argument));
       case "cancel-download" -> call.reply(this.cancelDownloadOf(argument) ? "1" : "0");
       default -> throw RpcException.badRequest("malformed-control", "No such action: " + parts[0]);
     }
@@ -669,7 +662,7 @@ public abstract class AbstractWindow implements Window {
   /** Cancels the download of {@code lwjwae.downloads.cancel}, by the ID that its events carry. */
   private boolean cancelDownloadOf(String argument) {
     try {
-      return this.cancelDownload(Long.parseLong(argument));
+      return this.downloads.cancel(Long.parseLong(argument));
     } catch (NumberFormatException _) {
       throw RpcException.badRequest("malformed-download", "Malformed download: " + argument);
     }
@@ -780,11 +773,6 @@ public abstract class AbstractWindow implements Window {
     }
   }
 
-  @Override
-  public final EventSubscription onFileDrop(Consumer<FileDropEvent> listener) {
-    return this.fileDropListeners.listen(Objects.requireNonNull(listener, "listener"));
-  }
-
   /**
    * The user dropped files on the page. A backend calls this from the callback that hands it their
    * paths, on any thread: Java listeners and the page both hear of it. A drop with no file in it is
@@ -806,22 +794,7 @@ public abstract class AbstractWindow implements Window {
     if (this.allows(PageCapability.FILES)) {
       this.pageEvents.send(BridgeProtocol.FILES_EVENT, JsonUtil.write(payload), false);
     }
-    this.fileDropListeners.deliver(event);
-  }
-
-  @Override
-  public final void downloadHandler(Function<DownloadRequest, DownloadDecision> handler) {
-    this.downloads.handler(handler);
-  }
-
-  @Override
-  public final EventSubscription onDownload(Consumer<DownloadEvent> listener) {
-    return this.downloads.listen(Objects.requireNonNull(listener, "listener"));
-  }
-
-  @Override
-  public final boolean cancelDownload(long id) {
-    return this.downloads.cancel(id, this.dispatcher()::post);
+    this.webView.dropped(event);
   }
 
   /**
@@ -865,27 +838,20 @@ public abstract class AbstractWindow implements Window {
     this.downloads.ended(id, state, failure);
   }
 
-  @Override
-  public final double zoom() {
-    this.checkOpen();
-    return this.dispatcher().call(this::currentZoom);
-  }
-
-  @Override
-  public final void zoom(double factor) {
-    this.checkOpen();
-    if (!(factor >= MINIMUM_ZOOM && factor <= MAXIMUM_ZOOM)) {
-      throw new IllegalArgumentException(
-          "The zoom is from " + MINIMUM_ZOOM + " to " + MAXIMUM_ZOOM + ": " + factor);
-    }
-    this.dispatcher().run(() -> this.presentZoom(factor));
-  }
-
   /** Zooms the page of the web view to {@code factor}, already checked. Called on the UI thread. */
   protected abstract void presentZoom(double factor);
 
   /** The zoom that the web view shows now. Called on the UI thread. */
   protected abstract double currentZoom();
+
+  /**
+   * Makes the developer tools of the engine reachable from the context menu, or not, as {@link
+   * WebView#devToolsEnabled} describes. Called on the UI thread.
+   */
+  protected abstract void presentDevTools(boolean enabled);
+
+  /** Whether the developer tools of the engine are reachable now. Called on the UI thread. */
+  protected abstract boolean currentDevTools();
 
   @Override
   public final void icon(byte[] png) {
@@ -909,18 +875,13 @@ public abstract class AbstractWindow implements Window {
    */
   protected abstract void presentIcon(byte[] png);
 
-  @Override
-  public final void externalLinkHandler(Consumer<String> handler) {
-    this.externalLinkHandler = handler;
-  }
-
   /**
    * The page asked for a new window, with {@code target="_blank"} or {@code window.open}, and the
    * engine left the decision to the host. A backend calls this from the callback of that request,
    * on the UI thread, and opens no window itself: a URL of the application's own origin opens in
    * this window, since a web view has no tabs, one of the web or {@code mailto:} goes to {@link
-   * #externalLinkHandler}, and anything else, {@code about:blank} of an empty {@code window.open}
-   * included, is dropped.
+   * WebView#externalLinkHandler}, and anything else, {@code about:blank} of an empty {@code
+   * window.open} included, is dropped.
    */
   protected final void newWindowRequested(String url) {
     if (url == null || url.isEmpty()) {
@@ -940,11 +901,6 @@ public abstract class AbstractWindow implements Window {
     }
   }
 
-  @Override
-  public final void permissionHandler(Function<PermissionRequest, PermissionDecision> handler) {
-    this.permissionHandler = handler;
-  }
-
   /**
    * The page asked for permissions, and the engine waits for the answer. A backend calls this from
    * the callback of that request, on the UI thread, and answers the engine with the result.
@@ -956,70 +912,26 @@ public abstract class AbstractWindow implements Window {
    *     throws, {@code false}.
    */
   protected final boolean permissionRequested(String origin, PermissionKind... kinds) {
-    Function<PermissionRequest, PermissionDecision> handler = this.permissionHandler;
-    if (handler == null || kinds.length == 0) {
-      return false;
-    }
-    try {
-      for (PermissionKind kind : kinds) {
-        PermissionRequest request =
-            new PermissionRequest(kind, AbstractWindow.originOrEmpty(origin));
-        if (handler.apply(request) != PermissionDecision.GRANT) {
-          return false;
-        }
-      }
-      return true;
-    } catch (Throwable t) {
-      ThrowableUtil.report(t);
-      return false;
-    }
-  }
-
-  /** Hands a link that leaves the application to the handler of the window, or to the system. */
-  private void leave(String url) {
-    Consumer<String> handler = this.externalLinkHandler;
-    if (handler != null) {
-      handler.accept(url);
-    } else {
-      this.application.openExternal(url);
-    }
+    return this.webView.permits(origin, kinds);
   }
 
   private void leaveReporting(String url) {
     try {
-      this.leave(url);
+      this.webView.leave(url);
     } catch (Throwable t) {
       ThrowableUtil.report(t);
     }
-  }
-
-  @Override
-  public final CompletableFuture<List<Path>> showOpenDialog(OpenDialogParameters parameters) {
-    Objects.requireNonNull(parameters, "parameters");
-    return this.showDialog(completion -> this.presentOpenDialog(parameters, completion));
-  }
-
-  @Override
-  public final CompletableFuture<Optional<Path>> showSaveDialog(SaveDialogParameters parameters) {
-    Objects.requireNonNull(parameters, "parameters");
-    return this.showDialog(completion -> this.presentSaveDialog(parameters, completion));
-  }
-
-  @Override
-  public final CompletableFuture<Boolean> showMessageDialog(MessageDialogParameters parameters) {
-    Objects.requireNonNull(parameters, "parameters");
-    return this.showDialog(completion -> this.presentMessageDialog(parameters, completion));
   }
 
   /**
    * Shows a dialog on the UI thread. The window keeps the dialogs that are up, and cancels them
    * when it closes, which closes them: a dialog must not outlive the window that it belongs to.
    */
-  private <T> CompletableFuture<T> showDialog(Consumer<DialogCompletion<T>> present) {
+  final <T> CompletableFuture<T> showDialog(Consumer<DialogCompletion<T>> present) {
     this.checkOpen();
     DialogCompletion<T> completion = new DialogCompletion<>(this.dispatcher());
-    this.dialogs.add(completion);
-    completion.future().whenComplete((_, _) -> this.dialogs.remove(completion));
+    this.openDialogs.add(completion);
+    completion.future().whenComplete((_, _) -> this.openDialogs.remove(completion));
     this.dispatcher()
         .post(
             () -> {
@@ -1053,96 +965,16 @@ public abstract class AbstractWindow implements Window {
       MessageDialogParameters parameters, DialogCompletion<Boolean> completion);
 
   /**
-   * {@code window.lwjwae.dialog}: the body is {@code open}, {@code save}, or {@code message}, and
-   * the fields of the dialog, see {@link BridgeProtocol#parseOpenDialog} and its siblings. The
-   * answer is the picked paths separated by {@link BridgeProtocol#SEPARATOR}, empty for none, or
-   * {@code 1} and {@code 0} for a message. A page that abandons the call closes the dialog.
-   */
-  private void dialogFromPage(RpcCall call) throws Exception {
-    String[] parts = call.text().split(BridgeProtocol.SEPARATOR, 2);
-    String fields = parts.length > 1 ? parts[1] : "";
-    // The future of the dialog itself, which a cancellation must reach to close it, and the answer.
-    CompletableFuture<?> dialog;
-    CompletableFuture<String> answer;
-    switch (parts[0]) {
-      case "open" -> {
-        OpenDialogParameters parameters = BridgeProtocol.parseOpenDialog(fields);
-        CompletableFuture<List<Path>> open =
-            parameters == null ? null : this.showOpenDialog(parameters);
-        dialog = open;
-        answer = open == null ? null : open.thenApply(AbstractWindow::joinPaths);
-      }
-      case "save" -> {
-        SaveDialogParameters parameters = BridgeProtocol.parseSaveDialog(fields);
-        CompletableFuture<Optional<Path>> save =
-            parameters == null ? null : this.showSaveDialog(parameters);
-        dialog = save;
-        answer = save == null ? null : save.thenApply(path -> path.map(Path::toString).orElse(""));
-      }
-      case "message" -> {
-        MessageDialogParameters parameters = BridgeProtocol.parseMessageDialog(fields);
-        CompletableFuture<Boolean> message =
-            parameters == null ? null : this.showMessageDialog(parameters);
-        dialog = message;
-        answer = message == null ? null : message.thenApply(yes -> yes ? "1" : "0");
-      }
-      default -> {
-        dialog = null;
-        answer = null;
-      }
-    }
-    if (answer == null) {
-      throw RpcException.badRequest("malformed-dialog", "Malformed dialog: " + parts[0]);
-    }
-    // A page that gives the call up interrupts this thread.
-    try {
-      if (call.isCancelled()) {
-        throw new InterruptedException();
-      }
-      call.reply(answer.get());
-    } catch (InterruptedException e) {
-      dialog.cancel(false);
-      throw e;
-    }
-  }
-
-  @Override
-  public final List<MenuItem> menu() {
-    List<MenuItem> own = this.ownMenu;
-    return own != null ? own : this.application.menu();
-  }
-
-  @Override
-  public final void menu(List<MenuItem> items) {
-    List<MenuItem> bar = AbstractWindow.requireMenuBar(items);
-    this.checkOpen();
-    this.ownMenu = bar;
-    this.refreshMenuBar();
-  }
-
-  @Override
-  public final void useApplicationMenu() {
-    this.checkOpen();
-    this.ownMenu = null;
-    this.refreshMenuBar();
-  }
-
-  /**
    * Starts with the menu bar of {@code parameters}, or the one of the application. The application
    * calls this once, as it opens the window.
    */
   final void initializeMenu(List<MenuItem> items) {
-    this.ownMenu = items == null ? null : AbstractWindow.requireMenuBar(items);
-    if (!this.menu().isEmpty()) {
-      this.refreshMenuBar();
-    }
+    this.menus.initialize(items);
   }
 
   /** The menu of the application changed: this window shows it, unless it has one of its own. */
   final void applicationMenuChanged() {
-    if (this.ownMenu == null) {
-      this.refreshMenuBar();
-    }
+    this.menus.applicationBarChanged();
   }
 
   /**
@@ -1150,85 +982,7 @@ public abstract class AbstractWindow implements Window {
    * again, as macOS does when the window comes to the front.
    */
   protected final MenuCommands menuBar() {
-    return this.menuBar;
-  }
-
-  /** Builds the bar from the menu of this moment, on the UI thread, so the last change wins. */
-  private void refreshMenuBar() {
-    this.dispatcher()
-        .run(
-            () -> {
-              if (this.closed) {
-                return;
-              }
-              MenuCommands commands = new MenuCommands(this.menu());
-              this.menuBar = commands;
-              this.presentMenuBar(commands);
-            });
-  }
-
-  /**
-   * A copy of {@code items} as a menu bar.
-   *
-   * @throws IllegalArgumentException If an entry isn't a submenu.
-   */
-  static List<MenuItem> requireMenuBar(List<MenuItem> items) {
-    Objects.requireNonNull(items, "items");
-    for (MenuItem item : items) {
-      if (!(item instanceof SubmenuItem)) {
-        throw new IllegalArgumentException("A menu bar holds submenus only, not " + item);
-      }
-    }
-    return List.copyOf(items);
-  }
-
-  @Override
-  public final void contextMenu(List<MenuItem> items) {
-    Objects.requireNonNull(items, "items");
-    this.checkOpen();
-    this.contextMenu = items.isEmpty() ? null : new MenuCommands(items);
-    // Once for documents loaded from now on, once for the document already on screen.
-    String flag =
-        "if (window.%s) window.%s.contextMenu = %b;"
-            .formatted(BridgeProtocol.CHANNEL, BridgeProtocol.CHANNEL, !items.isEmpty());
-    this.injectOnDocumentStart(flag);
-    this.eval(flag);
-  }
-
-  @Override
-  public final CompletableFuture<Void> showContextMenu(List<MenuItem> items) {
-    return AbstractWindow.following(this.popUp(new MenuCommands(items), null), _ -> null);
-  }
-
-  /**
-   * Opens {@code commands} at {@code place} in the page, or at the pointer for {@code null}, and
-   * completes with the number of the entry picked, 0 for none, once that entry has started.
-   */
-  private CompletableFuture<Integer> popUp(MenuCommands commands, WindowPosition place) {
-    CompletableFuture<Integer> shown =
-        this.showDialog(completion -> this.presentContextMenu(commands, place, completion));
-    return AbstractWindow.following(
-        shown,
-        id -> {
-          this.menuItemPicked(commands, id);
-          return id;
-        });
-  }
-
-  /**
-   * {@code source} with its result turned by {@code then}, where canceling the result cancels
-   * {@code source} too, which closes the menu, as canceling {@code source} itself does.
-   */
-  private static <T, R> CompletableFuture<R> following(
-      CompletableFuture<T> source, Function<T, R> then) {
-    CompletableFuture<R> result = source.thenApply(then);
-    result.whenComplete(
-        (_, _) -> {
-          if (result.isCancelled()) {
-            source.cancel(false);
-          }
-        });
-    return result;
+    return this.menus.shownBar();
   }
 
   /**
@@ -1237,43 +991,7 @@ public abstract class AbstractWindow implements Window {
    * for its accelerators; 0 and a number of no entry do nothing.
    */
   protected final void menuItemPicked(MenuCommands commands, int id) {
-    switch (commands.item(id)) {
-      case ActionMenuItem action -> HandlerUtil.runOffTheUiThread(action.action());
-      case CheckMenuItem check -> {
-        boolean state = commands.toggle(id);
-        if (check.onToggle() != null) {
-          HandlerUtil.runOffTheUiThread(() -> check.onToggle().accept(state));
-        }
-      }
-      case RoleMenuItem role -> this.play(role.role());
-      case null, default -> {}
-    }
-  }
-
-  /**
-   * Plays {@code role} on this window. An editing role waits for the menu to close, which gives the
-   * keyboard back to the page, on the UI thread; the rest run off it, like an action.
-   */
-  private void play(MenuRole role) {
-    if (role.isEditing()) {
-      this.dispatcher()
-          .post(
-              () -> {
-                if (!this.closed) {
-                  this.performEditing(role);
-                }
-              });
-      return;
-    }
-    HandlerUtil.runOffTheUiThread(
-        switch (role) {
-          case CLOSE_WINDOW -> this::requestClose;
-          case MINIMIZE -> this::minimize;
-          case FULLSCREEN -> () -> this.fullscreen(!this.isFullscreen());
-          case QUIT -> this.application::quit;
-          case UNDO, REDO, CUT, COPY, PASTE, SELECT_ALL ->
-              throw new IllegalStateException("An editing role: " + role);
-        });
+    this.menus.picked(commands, id);
   }
 
   /**
@@ -1295,67 +1013,6 @@ public abstract class AbstractWindow implements Window {
 
   /** Runs the editing command of {@code role} on the page, on the UI thread. */
   protected abstract void performEditing(MenuRole role);
-
-  /**
-   * {@code window.lwjwae.menu} and the context menu of the page: the body is {@code context} or
-   * {@code popup}, the place, and for a popup the entries, see {@link BridgeProtocol#parseMenu}. A
-   * popup answers with the ID that the page gave the entry picked, empty for none. A page that
-   * abandons the call closes the menu.
-   */
-  private void menuFromPage(RpcCall call) throws Exception {
-    String[] parts = call.text().split(BridgeProtocol.SEPARATOR, 4);
-    if (parts.length < 3) {
-      throw RpcException.badRequest("malformed-menu", "Malformed menu");
-    }
-    WindowPosition place;
-    try {
-      place =
-          parts[1].isEmpty() || parts[2].isEmpty()
-              ? null
-              : new WindowPosition(Integer.parseInt(parts[1]), Integer.parseInt(parts[2]));
-    } catch (NumberFormatException _) {
-      throw RpcException.badRequest(
-          "malformed-menu", "Malformed place: " + parts[1] + ", " + parts[2]);
-    }
-    MenuCommands commands;
-    Map<MenuItem, String> pageIds;
-    switch (parts[0]) {
-      case "context" -> {
-        commands = this.contextMenu;
-        pageIds = Map.of();
-      }
-      case "popup" -> {
-        this.require(PageCapability.MENUS);
-        PageMenu menu = parts.length < 4 ? null : BridgeProtocol.parseMenu(parts[3]);
-        if (menu == null) {
-          throw RpcException.badRequest("malformed-menu", "Malformed entries");
-        }
-        commands = new MenuCommands(menu.items());
-        pageIds = menu.pageIds();
-      }
-      default -> throw RpcException.badRequest("malformed-menu", "Malformed menu: " + parts[0]);
-    }
-    if (commands == null || commands.isEmpty()) {
-      call.reply("");
-      return;
-    }
-    CompletableFuture<Integer> picked = this.popUp(commands, place);
-    // A page that gives the call up interrupts this thread.
-    try {
-      if (call.isCancelled()) {
-        throw new InterruptedException();
-      }
-      MenuItem item = commands.item(picked.get());
-      call.reply(item == null ? "" : pageIds.getOrDefault(item, ""));
-    } catch (InterruptedException e) {
-      picked.cancel(false);
-      throw e;
-    }
-  }
-
-  private static String joinPaths(List<Path> paths) {
-    return paths.stream().map(Path::toString).collect(Collectors.joining(BridgeProtocol.SEPARATOR));
-  }
 
   private void toggleMaximize() {
     if (this.isMaximized()) {
@@ -1463,9 +1120,9 @@ public abstract class AbstractWindow implements Window {
     this.pageEvents.close();
     this.windowEvents.shutdown();
     this.downloads.shutdown();
-    this.fileDropListeners.shutdown();
+    this.webView.shutdown();
     this.loadListeners.shutdown();
-    this.dialogs.forEach(dialog -> dialog.future().cancel(false));
+    this.openDialogs.forEach(dialog -> dialog.future().cancel(false));
     MessageRpcCalls calls = this.messageCalls;
     if (calls != null) {
       calls.cancelAll();

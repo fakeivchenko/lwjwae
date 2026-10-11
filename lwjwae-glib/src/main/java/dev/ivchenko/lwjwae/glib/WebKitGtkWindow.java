@@ -328,31 +328,30 @@ public abstract class WebKitGtkWindow extends AbstractWindow {
   }
 
   @Override
-  public boolean isDevToolsEnabled() {
-    return this.dispatcher().call(() -> this.webKit.isDeveloperExtrasEnabled(this.webView()));
+  protected final boolean currentDevTools() {
+    return this.webKit.isDeveloperExtrasEnabled(this.view());
   }
 
   @Override
-  public void devToolsEnabled(boolean devToolsEnabled) {
-    this.dispatcher()
-        .run(() -> this.webKit.setDeveloperExtrasEnabled(this.webView(), devToolsEnabled));
+  protected final void presentDevTools(boolean enabled) {
+    this.webKit.setDeveloperExtrasEnabled(this.view(), enabled);
   }
 
   @Override
   public void navigate(String url) {
     Objects.requireNonNull(url, "url");
-    this.dispatcher().run(() -> this.webKit.loadUri(this.webView(), url));
+    this.dispatcher().run(() -> this.webKit.loadUri(this.view(), url));
   }
 
   @Override
   public void html(String html) {
     Objects.requireNonNull(html, "html");
-    this.dispatcher().run(() -> this.webKit.loadHtml(this.webView(), html, this.resourceUrl("")));
+    this.dispatcher().run(() -> this.webKit.loadHtml(this.view(), html, this.resourceUrl("")));
   }
 
   @Override
   public String url() {
-    return this.dispatcher().call(() -> this.webKit.uri(this.webView()));
+    return this.dispatcher().call(() -> this.webKit.uri(this.view()));
   }
 
   @Override
@@ -365,7 +364,7 @@ public abstract class WebKitGtkWindow extends AbstractWindow {
             () -> {
               try {
                 this.webKit.evaluateJavascript(
-                    this.webView(),
+                    this.view(),
                     script,
                     ON_EVALUATION_READY,
                     CallbackRegistry.userData(evaluationId));
@@ -406,12 +405,12 @@ public abstract class WebKitGtkWindow extends AbstractWindow {
   }
 
   /** The web view. Call on the GTK thread. */
-  protected final MemorySegment webView() {
+  protected final MemorySegment view() {
     return this.alive(this.webView);
   }
 
   /** The web view, or {@code null} once it's destroyed. */
-  protected final MemorySegment webViewIfAny() {
+  protected final MemorySegment viewIfAny() {
     return this.webView;
   }
 

@@ -5,8 +5,8 @@ import java.util.List;
 import lombok.Builder;
 
 /**
- * What a dialog that saves a file asks for, see {@link dev.ivchenko.lwjwae.Window#showSaveDialog}.
- * The dialog asks the user before it picks a file that exists.
+ * What a dialog that saves a file asks for, see {@link Dialogs#save}. The dialog asks the user
+ * before it picks a file that exists.
  *
  * <p>Platforms:
  *

@@ -77,7 +77,7 @@ class PageCapabilityTest {
     try (FakeApplication application = new FakeApplication(ApplicationParameters.createDefault())) {
       FakeWindow window = application.openFake();
       BlockingQueue<FileDropEvent> heard = new LinkedBlockingQueue<>();
-      window.onFileDrop(heard::add);
+      window.webView().onFileDrop(heard::add);
       window.call(1, BridgeProtocol.EVENTS_CALL, "");
 
       window.dropFiles(List.of(Path.of("/tmp/a.txt")), 1, 2);

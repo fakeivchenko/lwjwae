@@ -157,7 +157,7 @@ wrapper that the Windows and macOS backends use.
 
 ## Developer tools
 
-`devToolsEnabled(true)` sets `enable-developer-extras` on the `WebKitSettings` of the view. That
+`WebView.devToolsEnabled(true)` sets `enable-developer-extras` on the `WebKitSettings` of the view. That
 enables the Web Inspector and adds "Inspect Element" to the context menu, which the backend then
 stops suppressing. `isDevToolsEnabled()` reads the same setting back.
 
@@ -195,7 +195,7 @@ keeps `Application.run()` going, so an application can live in the tray with no 
 
 ## Notifications
 
-`Application.showNotification(Notification)` goes through the
+`Notifications.show(Notification)` goes through the
 [`FreedesktopNotifier`](../lwjwae-glib/src/main/java/dev/ivchenko/lwjwae/glib/FreedesktopNotifier.java)
 of [`lwjwae-glib`](../lwjwae-glib#notifications): `org.freedesktop.Notifications` over GDBus, the
 same under GTK 3 and GTK 4.

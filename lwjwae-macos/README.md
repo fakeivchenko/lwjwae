@@ -173,7 +173,7 @@ one does what `AppleActionOnDoubleClick` says.
 
 ## Developer tools
 
-`devToolsEnabled(true)` sets `developerExtrasEnabled` on the `WKPreferences` of the view through
+`WebView.devToolsEnabled(true)` sets `developerExtrasEnabled` on the `WKPreferences` of the view through
 key-value coding. The key is private but has been stable since Safari 9, and it's what every
 embedding application uses. That enables the Web Inspector and adds "Inspect Element" to the
 context menu, so the backend also sets `window.__lwjwaeContextMenu` in the current document and in
@@ -210,7 +210,7 @@ keeps `Application.run()` going, so an application can live in the menu bar with
 
 ## Notifications
 
-`Application.showNotification(Notification)` goes through a
+`Notifications.show(Notification)` goes through a
 [`MacNotifier`](src/main/java/dev/ivchenko/lwjwae/macos/MacNotifier.java), which uses
 `UNUserNotificationCenter`. The center exists only for an application bundle: asked for in a process
 that runs from the `java` launcher or as a bare executable, it raises an Objective-C exception that
@@ -221,7 +221,7 @@ packaged as an `.app`.
 The first notification asks the user whether the application may show notifications, through
 `requestAuthorizationWithOptions:completionHandler:`, and waits for the answer; after a no, every
 notification is refused with `UnsupportedOperationException` until the user turns them on in System
-Settings. `showNotification` also waits for the completion block of `addNotificationRequest:`, so a
+Settings. `show` also waits for the completion block of `addNotificationRequest:`, so a
 notification that macOS refuses is an exception, not silence.
 
 Buttons are the actions of a category, one category per notification, with the identifiers

@@ -39,17 +39,19 @@ public abstract class NotificationContractTest extends DisplayContractTest {
     this.assumeNotificationsAllowed();
     try (Application application = Application.create()) {
       NotificationHandle notification =
-          application.showNotification(
-              Notification.builder()
-                  .title("lwjwae :: notification")
-                  .body("With an image, two buttons, and a handler for the click")
-                  .icon(GREEN)
-                  .actions(
-                      List.of(
-                          new NotificationAction("First", () -> {}),
-                          new NotificationAction("Second", null)))
-                  .onActivate(() -> {})
-                  .build());
+          application
+              .notifications()
+              .show(
+                  Notification.builder()
+                      .title("lwjwae :: notification")
+                      .body("With an image, two buttons, and a handler for the click")
+                      .icon(GREEN)
+                      .actions(
+                          List.of(
+                              new NotificationAction("First", () -> {}),
+                              new NotificationAction("Second", null)))
+                      .onActivate(() -> {})
+                      .build());
       Assertions.assertFalse(notification.isClosed());
       Thread.sleep(300);
 
@@ -64,7 +66,7 @@ public abstract class NotificationContractTest extends DisplayContractTest {
     this.assumeNotificationsAllowed();
     try (Application application = Application.create()) {
       NotificationHandle notification =
-          application.showNotification(Notification.builder().title("lwjwae :: title").build());
+          application.notifications().show(Notification.builder().title("lwjwae :: title").build());
       notification.close();
       Assertions.assertTrue(notification.isClosed());
     }
@@ -76,7 +78,7 @@ public abstract class NotificationContractTest extends DisplayContractTest {
     NotificationHandle notification;
     try (Application application = Application.create()) {
       notification =
-          application.showNotification(Notification.builder().title("lwjwae :: quit").build());
+          application.notifications().show(Notification.builder().title("lwjwae :: quit").build());
       Assertions.assertFalse(notification.isClosed());
     }
     Assertions.assertTrue(notification.isClosed(), "The notification must go with its application");

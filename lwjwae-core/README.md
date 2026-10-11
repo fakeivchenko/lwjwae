@@ -11,8 +11,8 @@ the window; a codec module supplies JSON when you use the typed bridge methods.
 
 | Type                                                                                                                                                                                                                                                                                                                      | Role                                                                                                                                                                                                                                                                                                                                                   |
 |---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| [`Application`](src/main/java/dev/ivchenko/lwjwae/Application.java)                                                                                                                                                                                                                                                       | Entry point and the process-wide half: `create` picks a backend; `open` adds a window; `run`, `quit`; the bridge across every window.                                                                                                                                                                                                                  |
-| [`Window`](src/main/java/dev/ivchenko/lwjwae/Window.java)                                                                                                                                                                                                                                                                 | One native window with a web view inside: title, size and its limits, position, minimized, maximized, full screen, on top, focus, `show`/`hide`, navigation, `eval`, the bridge of that window. |
+| [`Application`](src/main/java/dev/ivchenko/lwjwae/Application.java)                                                                                                                                                                                                                                                       | Entry point and the process-wide half: `create` picks a backend; `open` adds a window; `run`, `quit`; the bridge across every window; `taskbar()`, `notifications()`, `shortcuts()`, and `theme()`.                                                                                                                                                                                                                  |
+| [`Window`](src/main/java/dev/ivchenko/lwjwae/Window.java)                                                                                                                                                                                                                                                                 | One native window with a web view inside: title, size and its limits, position, minimized, maximized, full screen, on top, focus, `show`/`hide`, navigation, `eval`, the bridge of that window; `dialogs()`, `menus()`, `downloads()`, and `webView()`. |
 | [`ApplicationParameters`](src/main/java/dev/ivchenko/lwjwae/ApplicationParameters.java)                                                                                                                                                                                                                                   | What the application starts with: development server, codec, and the name that notifications show.                                                                                                                                                                                                                                                     |
 | [`WindowParameters`](src/main/java/dev/ivchenko/lwjwae/WindowParameters.java)                                                                                                                                                                                                                                             | What a window starts with: title, size, position, URL or resource, and its close action.                                                                                                                                                                                                                                                               |
 | [`CloseAction`](src/main/java/dev/ivchenko/lwjwae/CloseAction.java)                                                                                                                                                                                                                                                       | What the close button of the title bar does: `CLOSE`, or `HIDE` for an application that lives in the tray; `HIDE` hides only while a tray icon is up. `Window.closeAction(...)` changes it at run time; `requestClose()` does what the button does, `close()` always closes.                                                                                                                      |
@@ -22,8 +22,8 @@ the window; a codec module supplies JSON when you use the typed bridge methods.
 | [`event.Event`](src/main/java/dev/ivchenko/lwjwae/event/Event.java)                                                                                                                                                                                                                                                       | What a Java listener receives: name, payload, and the window that the event came through.                                                                                                                                                                                                                                                              |
 | [`event.LoadEvent`](src/main/java/dev/ivchenko/lwjwae/event/LoadEvent.java), [`event.LoadState`](src/main/java/dev/ivchenko/lwjwae/event/LoadState.java)                                                                                                                                                                  | Page load lifecycle notifications.                                                                                                                                                                                                                                                                                                                     |
 | [`tray.TrayIcon`](src/main/java/dev/ivchenko/lwjwae/tray/TrayIcon.java), [`tray.TrayMenuItem`](src/main/java/dev/ivchenko/lwjwae/tray/TrayMenuItem.java), [`tray.Tray`](src/main/java/dev/ivchenko/lwjwae/tray/Tray.java)                                                                                                 | A system tray icon: what it shows, its menu, and the handle that changes or removes it. The image is PNG bytes or a PNG among the resources of the application, `icon("app/tray.png")`. `Application.tray(TrayIcon)` puts one up; it belongs to the application, keeps `run()` going with no window open, and goes away with the application at the latest. A backend without tray support throws `UnsupportedOperationException`.                     |
-| [`notification.Notification`](src/main/java/dev/ivchenko/lwjwae/notification/Notification.java), [`notification.NotificationAction`](src/main/java/dev/ivchenko/lwjwae/notification/NotificationAction.java), [`notification.NotificationHandle`](src/main/java/dev/ivchenko/lwjwae/notification/NotificationHandle.java) | A desktop notification: its title, body, image, buttons, and click handler, and the handle that takes it back. `Notification.of(title, body)` is the plain one; the image is PNG bytes or a resource path. `Application.showNotification(Notification)` shows one; it doesn't keep `run()` going, and `quit()` takes it back. A backend without notifications, or a desktop without a notification server, throws `UnsupportedOperationException`. |
-| [`shortcut.Shortcut`](src/main/java/dev/ivchenko/lwjwae/shortcut/Shortcut.java), [`shortcut.ShortcutKey`](src/main/java/dev/ivchenko/lwjwae/shortcut/ShortcutKey.java), [`shortcut.ShortcutModifier`](src/main/java/dev/ivchenko/lwjwae/shortcut/ShortcutModifier.java) | A combination of keys for `Application.globalShortcut`, which runs a handler on it whichever application has the keyboard. `Shortcut.parse("CmdOrCtrl+Shift+K")` reads one. |
+| [`notification.Notification`](src/main/java/dev/ivchenko/lwjwae/notification/Notification.java), [`notification.NotificationAction`](src/main/java/dev/ivchenko/lwjwae/notification/NotificationAction.java), [`notification.NotificationHandle`](src/main/java/dev/ivchenko/lwjwae/notification/NotificationHandle.java) | A desktop notification: its title, body, image, buttons, and click handler, and the handle that takes it back. `Notification.of(title, body)` is the plain one; the image is PNG bytes or a resource path. `application.notifications().show(Notification)` shows one; it doesn't keep `run()` going, and `quit()` takes it back. A backend without notifications, or a desktop without a notification server, throws `UnsupportedOperationException`. |
+| [`shortcut.Shortcut`](src/main/java/dev/ivchenko/lwjwae/shortcut/Shortcut.java), [`shortcut.ShortcutKey`](src/main/java/dev/ivchenko/lwjwae/shortcut/ShortcutKey.java), [`shortcut.ShortcutModifier`](src/main/java/dev/ivchenko/lwjwae/shortcut/ShortcutModifier.java) | A combination of keys for `application.shortcuts().register`, which runs a handler on it whichever application has the keyboard. `Shortcut.parse("CmdOrCtrl+Shift+K")` reads one. |
 | `exception.*`                                                                                                                                                                                                                                                                                                             | [`BackendNotAvailableException`](src/main/java/dev/ivchenko/lwjwae/exception/BackendNotAvailableException.java), [`ResourceNotFoundException`](src/main/java/dev/ivchenko/lwjwae/exception/ResourceNotFoundException.java), [`ScriptEvaluationFailedException`](src/main/java/dev/ivchenko/lwjwae/exception/ScriptEvaluationFailedException.java), [`ShortcutUnavailableException`](src/main/java/dev/ivchenko/lwjwae/exception/ShortcutUnavailableException.java).     |
 
 A minimal application, in one line:
@@ -59,10 +59,10 @@ freely:
 | `application.show(target)`, `show(parameters)`    | `open`, `load`, and `show`                                                                     |
 | `window.load(target)`                             | `navigate` for a URL, which has a scheme such as `https:`, `loadResource` for a path          |
 | `WindowParameters.of(title, target)`, `of(title, width, height)` | The builder with a title and a page, or a title and a size                      |
-| `window.alert(message)`, `confirm(message)`       | `showMessageDialog` with OK, or with OK and Cancel as a question                              |
-| `window.pickFile(types...)`, `pickFiles(types...)`, `pickFolder()`, `pickSaveFile(name, types...)` | `showOpenDialog` and `showSaveDialog` with one file, many, a folder, or a file to save |
+| `window.dialogs().alert(message)`, `confirm(message)` | `message` with OK, or with OK and Cancel as a question                                    |
+| `window.dialogs().pickFile(types...)`, `pickFiles(types...)`, `pickFolder()`, `pickSaveFile(name, types...)` | `open` and `save` with one file, many, a folder, or a file to save |
 | `application.tray(icon, items...)`                | `tray(TrayIcon)` with an image among the resources and a menu                                 |
-| `application.showNotification(title, body)`       | `showNotification(Notification.of(title, body))`                                              |
+| `application.notifications().show(title, body)`   | `show(Notification.of(title, body))`                                                          |
 | `call.replyResource(path)`                        | `reply` with a file of the application and the type of its extension                          |
 | `size(WindowSize)`, `position(WindowPosition)`, `minimumSize(WindowSize)`, `maximumSize(WindowSize)` | The same as the two numbers                                            |
 
@@ -75,6 +75,20 @@ development server setting, and the list of open windows. A `Window` is one nati
 web view inside. `open` creates a window, hidden, so a page can load before anything appears on
 screen; `show` puts it up. `windows()` lists the open ones, oldest first, and `window(id)` finds
 one by the number that `Window.id()` reports.
+
+What a window and an application do besides their frame, their pages, and the bridge is grouped
+by feature, each group behind a method of its own, so that the two types stay short:
+
+| Group                          | What it holds                                                                  |
+|--------------------------------|--------------------------------------------------------------------------------|
+| `window.dialogs()`             | `open`, `save`, `message`, and the short `alert`, `confirm`, and `pick...`      |
+| `window.menus()`               | `bar`, `useApplicationBar`, `context`, and `popup`                             |
+| `window.downloads()`           | `handler`, `listen`, and `cancel`                                              |
+| `window.webView()`             | `zoom`, the developer tools, `externalLinkHandler`, `permissionHandler`, and `onFileDrop` |
+| `application.taskbar()`        | `progress` and `badgeCount` on the icon                                        |
+| `application.notifications()`  | `show`                                                                         |
+| `application.shortcuts()`      | `register`, for a global shortcut                                              |
+| `application.theme()`          | `current` and `onChange`                                                       |
 
 `run()` blocks the calling thread while any window is open, and returns at once when none is. A
 window opened in the meantime, from another thread or from a page, keeps it blocked. Closing the
@@ -259,17 +273,18 @@ with `lwjwae.open({ transparent: true })`.
 
 ### Dialogs
 
-`showOpenDialog`, `showSaveDialog`, and `showMessageDialog` on a window show the dialogs of the
-platform over it, and return a future at once:
+`open`, `save`, and `message` of `window.dialogs()` show the dialogs of the platform over the
+window, and return a future at once:
 
 ```java
-window.showOpenDialog(OpenDialogParameters.builder()
+Dialogs dialogs = window.dialogs();
+dialogs.open(OpenDialogParameters.builder()
         .fileTypes(List.of(FileType.of("Images", "png", "jpg")))
         .multiple(true)
         .build())
     .thenAccept(paths -> ...);             // none if the user cancelled
-window.showSaveDialog(SaveDialogParameters.builder().fileName("notes.txt").build());
-window.showMessageDialog(MessageDialogParameters.builder()
+dialogs.save(SaveDialogParameters.builder().fileName("notes.txt").build());
+dialogs.message(MessageDialogParameters.builder()
     .message("Delete it?").level(MessageLevel.QUESTION).buttons(MessageButtons.YES_NO).build());
 ```
 
@@ -351,13 +366,13 @@ user didn't unlock, throws `SecretStoreFailedException`.
 
 ### Global shortcuts
 
-`application.globalShortcut(shortcut, handler)` runs the handler whenever the user presses the
+`application.shortcuts().register(shortcut, handler)` runs the handler whenever the user presses the
 shortcut, whichever application has the keyboard, until the returned handle gives it back or the
 application closes. The handler runs off the UI thread, like a handler of the tray:
 
 ```java
 EventSubscription shortcut =
-    application.globalShortcut("CmdOrCtrl+Shift+Space", window::focus);
+    application.shortcuts().register("CmdOrCtrl+Shift+Space", window::focus);
 shortcut.unlisten(); // gives the shortcut back
 ```
 
@@ -374,7 +389,7 @@ that this application holds already.
 | Windows | `RegisterHotKey` on the message window of the UI thread, so a shortcut keeps working while every window is hidden. Holding the keys down runs the handler once. |
 | macOS | A hot key of Carbon, which needs no permission of the user. A letter names the key at its place on a US keyboard, as the menu shortcuts of macOS do. |
 | Linux, X11 | A grab of the key on the root window, with and without Caps Lock and Num Lock. |
-| Linux, Wayland | The `GlobalShortcuts` portal, which KDE Plasma and GNOME 48 and later have. The desktop asks the user to confirm the shortcut the first time and may let them pick other keys; `globalShortcut` returns before that. `focus()` from the handler brings the window to the front where the portal hands on the activation token of the press, as GNOME does; KDE Plasma hands none on, so there the window only asks for attention. Without the portal, the call throws `UnsupportedOperationException`. |
+| Linux, Wayland | The `GlobalShortcuts` portal, which KDE Plasma and GNOME 48 and later have. The desktop asks the user to confirm the shortcut the first time and may let them pick other keys; `register` returns before that. `focus()` from the handler brings the window to the front where the portal hands on the activation token of the press, as GNOME does; KDE Plasma hands none on, so there the window only asks for attention. Without the portal, the call throws `UnsupportedOperationException`. |
 
 ### Links that leave the application
 
@@ -387,7 +402,7 @@ of its own. A link that the page already handled with `preventDefault()`, a down
 the application, and a navigation that a script or Java starts stay in the window, as does
 everything in a page from elsewhere that the window shows.
 
-`window.externalLinkHandler(url -> ...)` decides instead, for example to open a sign-in page in a
+`window.webView().externalLinkHandler(url -> ...)` decides instead, for example to open a sign-in page in a
 window of the application; `Application.openExternal(url)` is what the default does, and takes
 only `http`, `https`, and `mailto`: a `file:` URL or the scheme of another application would run
 whatever the system associates with it. It goes through `g_app_info_launch_default_for_uri` on
@@ -396,7 +411,7 @@ on macOS.
 
 ### Permissions of a page
 
-`window.permissionHandler(request -> ...)` decides what a page may use that needs the user's
+`window.webView().permissionHandler(request -> ...)` decides what a page may use that needs the user's
 permission. By default every request is denied, on every platform, and no engine shows a prompt of
 its own: `getUserMedia` fails on the page with `NotAllowedError`. The handler gets a
 `PermissionRequest` with a `kind`, `CAMERA`, `MICROPHONE`, `GEOLOCATION`, or `NOTIFICATIONS`, and
@@ -412,7 +427,7 @@ together arrives as two requests, and both must be granted.
 
 ### Downloads
 
-`window.downloadHandler(request -> ...)` decides where a download of the page goes: a link with a
+`window.downloads().handler(request -> ...)` decides where a download of the page goes: a link with a
 `download` attribute, a file that the server sends as an attachment or that the engine can't show,
 and a navigation from Java to such a file. The handler gets a `DownloadRequest` with the `url`, the
 `suggestedFileName`, the `mimeType`, and the `totalBytes`, and answers `DownloadDecision.saveTo(path)`,
@@ -422,13 +437,13 @@ to the downloads folder of the user, under the suggested name, with a number add
 that name is there.
 
 ```java
-window.downloadHandler(request -> DownloadDecision.saveTo(exports.resolve(request.suggestedFileName())));
-window.onDownload(event -> System.out.println(event.state() + " " + event.receivedBytes()));
+window.downloads().handler(request -> DownloadDecision.saveTo(exports.resolve(request.suggestedFileName())));
+window.downloads().listen(event -> System.out.println(event.state() + " " + event.receivedBytes()));
 ```
 
-`window.onDownload(event -> ...)` hears each step: `STARTED`, `PROGRESSED` at most about ten times
+`window.downloads().listen(event -> ...)` hears each step: `STARTED`, `PROGRESSED` at most about ten times
 a second, and one of `COMPLETED`, `FAILED`, and `CANCELED`, one after the other on a virtual
-thread. `window.cancelDownload(event.id())` cancels one. A page hears the same through
+thread. `window.downloads().cancel(event.id())` cancels one. A page hears the same through
 `lwjwae.downloads.listen(handler)`, with `{ id, url, path, state, receivedBytes, totalBytes,
 failure }`, and cancels with `await lwjwae.downloads.cancel(id)`.
 
@@ -440,8 +455,8 @@ failure }`, and cancels with `await lwjwae.downloads.cancel(id)`.
 
 ### The theme of the desktop
 
-`application.theme()` is `SystemTheme.LIGHT` or `DARK`, as the user set it for the desktop, and
-`application.onThemeChange(theme -> ...)` runs on a virtual thread when the user switches, never
+`application.theme().current()` is `SystemTheme.LIGHT` or `DARK`, as the user set it for the
+desktop, and `application.theme().onChange(theme -> ...)` runs on a virtual thread when the user switches, never
 with the theme that the application already has. A page reads the same through `await
 lwjwae.theme.current()`, which resolves to `"light"` or `"dark"`, and `lwjwae.theme.listen(handler)`,
 which resolves to the function that stops it. The engines of Windows and macOS follow the desktop
@@ -470,8 +485,8 @@ scales it down to every size it needs.
 
 ### Zooming a page
 
-`window.zoom(1.5)` shows the page at 150%, and `window.zoom()` reads the zoom: 1 is 100%, from
-`Window.MINIMUM_ZOOM` (0.25) to `Window.MAXIMUM_ZOOM` (5). The whole page zooms, as in a browser: its
+`window.webView().zoom(1.5)` shows the page at 150%, and `zoom()` reads the zoom: 1 is 100%, from
+`WebView.MINIMUM_ZOOM` (0.25) to `WebView.MAXIMUM_ZOOM` (5). The whole page zooms, as in a browser: its
 text, images, and layout grow together, and the page sees a narrower viewport in CSS pixels. The
 zoom belongs to the window and stays through navigations, including to another origin. The user
 can't zoom with Ctrl and the wheel or the keys, on any backend, so only Java sets it. There is no
@@ -479,7 +494,7 @@ call for it on the page.
 
 ### Files dropped on a window
 
-`window.onFileDrop(event -> ...)` hears the files that the user drops from the file manager onto the
+`window.webView().onFileDrop(event -> ...)` hears the files that the user drops from the file manager onto the
 page, as a `FileDropEvent`: the `paths`, absolute, in the order that the file manager gave them, the
 `window`, and where the pointer was, `x` and `y`, from the top left of the page. A page hears the
 same through `lwjwae.files.listen(({ paths, x, y }) => ...)`, which resolves to the function that

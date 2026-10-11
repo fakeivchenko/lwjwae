@@ -5,6 +5,7 @@ import dev.ivchenko.lwjwae.download.DownloadAction;
 import dev.ivchenko.lwjwae.download.DownloadDecision;
 import dev.ivchenko.lwjwae.download.DownloadRequest;
 import dev.ivchenko.lwjwae.download.DownloadState;
+import dev.ivchenko.lwjwae.download.Downloads;
 import dev.ivchenko.lwjwae.event.DownloadEvent;
 import dev.ivchenko.lwjwae.event.EventSubscription;
 import dev.ivchenko.lwjwae.util.JsonUtil;
@@ -51,7 +52,7 @@ import java.util.function.Supplier;
  * doesn't complete, or never starts because its window closed, takes its claimed file with it, so
  * no empty file stays behind. A file that the handler names belongs to the application and stays.
  */
-public final class WindowDownloads {
+public final class WindowDownloads implements Downloads {
   private static final System.Logger LOG = System.getLogger(WindowDownloads.class.getName());
 
   /** The shortest time between two {@link DownloadState#PROGRESSED} events of a download. */
@@ -73,6 +74,7 @@ public final class WindowDownloads {
   private static final Set<Path> CLAIMED = ConcurrentHashMap.newKeySet();
 
   private final Window window;
+  private final Executor uiThread;
   private final Consumer<String> page;
   private final Function<String, CompletableFuture<Optional<Path>>> ask;
   private final Listeners<DownloadEvent> listeners = new Listeners<>("lwjwae-downloads");
@@ -90,35 +92,39 @@ public final class WindowDownloads {
    * Creates the downloads of {@code window}.
    *
    * @param window The window whose page downloads.
+   * @param uiThread Where a cancel goes to the engine.
    * @param page Where the events go for the page, as JSON.
    * @param ask Shows the dialog that saves a file, with the name that it proposes, for {@link
    *     DownloadAction#ASK}.
    */
   public WindowDownloads(
       Window window,
+      Executor uiThread,
       Consumer<String> page,
       Function<String, CompletableFuture<Optional<Path>>> ask) {
-    this(window, page, ask, WindowDownloads::downloadsDirectory);
+    this(window, uiThread, page, ask, WindowDownloads::downloadsDirectory);
   }
 
   /** The same, with the folder that a download goes to without a handler. */
   WindowDownloads(
       Window window,
+      Executor uiThread,
       Consumer<String> page,
       Function<String, CompletableFuture<Optional<Path>>> ask,
       Supplier<Path> downloadsDirectory) {
     this.window = window;
+    this.uiThread = uiThread;
     this.page = page;
     this.ask = ask;
     this.downloadsDirectory = downloadsDirectory;
   }
 
-  /** Sets the handler that decides where a download goes; {@code null} brings the default back. */
+  @Override
   public void handler(Function<DownloadRequest, DownloadDecision> handler) {
     this.handler = handler;
   }
 
-  /** Registers {@code listener} for every event from now on. */
+  @Override
   public EventSubscription listen(Consumer<DownloadEvent> listener) {
     return this.listeners.listen(listener);
   }
@@ -215,17 +221,13 @@ public final class WindowDownloads {
     this.emit(download, state, failure);
   }
 
-  /**
-   * Cancels the download {@code id} on {@code uiThread}.
-   *
-   * @return Whether the download was still going.
-   */
-  public boolean cancel(long id, Executor uiThread) {
+  @Override
+  public boolean cancel(long id) {
     ActiveDownload download = this.active.get(id);
     if (download == null) {
       return false;
     }
-    uiThread.execute(download.cancel);
+    this.uiThread.execute(download.cancel);
     return true;
   }
 

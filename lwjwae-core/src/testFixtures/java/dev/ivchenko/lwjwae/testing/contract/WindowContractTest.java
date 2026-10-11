@@ -198,10 +198,10 @@ public abstract class WindowContractTest extends DisplayContractTest {
       window.resizable(false);
       Assertions.assertFalse(window.isResizable());
 
-      window.devToolsEnabled(true);
-      Assertions.assertTrue(window.isDevToolsEnabled());
-      window.devToolsEnabled(false);
-      Assertions.assertFalse(window.isDevToolsEnabled());
+      window.webView().devToolsEnabled(true);
+      Assertions.assertTrue(window.webView().isDevToolsEnabled());
+      window.webView().devToolsEnabled(false);
+      Assertions.assertFalse(window.webView().isDevToolsEnabled());
 
       window.resizable(true);
       if (!this.canResizeShownWindows()) {
@@ -681,11 +681,13 @@ public abstract class WindowContractTest extends DisplayContractTest {
           application.open(WindowParameters.builder().title("lwjwae :: permissions").build());
       BlockingQueue<PermissionRequest> asked = new LinkedBlockingQueue<>();
       AtomicReference<PermissionDecision> answer = new AtomicReference<>(PermissionDecision.DENY);
-      window.permissionHandler(
-          request -> {
-            asked.add(request);
-            return answer.get();
-          });
+      window
+          .webView()
+          .permissionHandler(
+              request -> {
+                asked.add(request);
+                return answer.get();
+              });
       final var loaded = Loads.expectFinished(window);
       window.loadResource("test-app/index.html");
       window.show();
@@ -727,7 +729,7 @@ public abstract class WindowContractTest extends DisplayContractTest {
       window.show();
       loaded.get(30, TimeUnit.SECONDS);
 
-      SystemTheme original = application.theme();
+      SystemTheme original = application.theme().current();
       Loads.eval(
           window,
           "lwjwae.theme.current().then((t) => window.__current = t);"
@@ -739,12 +741,12 @@ public abstract class WindowContractTest extends DisplayContractTest {
 
       SystemTheme other = original == SystemTheme.DARK ? SystemTheme.LIGHT : SystemTheme.DARK;
       BlockingQueue<SystemTheme> heard = new LinkedBlockingQueue<>();
-      application.onThemeChange(heard::add);
+      application.theme().onChange(heard::add);
       boolean switched = this.switchSystemTheme(other);
       try {
         Assumptions.assumeTrue(switched, "this machine can't switch its theme in a test");
         Assertions.assertEquals(other, heard.poll(10, TimeUnit.SECONDS), "Java hears the switch");
-        Assertions.assertEquals(other, application.theme());
+        Assertions.assertEquals(other, application.theme().current());
         Assertions.assertEquals(
             other.pageName(), Loads.awaitValue(window, "window.__heard"), "and so does the page");
         Loads.eval(window, "lwjwae.theme.current().then((t) => window.__after = t); undefined;");
@@ -803,11 +805,11 @@ public abstract class WindowContractTest extends DisplayContractTest {
       window.loadResource("test-app/index.html");
       window.show();
       loaded.get(30, TimeUnit.SECONDS);
-      Assertions.assertEquals(1.0, window.zoom(), 0.001);
+      Assertions.assertEquals(1.0, window.webView().zoom(), 0.001);
       int width = WindowContractTest.viewportWidth(window);
 
-      window.zoom(2.0);
-      Assertions.assertEquals(2.0, window.zoom(), 0.001);
+      window.webView().zoom(2.0);
+      Assertions.assertEquals(2.0, window.webView().zoom(), 0.001);
       WindowContractTest.awaitTrue(
           () -> Math.abs(WindowContractTest.viewportWidth(window) - width / 2) <= 2,
           "at 200% the page has half the width in CSS pixels");
@@ -817,19 +819,19 @@ public abstract class WindowContractTest extends DisplayContractTest {
       final var next = Loads.expectFinished(window);
       window.navigate(url);
       next.get(30, TimeUnit.SECONDS);
-      Assertions.assertEquals(2.0, window.zoom(), 0.001);
+      Assertions.assertEquals(2.0, window.webView().zoom(), 0.001);
       WindowContractTest.awaitTrue(
           () -> Math.abs(WindowContractTest.viewportWidth(window) - width / 2) <= 2,
           "the zoom stays through the navigation");
 
-      window.zoom(0.5);
+      window.webView().zoom(0.5);
       WindowContractTest.awaitTrue(
           () -> Math.abs(WindowContractTest.viewportWidth(window) - width * 2) <= 4,
           "at 50% the page has twice the width");
-      window.zoom(1.0);
+      window.webView().zoom(1.0);
       WindowContractTest.awaitTrue(
           () -> Math.abs(WindowContractTest.viewportWidth(window) - width) <= 2, "and back");
-      Assertions.assertThrows(IllegalArgumentException.class, () -> window.zoom(10));
+      Assertions.assertThrows(IllegalArgumentException.class, () -> window.webView().zoom(10));
     }
   }
 
@@ -855,7 +857,7 @@ public abstract class WindowContractTest extends DisplayContractTest {
       window.show();
       loaded.get(30, TimeUnit.SECONDS);
       BlockingQueue<FileDropEvent> dropped = new LinkedBlockingQueue<>();
-      window.onFileDrop(dropped::add);
+      window.webView().onFileDrop(dropped::add);
       Loads.eval(
           window,
           "lwjwae.files.listen((drop) => window.__dropped = drop.paths.join('|')); undefined;");
@@ -884,7 +886,7 @@ public abstract class WindowContractTest extends DisplayContractTest {
     try (Application application = Application.create()) {
       Window window = application.open(WindowParameters.builder().title("lwjwae :: links").build());
       BlockingQueue<String> left = new LinkedBlockingQueue<>();
-      window.externalLinkHandler(left::add);
+      window.webView().externalLinkHandler(left::add);
       final var loaded = Loads.expectFinished(window);
       window.loadResource("test-app/index.html");
       window.show();
@@ -931,22 +933,26 @@ public abstract class WindowContractTest extends DisplayContractTest {
 
       List<CompletableFuture<?>> dialogs =
           List.of(
-              window.showOpenDialog(
-                  OpenDialogParameters.builder()
-                      .title("lwjwae :: open")
-                      .multiple(true)
-                      .fileTypes(List.of(FileType.of("Images", "png", "jpg")))
-                      .build()),
-              window.showOpenDialog(OpenDialogParameters.builder().directories(true).build()),
-              window.showSaveDialog(SaveDialogParameters.builder().fileName("lwjwae.txt").build()),
-              window.showMessageDialog(
-                  MessageDialogParameters.builder()
-                      .title("lwjwae :: message")
-                      .message("A question")
-                      .detail("With a detail")
-                      .level(MessageLevel.QUESTION)
-                      .buttons(MessageButtons.YES_NO)
-                      .build()));
+              window
+                  .dialogs()
+                  .open(
+                      OpenDialogParameters.builder()
+                          .title("lwjwae :: open")
+                          .multiple(true)
+                          .fileTypes(List.of(FileType.of("Images", "png", "jpg")))
+                          .build()),
+              window.dialogs().open(OpenDialogParameters.builder().directories(true).build()),
+              window.dialogs().save(SaveDialogParameters.builder().fileName("lwjwae.txt").build()),
+              window
+                  .dialogs()
+                  .message(
+                      MessageDialogParameters.builder()
+                          .title("lwjwae :: message")
+                          .message("A question")
+                          .detail("With a detail")
+                          .level(MessageLevel.QUESTION)
+                          .buttons(MessageButtons.YES_NO)
+                          .build()));
       String[] names = {"open", "folder", "save", "message"};
       for (int index = 0; index < dialogs.size(); index++) {
         CompletableFuture<?> dialog = dialogs.get(index);
@@ -969,7 +975,7 @@ public abstract class WindowContractTest extends DisplayContractTest {
       Assertions.assertEquals("4", Loads.eval(window, "String(2 + 2)"));
 
       CompletableFuture<Boolean> left =
-          window.showMessageDialog(MessageDialogParameters.of("Left open"));
+          window.dialogs().message(MessageDialogParameters.of("Left open"));
       Thread.sleep(500);
       window.close();
       Assertions.assertTrue(left.isCancelled(), "a closed window cancels its dialogs");
@@ -1000,7 +1006,7 @@ public abstract class WindowContractTest extends DisplayContractTest {
               MenuItem.submenu("More", MenuItem.of("Deep", () -> {}))),
           MenuItem.editMenu(),
           MenuItem.windowMenu());
-      Assertions.assertEquals(3, window.menu().size());
+      Assertions.assertEquals(3, window.menus().bar().size());
       if (this.hasMenuBarInWindow()) {
         WindowContractTest.awaitTrue(
             () -> WindowContractTest.innerHeight(window) < without, "the bar takes room");
@@ -1016,14 +1022,14 @@ public abstract class WindowContractTest extends DisplayContractTest {
         Assertions.assertEquals(false, heard.poll(10, TimeUnit.SECONDS), "and off");
       }
 
-      window.menu(List.of());
-      Assertions.assertEquals(List.of(), window.menu());
+      window.menus().bar(List.of());
+      Assertions.assertEquals(List.of(), window.menus().bar());
       if (this.hasMenuBarInWindow()) {
         WindowContractTest.awaitTrue(
             () -> WindowContractTest.innerHeight(window) == without, "no bar, no room");
       }
-      window.useApplicationMenu();
-      Assertions.assertEquals(3, window.menu().size());
+      window.menus().useApplicationBar();
+      Assertions.assertEquals(3, window.menus().bar().size());
       application.menu(List.of());
       if (this.hasMenuBarInWindow()) {
         WindowContractTest.awaitTrue(
@@ -1054,11 +1060,13 @@ public abstract class WindowContractTest extends DisplayContractTest {
       WindowContractTest.awaitTrue(window::isVisible, "the window must show");
 
       CompletableFuture<Void> shown =
-          window.showContextMenu(
-              MenuItem.of("First", () -> {}),
-              MenuItem.separator(),
-              MenuItem.checkbox("Checked", true, _ -> {}),
-              MenuItem.submenu("More", MenuItem.of("Deep", () -> {})));
+          window
+              .menus()
+              .popup(
+                  MenuItem.of("First", () -> {}),
+                  MenuItem.separator(),
+                  MenuItem.checkbox("Checked", true, _ -> {}),
+                  MenuItem.submenu("More", MenuItem.of("Deep", () -> {})));
       Thread.sleep(1000);
       Screenshots.capture("context-menu");
       Assertions.assertFalse(shown.isDone(), "the menu waits for the user");
@@ -1078,7 +1086,7 @@ public abstract class WindowContractTest extends DisplayContractTest {
         Assertions.assertEquals("first", Loads.awaitValue(window, "window.__picked"));
 
         BlockingQueue<String> heard = new LinkedBlockingQueue<>();
-        window.contextMenu(MenuItem.of("Reload", () -> heard.add("reload")));
+        window.menus().context(MenuItem.of("Reload", () -> heard.add("reload")));
         Loads.eval(
             window,
             "document.body.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true,"
@@ -1095,7 +1103,7 @@ public abstract class WindowContractTest extends DisplayContractTest {
               "const input = document.createElement('input'); input.value = '"
                   + text
                   + "'; document.body.append(input); input.focus(); input.select(); undefined;");
-          window.showContextMenu(MenuItem.role(MenuRole.COPY));
+          window.menus().popup(MenuItem.role(MenuRole.COPY));
           Thread.sleep(1000);
           this.pickFirstEntryOfOpenMenu();
           WindowContractTest.awaitTrue(
@@ -1116,10 +1124,10 @@ public abstract class WindowContractTest extends DisplayContractTest {
               WindowParameters.builder().title("lwjwae :: taskbar").size(400, 300).build());
       window.show();
       WindowContractTest.awaitTrue(window::isVisible, "the window must show");
-      application.progress(0.4);
-      application.badgeCount(3);
-      Assertions.assertEquals(TaskbarProgress.of(0.4), application.progress());
-      Assertions.assertEquals(3, application.badgeCount());
+      application.taskbar().progress(0.4);
+      application.taskbar().badgeCount(3);
+      Assertions.assertEquals(TaskbarProgress.of(0.4), application.taskbar().progress());
+      Assertions.assertEquals(3, application.taskbar().badgeCount());
       Thread.sleep(500);
       Screenshots.capture("taskbar-progress");
       for (TaskbarProgress progress :
@@ -1128,19 +1136,19 @@ public abstract class WindowContractTest extends DisplayContractTest {
               TaskbarProgress.paused(0.6),
               TaskbarProgress.error(0.8),
               TaskbarProgress.none())) {
-        application.progress(progress);
+        application.taskbar().progress(progress);
       }
-      application.badgeCount(12);
+      application.taskbar().badgeCount(12);
       Thread.sleep(500);
       Screenshots.capture("taskbar-badge");
-      application.badgeCount(0);
+      application.taskbar().badgeCount(0);
 
       // A window opened later shows what the application shows.
-      application.progress(0.7);
+      application.taskbar().progress(0.7);
       Window later = application.open(WindowParameters.builder().title("lwjwae :: later").build());
       later.show();
       WindowContractTest.awaitTrue(later::isVisible, "the window must show");
-      Assertions.assertEquals(TaskbarProgress.of(0.7), application.progress());
+      Assertions.assertEquals(TaskbarProgress.of(0.7), application.taskbar().progress());
     }
   }
 
@@ -1381,10 +1389,10 @@ public abstract class WindowContractTest extends DisplayContractTest {
     try (Application application = Application.create()) {
       BlockingQueue<Boolean> heard = new LinkedBlockingQueue<>();
       Runnable handler = () -> heard.add(Thread.currentThread().isVirtual());
-      EventSubscription binding = application.globalShortcut(shortcut, handler);
+      EventSubscription binding = application.shortcuts().register(shortcut, handler);
       Assertions.assertThrows(
           ShortcutUnavailableException.class,
-          () -> application.globalShortcut(shortcut, handler),
+          () -> application.shortcuts().register(shortcut, handler),
           "a shortcut is bound once");
 
       if (this.pressKeys(shortcut)) {
@@ -1397,7 +1405,7 @@ public abstract class WindowContractTest extends DisplayContractTest {
         Assertions.assertNull(heard.poll(1, TimeUnit.SECONDS), "a shortcut given back stays quiet");
       }
 
-      application.globalShortcut(shortcut, handler);
+      application.shortcuts().register(shortcut, handler);
       if (this.pressKeys(shortcut)) {
         Assertions.assertEquals(
             Boolean.TRUE, heard.poll(10, TimeUnit.SECONDS), "bound again, the press is heard");

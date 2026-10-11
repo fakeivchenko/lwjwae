@@ -440,13 +440,13 @@ public class FakeWindow extends AbstractWindow {
   }
 
   @Override
-  public boolean isDevToolsEnabled() {
+  protected boolean currentDevTools() {
     return this.devToolsEnabled;
   }
 
   @Override
-  public void devToolsEnabled(boolean devToolsEnabled) {
-    this.devToolsEnabled = devToolsEnabled;
+  protected void presentDevTools(boolean enabled) {
+    this.devToolsEnabled = enabled;
   }
 
   @Override

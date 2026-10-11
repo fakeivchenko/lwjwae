@@ -699,13 +699,13 @@ public class WindowsWindow extends AbstractWindow {
   }
 
   @Override
-  public boolean isDevToolsEnabled() {
-    return this.dispatcher().call(() -> WebView2.isDevToolsEnabled(this.view()));
+  protected boolean currentDevTools() {
+    return WebView2.isDevToolsEnabled(this.view());
   }
 
   @Override
-  public void devToolsEnabled(boolean devToolsEnabled) {
-    this.dispatcher().run(() -> WebView2.setDevToolsEnabled(this.view(), devToolsEnabled));
+  protected void presentDevTools(boolean enabled) {
+    WebView2.setDevToolsEnabled(this.view(), enabled);
   }
 
   @Override
@@ -1297,7 +1297,7 @@ public class WindowsWindow extends AbstractWindow {
   }
 
   /** The {@code ICoreWebView2}, or {@code null} once it's gone. */
-  MemorySegment webView() {
+  MemorySegment webViewIfAny() {
     return this.webView;
   }
 

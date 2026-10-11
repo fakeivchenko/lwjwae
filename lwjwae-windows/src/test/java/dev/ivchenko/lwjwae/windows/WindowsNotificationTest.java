@@ -22,8 +22,13 @@ class WindowsNotificationTest extends NotificationContractTest {
     try (Application application = Application.create()) {
       WindowsNotification notification =
           (WindowsNotification)
-              application.showNotification(
-                  Notification.builder().title("lwjwae :: stays").body("No Failed event").build());
+              application
+                  .notifications()
+                  .show(
+                      Notification.builder()
+                          .title("lwjwae :: stays")
+                          .body("No Failed event")
+                          .build());
 
       // A toast that Windows can't show reports Failed within moments; this one must not.
       Thread.sleep(1500);
@@ -47,12 +52,13 @@ class WindowsNotificationTest extends NotificationContractTest {
               .onActivate(activated::countDown)
               .build();
 
-      WindowsNotification clicked = (WindowsNotification) application.showNotification(content);
+      WindowsNotification clicked = (WindowsNotification) application.notifications().show(content);
       clicked.simulateActivation("default");
       Assertions.assertTrue(activated.await(5, TimeUnit.SECONDS), "onActivate must run");
       Assertions.assertTrue(clicked.isClosed(), "a click ends the toast");
 
-      WindowsNotification answered = (WindowsNotification) application.showNotification(content);
+      WindowsNotification answered =
+          (WindowsNotification) application.notifications().show(content);
       answered.simulateActivation("action-1");
       Assertions.assertTrue(second.await(5, TimeUnit.SECONDS), "the second button must run");
     }
@@ -63,8 +69,9 @@ class WindowsNotificationTest extends NotificationContractTest {
     try (Application application = Application.create()) {
       WindowsNotification notification =
           (WindowsNotification)
-              application.showNotification(
-                  Notification.builder().title("lwjwae :: dismiss").build());
+              application
+                  .notifications()
+                  .show(Notification.builder().title("lwjwae :: dismiss").build());
 
       notification.simulateDismiss();
       Assertions.assertTrue(notification.isClosed());
@@ -76,8 +83,9 @@ class WindowsNotificationTest extends NotificationContractTest {
     try (Application application = Application.create()) {
       WindowsNotification notification =
           (WindowsNotification)
-              application.showNotification(
-                  Notification.builder().title("lwjwae :: timeout").build());
+              application
+                  .notifications()
+                  .show(Notification.builder().title("lwjwae :: timeout").build());
 
       notification.simulateTimeout();
       Assertions.assertFalse(notification.isClosed(), "a timed-out toast can still be clicked");

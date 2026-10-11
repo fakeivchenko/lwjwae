@@ -4,7 +4,7 @@ import java.nio.file.Path;
 import java.util.Objects;
 
 /**
- * Where a download goes, which {@link dev.ivchenko.lwjwae.Window#downloadHandler} answers with.
+ * Where a download goes, which {@link Downloads#handler} answers with.
  *
  * @param action Whether the file is saved, the user is asked, or nothing is downloaded.
  * @param path The file to write for {@link DownloadAction#SAVE}, as an absolute path, and {@code

@@ -2,10 +2,7 @@ package dev.ivchenko.lwjwae.theme;
 
 import java.util.Locale;
 
-/**
- * The colors that the user chose for the desktop, see {@link
- * dev.ivchenko.lwjwae.Application#theme}.
- */
+/** The colors that the user chose for the desktop, see {@link Theme#current}. */
 public enum SystemTheme {
   /** Dark text on a light background. Also the answer where the desktop has no choice. */
   LIGHT,

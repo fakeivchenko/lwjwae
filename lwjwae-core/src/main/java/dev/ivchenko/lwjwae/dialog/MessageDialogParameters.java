@@ -3,7 +3,7 @@ package dev.ivchenko.lwjwae.dialog;
 import lombok.Builder;
 
 /**
- * What a message dialog says and offers, see {@link dev.ivchenko.lwjwae.Window#showMessageDialog}.
+ * What a message dialog says and offers, see {@link Dialogs#message}.
  *
  * <p>Platforms:
  *

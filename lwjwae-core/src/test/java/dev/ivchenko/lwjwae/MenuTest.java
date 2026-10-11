@@ -34,7 +34,7 @@ class MenuTest {
       SubmenuItem own = MenuItem.submenu("Own");
       FakeWindow second =
           (FakeWindow) application.open(WindowParameters.builder().menu(own).build());
-      Assertions.assertEquals(List.of(own), second.menu());
+      Assertions.assertEquals(List.of(own), second.menus().bar());
       Assertions.assertEquals(List.of(own), second.menuBars.getLast().items());
 
       SubmenuItem edit = MenuItem.editMenu();
@@ -42,7 +42,7 @@ class MenuTest {
       Assertions.assertEquals(List.of(edit), first.menuBars.getLast().items());
       Assertions.assertEquals(List.of(own), second.menuBars.getLast().items());
 
-      second.useApplicationMenu();
+      second.menus().useApplicationBar();
       Assertions.assertEquals(List.of(edit), second.menuBars.getLast().items());
     }
   }
@@ -60,12 +60,14 @@ class MenuTest {
     try (FakeApplication application = new FakeApplication()) {
       FakeWindow window = application.openFake();
       LinkedBlockingQueue<Object> heard = new LinkedBlockingQueue<>();
-      window.menu(
-          MenuItem.submenu(
-              "File",
-              MenuItem.of("Open", () -> heard.add("open")),
-              MenuItem.checkbox("Wrap", false, heard::add),
-              MenuItem.role(MenuRole.COPY)));
+      window
+          .menus()
+          .bar(
+              MenuItem.submenu(
+                  "File",
+                  MenuItem.of("Open", () -> heard.add("open")),
+                  MenuItem.checkbox("Wrap", false, heard::add),
+                  MenuItem.role(MenuRole.COPY)));
 
       window.pickFromMenuBar(1);
       Assertions.assertEquals("open", heard.poll(5, TimeUnit.SECONDS));
@@ -84,14 +86,14 @@ class MenuTest {
       FakeWindow window = application.openFake();
       LinkedBlockingQueue<String> heard = new LinkedBlockingQueue<>();
       CompletableFuture<Void> shown =
-          window.showContextMenu(MenuItem.of("Rename", () -> heard.add("rename")));
+          window.menus().popup(MenuItem.of("Rename", () -> heard.add("rename")));
       PresentedDialog menu = window.dialogs.poll(5, TimeUnit.SECONDS);
       Assertions.assertEquals(Optional.empty(), window.menuPlaces.getLast(), "at the pointer");
       menu.answer(1);
       shown.get(5, TimeUnit.SECONDS);
       Assertions.assertEquals("rename", heard.poll(5, TimeUnit.SECONDS));
 
-      CompletableFuture<Void> abandoned = window.showContextMenu(MenuItem.of("Gone", () -> {}));
+      CompletableFuture<Void> abandoned = window.menus().popup(MenuItem.of("Gone", () -> {}));
       PresentedDialog closing = window.dialogs.poll(5, TimeUnit.SECONDS);
       abandoned.cancel(false);
       for (int attempt = 0; attempt < 50 && !closing.closed().get(); attempt++) {
@@ -146,7 +148,7 @@ class MenuTest {
       Assertions.assertEquals("", window.awaitReply(1).body(), "no menu, nothing opens");
 
       LinkedBlockingQueue<String> heard = new LinkedBlockingQueue<>();
-      window.contextMenu(MenuItem.of("Reload", () -> heard.add("reload")));
+      window.menus().context(MenuItem.of("Reload", () -> heard.add("reload")));
       Assertions.assertTrue(
           window.evaluated.getLast().contains(".contextMenu = true"), "the page learns of it");
       window.call(2, BridgeProtocol.MENU_CALL, String.join(SEP, "context", "1", "2"));
@@ -154,7 +156,7 @@ class MenuTest {
       Assertions.assertEquals("", window.awaitReply(2).body());
       Assertions.assertEquals("reload", heard.poll(5, TimeUnit.SECONDS));
 
-      window.contextMenu(List.of());
+      window.menus().context(List.of());
       Assertions.assertTrue(window.evaluated.getLast().contains(".contextMenu = false"));
     }
   }

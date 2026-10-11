@@ -87,8 +87,8 @@ import lombok.Builder;
  * @param icon The PNG bytes of the icon of the window, or {@code null} for the one of the platform.
  *     The builder also takes a PNG among the resources of the application. See {@link
  *     Window#icon(byte[])}. Default: {@code null}.
- * @param menu The menu bar of the window, see {@link Window#menu(List)}, or {@code null} for the
- *     one of the application. Default: {@code null}.
+ * @param menu The menu bar of the window, see {@link dev.ivchenko.lwjwae.menu.Menus#bar(List)}, or
+ *     {@code null} for the one of the application. Default: {@code null}.
  * @param parent The window that this one belongs to, an open window of the same application, or
  *     {@code null} for a window of its own. A child window stays above its parent, opens centered
  *     over it unless it has a position, and closes with it. Default: {@code null}.

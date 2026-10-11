@@ -28,7 +28,7 @@ would no longer compile to a direct call, on the path of every window operation.
 
 ## Notifications
 
-`Application.showNotification(Notification)` goes through a
+`Notifications.show(Notification)` goes through a
 [`FreedesktopNotifier`](src/main/java/dev/ivchenko/lwjwae/glib/FreedesktopNotifier.java), one per application, created
 on the first notification. It calls `org.freedesktop.Notifications`, the interface that GNOME Shell,
 Plasma, dunst, mako, and every other Linux notification server implement, over GDBus. GDBus is part
@@ -50,7 +50,7 @@ its table before the loop can deliver a signal about it. Handlers run on a virtu
 GTK thread.
 
 Without a session bus, or with nothing that owns `org.freedesktop.Notifications` on it,
-`showNotification` throws `UnsupportedOperationException`. `Application.quit()` takes back every
+`show` throws `UnsupportedOperationException`. `Application.quit()` takes back every
 notification still on screen with `CloseNotification`, because their handlers go with the
 application.
 

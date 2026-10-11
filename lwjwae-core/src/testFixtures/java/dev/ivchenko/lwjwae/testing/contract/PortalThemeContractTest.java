@@ -46,15 +46,17 @@ public abstract class PortalThemeContractTest {
       PortalThemeContractTest.choose("prefer-dark");
       try (Application application = Application.create()) {
         Assertions.assertEquals(
-            SystemTheme.DARK, application.theme(), "the first read finds the choice of the user");
+            SystemTheme.DARK,
+            application.theme().current(),
+            "the first read finds the choice of the user");
 
         BlockingQueue<SystemTheme> heard = new LinkedBlockingQueue<>();
-        application.onThemeChange(heard::add);
+        application.theme().onChange(heard::add);
         PortalThemeContractTest.choose("prefer-light");
         Assertions.assertEquals(SystemTheme.LIGHT, heard.poll(10, TimeUnit.SECONDS));
         PortalThemeContractTest.choose("prefer-dark");
         Assertions.assertEquals(SystemTheme.DARK, heard.poll(10, TimeUnit.SECONDS));
-        Assertions.assertEquals(SystemTheme.DARK, application.theme());
+        Assertions.assertEquals(SystemTheme.DARK, application.theme().current());
       }
     } finally {
       PortalThemeContractTest.choose("default");

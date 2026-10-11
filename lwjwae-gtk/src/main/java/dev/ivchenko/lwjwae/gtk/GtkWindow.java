@@ -498,7 +498,7 @@ public class GtkWindow extends WebKitGtkWindow {
   @Override
   protected void presentContextMenu(
       MenuCommands commands, WindowPosition place, DialogCompletion<Integer> picked) {
-    MemorySegment view = this.webViewIfAny();
+    MemorySegment view = this.viewIfAny();
     if (view == null) {
       picked.complete(0);
       return;
