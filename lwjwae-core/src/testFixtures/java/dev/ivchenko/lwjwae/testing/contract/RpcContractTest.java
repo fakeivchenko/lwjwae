@@ -17,6 +17,7 @@ import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -249,6 +250,50 @@ public abstract class RpcContractTest extends DisplayContractTest {
     } finally {
       development.stop(0);
       stranger.stop(0);
+    }
+  }
+
+  /**
+   * A request that a trusted document makes past the bridge, without the token of the window,
+   * reaches no handler: the origin alone opens nothing.
+   */
+  @Test
+  void requestWithoutTheTokenReachesNoHandler() throws Exception {
+    try (Application application = Application.create()) {
+      AtomicInteger reached = new AtomicInteger();
+      application.handle(
+          "ping",
+          call -> {
+            reached.incrementAndGet();
+            call.reply("pong");
+          });
+      JsonNode answer =
+          RpcContractTest.run(
+              application.open(),
+              """
+              const response = await fetch(location.origin + "/__lwjwae/rpc/ping", { method: "POST" })
+                  .catch((error) => ({ ok: false, status: 0, text: async () => String(error) }));
+              return { ok: response.ok, status: response.status, text: await response.text() };
+              """);
+      Assertions.assertFalse(answer.path("ok").asBoolean(), answer.toString());
+      Assertions.assertNotEquals("pong", answer.path("text").asText(), answer.toString());
+      Assertions.assertEquals(0, reached.get(), "the handler never ran");
+    }
+  }
+
+  /** A page has none of the capabilities that the application didn't grant it. */
+  @Test
+  void pageWithoutTheCapabilityIsRefused() throws Exception {
+    try (Application application = Application.create()) {
+      JsonNode answer =
+          RpcContractTest.run(
+              application.open(),
+              """
+              try { await lwjwae.clipboard.readText(); return { read: true }; }
+              catch (error) { return { status: error.status, code: error.code }; }
+              """);
+      Assertions.assertEquals(403, answer.path("status").asInt(), answer.toString());
+      Assertions.assertEquals("capability", answer.path("code").asText(), answer.toString());
     }
   }
 

@@ -207,6 +207,23 @@ public final class Store implements AutoCloseable {
     return this.locked(() -> work.apply(this));
   }
 
+  /**
+   * Runs {@code work} for a page, under one hold of the store: every statement compiled meanwhile
+   * stays inside the file of the store, see {@link Sqlite#authorizeForPage}. The hold keeps the
+   * statements of Java, which may reach further, out of that time.
+   */
+  <T> T forPage(Function<Store, T> work) {
+    return this.locked(
+        () -> {
+          this.database.authorizeForPages(true);
+          try {
+            return work.apply(this);
+          } finally {
+            this.database.authorizeForPages(false);
+          }
+        });
+  }
+
   /** Closes the file. The store can't be used afterwards. Idempotent. */
   @Override
   public void close() {

@@ -182,8 +182,10 @@
     const callFetch = (name, body, options = {}) => {
         if (token === null) return forbidden();
         const { data, type } = rpcBody(body);
+        const headers = { "X-Lwjwae-Token": token };
+        if (type) headers["Content-Type"] = type;
         return fetch(rpc.base + encodeURIComponent(name), {
-            method: "POST", body: data, headers: type ? { "Content-Type": type } : {}, signal: options.signal
+            method: "POST", body: data, headers, signal: options.signal
         }).then(rpcCheck);
     };
     // lwjwae.call streams where the engine does: fetch on the scheme of the application. A small

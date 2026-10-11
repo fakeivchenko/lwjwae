@@ -9,6 +9,7 @@ import dev.ivchenko.lwjwae.download.DownloadRequest;
 import dev.ivchenko.lwjwae.download.DownloadState;
 import dev.ivchenko.lwjwae.event.DownloadEvent;
 import dev.ivchenko.lwjwae.testing.Loads;
+import dev.ivchenko.lwjwae.testing.PageGrants;
 import dev.ivchenko.lwjwae.testing.Tags;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -96,7 +97,7 @@ public abstract class DownloadContractTest extends DisplayContractTest {
   @Test
   void downloadGoesWhereTheHandlerSaysAndReportsEachStep(@TempDir Path directory) throws Exception {
     Path target = directory.resolve("saved.bin");
-    try (Application application = Application.create()) {
+    try (Application application = Application.create(PageGrants.every())) {
       Window window = this.openWithPage(application);
       BlockingQueue<DownloadRequest> asked = new LinkedBlockingQueue<>();
       window.downloadHandler(
@@ -130,9 +131,34 @@ public abstract class DownloadContractTest extends DisplayContractTest {
     }
   }
 
+  /**
+   * A file at the path of the decision is replaced, which a download to the downloads folder relies
+   * on: it claims its file empty before the engine writes it.
+   */
+  @Test
+  void downloadReplacesTheFileThatIsThere(@TempDir Path directory) throws Exception {
+    Path target = Files.writeString(directory.resolve("report.bin"), "stale");
+    try (Application application = Application.create(PageGrants.every())) {
+      Window window = this.openWithPage(application);
+      window.downloadHandler(_ -> DownloadDecision.saveTo(target));
+      BlockingQueue<DownloadEvent> events = new LinkedBlockingQueue<>();
+      window.onDownload(events::add);
+
+      window.navigate(this.url("/report.bin"));
+
+      List<DownloadEvent> heard = DownloadContractTest.untilEnd(events);
+      Assertions.assertEquals(DownloadState.COMPLETED, heard.getLast().state(), heard.toString());
+      Assertions.assertEquals(target, heard.getLast().path());
+      Assertions.assertArrayEquals(REPORT, Files.readAllBytes(target));
+      try (Stream<Path> files = Files.list(directory)) {
+        Assertions.assertEquals(List.of(target), files.toList(), "no second file beside it");
+      }
+    }
+  }
+
   @Test
   void deniedDownloadWritesNothing(@TempDir Path directory) throws Exception {
-    try (Application application = Application.create()) {
+    try (Application application = Application.create(PageGrants.every())) {
       Window window = this.openWithPage(application);
       BlockingQueue<DownloadRequest> asked = new LinkedBlockingQueue<>();
       window.downloadHandler(
@@ -157,7 +183,7 @@ public abstract class DownloadContractTest extends DisplayContractTest {
 
   @Test
   void canceledDownloadEndsCanceled(@TempDir Path directory) throws Exception {
-    try (Application application = Application.create()) {
+    try (Application application = Application.create(PageGrants.every())) {
       Window window = this.openWithPage(application);
       window.downloadHandler(request -> DownloadDecision.saveTo(directory.resolve("slow.bin")));
       BlockingQueue<DownloadEvent> events = new LinkedBlockingQueue<>();

@@ -2,8 +2,10 @@ package dev.ivchenko.lwjwae.instance;
 
 import dev.ivchenko.lwjwae.event.SecondInstanceEvent;
 import dev.ivchenko.lwjwae.testing.ShortTemporaryDirectories;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.BlockingQueue;
@@ -12,6 +14,8 @@ import java.util.stream.Stream;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.api.condition.DisabledOnOs;
+import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
 
 @Timeout(10)
@@ -102,5 +106,32 @@ class InstanceLockTest {
 
       Assertions.assertTrue(InstanceLock.claim(this.directory, "app", SECOND).isEmpty());
     }
+  }
+
+  @Test
+  @DisabledOnOs(OS.WINDOWS)
+  void privateDirectoryIsForThisUserAlone() throws Exception {
+    Path made = InstanceLock.privateDirectory(this.directory.resolve("made"));
+    Path open =
+        Files.createDirectory(
+            this.directory.resolve("open"),
+            PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwxr-xr-x")));
+    InstanceLock.privateDirectory(open);
+
+    Assertions.assertEquals(
+        "rwx------", PosixFilePermissions.toString(Files.getPosixFilePermissions(made)));
+    Assertions.assertEquals(
+        "rwx------", PosixFilePermissions.toString(Files.getPosixFilePermissions(open)), "closed");
+  }
+
+  @Test
+  @DisabledOnOs(OS.WINDOWS)
+  void linkOrFileInPlaceOfThePrivateDirectoryIsRefused() throws Exception {
+    Path elsewhere = Files.createDirectory(this.directory.resolve("elsewhere"));
+    Path link = Files.createSymbolicLink(this.directory.resolve("link"), elsewhere);
+    Path file = Files.createFile(this.directory.resolve("file"));
+
+    Assertions.assertThrows(IOException.class, () -> InstanceLock.privateDirectory(link));
+    Assertions.assertThrows(IOException.class, () -> InstanceLock.privateDirectory(file));
   }
 }

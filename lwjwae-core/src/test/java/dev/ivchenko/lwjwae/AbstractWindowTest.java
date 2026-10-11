@@ -35,6 +35,8 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import org.junit.jupiter.api.Assertions;
@@ -634,6 +636,40 @@ class AbstractWindowTest {
   }
 
   @Test
+  void dropsReachASlowListenerOneAfterTheOtherInOrder() throws Exception {
+    try (FakeApplication application = new FakeApplication()) {
+      FakeWindow window = application.openFake();
+      BlockingQueue<Integer> heard = new LinkedBlockingQueue<>();
+      AtomicInteger hearing = new AtomicInteger();
+      AtomicBoolean overlapped = new AtomicBoolean();
+      window.onFileDrop(
+          event -> {
+            overlapped.compareAndSet(false, hearing.incrementAndGet() > 1);
+            try {
+              Thread.sleep(20);
+            } catch (InterruptedException _) {
+              Thread.currentThread().interrupt();
+            }
+            hearing.decrementAndGet();
+            heard.add(event.x());
+          });
+
+      for (int x = 0; x < 10; x++) {
+        window.dropFiles(List.of(Path.of("/tmp/a.txt")), x, 0);
+      }
+
+      List<Integer> order = new ArrayList<>();
+      while (order.size() < 10) {
+        Integer x = heard.poll(5, TimeUnit.SECONDS);
+        Assertions.assertNotNull(x, "every drop is heard; so far " + order);
+        order.add(x);
+      }
+      Assertions.assertEquals(List.of(0, 1, 2, 3, 4, 5, 6, 7, 8, 9), order);
+      Assertions.assertFalse(overlapped.get(), "never two drops at once");
+    }
+  }
+
+  @Test
   void zoomIsCheckedAndReachesTheBackend() {
     try (FakeApplication application = new FakeApplication()) {
       FakeWindow window = application.openFake();
@@ -898,6 +934,22 @@ class AbstractWindowTest {
 
       Assertions.assertEquals(List.of(event), heard);
       Assertions.assertEquals("bad listener", reported.getFirst().getMessage());
+    }
+  }
+
+  @Test
+  void loadListenerThatLeftHearsNoMore() {
+    try (FakeApplication application = new FakeApplication()) {
+      FakeWindow window = application.openFake();
+      List<LoadEvent> heard = new ArrayList<>();
+      EventSubscription subscription = window.onLoad(heard::add);
+      LoadEvent started = LoadEvent.of(LoadState.STARTED, "app://local/x");
+      window.emit(started);
+
+      subscription.unlisten();
+      window.emit(LoadEvent.of(LoadState.FINISHED, "app://local/x"));
+
+      Assertions.assertEquals(List.of(started), heard);
     }
   }
 

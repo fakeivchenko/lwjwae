@@ -5,6 +5,8 @@ import dev.ivchenko.lwjwae.exception.UpdateRejectedException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -31,6 +33,16 @@ class UpdaterTest {
         new UpdateParameters(server.url("/manifest.json"), server.publicKey(), current),
         installer,
         quit);
+  }
+
+  /** An updater that gives up on a server after half a second. */
+  private static Updater impatient(UpdateServer server, UpdateInstaller installer) {
+    return new Updater(
+        new UpdateParameters(server.url("/manifest.json"), server.publicKey(), "1.0.0"),
+        installer,
+        () -> {},
+        Duration.ofMillis(500),
+        Duration.ofMillis(500));
   }
 
   private static Throwable failure(CompletableFuture<?> future) {
@@ -121,6 +133,66 @@ class UpdaterTest {
   }
 
   @Test
+  void serverThatNeverAnswersFailsTheCheck(@TempDir Path directory) throws Exception {
+    try (UpdateServer server = new UpdateServer();
+        Updater updater = UpdaterTest.impatient(server, new RecordingInstaller(directory))) {
+      server.release("1.3.0", "1.0.0", ARTIFACT);
+      server.silent("/manifest.json");
+
+      Assertions.assertInstanceOf(
+          UpdateDownloadFailedException.class, UpdaterTest.failure(updater.check()));
+    }
+  }
+
+  @Test
+  void downloadWhoseBodyStopsArrivingFailsAndLeavesNothing(@TempDir Path directory)
+      throws Exception {
+    try (UpdateServer server = new UpdateServer();
+        Updater updater = UpdaterTest.impatient(server, new RecordingInstaller(directory))) {
+      server.release("1.3.0", "1.0.0", ARTIFACT);
+      Update update = updater.check().join().orElseThrow();
+      server.stalling("/app.bin", new byte[1000], ARTIFACT.length);
+
+      Throwable failure = UpdaterTest.failure(updater.download(update));
+
+      Assertions.assertInstanceOf(UpdateDownloadFailedException.class, failure);
+      Assertions.assertTrue(
+          String.valueOf(failure.getCause().getMessage()).startsWith("Nothing arrived"),
+          String.valueOf(failure.getCause()));
+      try (var left = Files.list(directory)) {
+        Assertions.assertEquals(0, left.count(), "no part of the file stays behind");
+      }
+    }
+  }
+
+  @Test
+  void manifestLargerThanAnyRealOneIsRejected(@TempDir Path directory) throws Exception {
+    try (UpdateServer server = new UpdateServer();
+        Updater updater = UpdaterTest.updater(server, "1.0.0", new RecordingInstaller(directory))) {
+      server.release("1.3.0", "1.0.0", ARTIFACT);
+      server.file("/manifest.json", new byte[Updater.MANIFEST_LIMIT + 1]);
+
+      Assertions.assertInstanceOf(
+          UpdateRejectedException.class, UpdaterTest.failure(updater.check()));
+    }
+  }
+
+  @Test
+  void expiredManifestIsRejectedAndOneThatStillHoldsIsBelieved(@TempDir Path directory)
+      throws Exception {
+    try (UpdateServer server = new UpdateServer();
+        Updater updater = UpdaterTest.updater(server, "1.0.0", new RecordingInstaller(directory))) {
+      server.signed("/manifest.json", UpdaterTest.manifestExpiring(Instant.now().minusSeconds(60)));
+      Throwable failure = UpdaterTest.failure(updater.check());
+      Assertions.assertInstanceOf(UpdateRejectedException.class, failure);
+      Assertions.assertTrue(failure.getMessage().contains("expired"), failure.getMessage());
+
+      server.signed("/manifest.json", UpdaterTest.manifestExpiring(Instant.now().plusSeconds(600)));
+      Assertions.assertEquals("1.3.0", updater.check().join().orElseThrow().version());
+    }
+  }
+
+  @Test
   void missingManifestFailsTheDownload(@TempDir Path directory) throws Exception {
     try (UpdateServer server = new UpdateServer();
         Updater updater = UpdaterTest.updater(server, "1.0.0", new RecordingInstaller(directory))) {
@@ -140,5 +212,14 @@ class UpdaterTest {
       Assertions.assertThrows(
           UnsupportedOperationException.class, () -> updater.installAndRestart(downloaded));
     }
+  }
+
+  /** A manifest of 1.3.0 for this platform that expires at {@code expires}. */
+  private static byte[] manifestExpiring(Instant expires) {
+    String manifest =
+        "{\"version\":\"1.3.0\",\"expires\":\"%s\",\"artifacts\":{\"%s\":"
+                .formatted(expires, UpdatePlatform.key())
+            + "{\"url\":\"app.bin\",\"sha256\":\"00\",\"size\":1}}}";
+    return manifest.getBytes(StandardCharsets.UTF_8);
   }
 }

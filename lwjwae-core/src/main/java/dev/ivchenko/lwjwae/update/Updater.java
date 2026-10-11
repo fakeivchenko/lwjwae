@@ -17,6 +17,7 @@ import java.nio.file.StandardCopyOption;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.HexFormat;
 import java.util.Objects;
 import java.util.Optional;
@@ -44,6 +45,12 @@ import java.util.function.Supplier;
  * the private key signed for. A version that isn't newer than the running one is no update, so a
  * manifest can't take the application back.
  *
+ * <p>A signature says who wrote a manifest, not when. A manifest with an {@code expires} instant is
+ * refused after it, so a server that someone else controls can't keep serving an old signed one,
+ * and keep the application from the release that fixes it, for longer than that. Every request has
+ * a timeout, a body that stops arriving fails, and the manifest and its signature are read only up
+ * to a size that no real one reaches.
+ *
  * <p>Each platform installs its own package: the {@code .msi} on Windows, the {@code .app} bundle
  * on macOS, and the AppImage on Linux. {@link #installAndRestart} hands the file to a process of
  * the system that waits for the application to quit, puts the new version in place, and starts it.
@@ -53,7 +60,21 @@ import java.util.function.Supplier;
  * <p>Every method is safe to call from any thread. The network calls run on virtual threads.
  */
 public final class Updater implements AutoCloseable {
+  private static final System.Logger LOG = System.getLogger(Updater.class.getName());
   private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(20);
+
+  /** How long a server may take to answer a request with its headers. */
+  private static final Duration ANSWER_TIMEOUT = Duration.ofSeconds(30);
+
+  /** How long the body of an answer may go without a byte before the request fails. */
+  private static final Duration IDLE_TIMEOUT = Duration.ofSeconds(60);
+
+  /** The largest manifest that is read; a real one takes a few hundred bytes. */
+  static final int MANIFEST_LIMIT = 1024 * 1024;
+
+  /** The largest signature that is read: an Ed25519 signature in Base64 takes 88 bytes. */
+  static final int SIGNATURE_LIMIT = 1024;
+
   private static final int BUFFER_SIZE = 64 * 1024;
   private static final double PROGRESS_STEP = 0.01;
 
@@ -61,6 +82,8 @@ public final class Updater implements AutoCloseable {
   private final UpdateInstaller installer;
   private final Runnable quit;
   private final HttpClient client;
+  private final Duration answerTimeout;
+  private final Duration idleTimeout;
   private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
 
   /**
@@ -74,9 +97,26 @@ public final class Updater implements AutoCloseable {
   }
 
   Updater(UpdateParameters parameters, UpdateInstaller installer, Runnable quit) {
+    this(parameters, installer, quit, ANSWER_TIMEOUT, IDLE_TIMEOUT);
+  }
+
+  /**
+   * The same, with timeouts of its own.
+   *
+   * @param answerTimeout How long a server may take to send the headers of an answer.
+   * @param idleTimeout How long the body of an answer may go without a byte.
+   */
+  Updater(
+      UpdateParameters parameters,
+      UpdateInstaller installer,
+      Runnable quit,
+      Duration answerTimeout,
+      Duration idleTimeout) {
     this.parameters = Objects.requireNonNull(parameters, "parameters");
     this.installer = installer;
     this.quit = Objects.requireNonNull(quit, "quit");
+    this.answerTimeout = answerTimeout;
+    this.idleTimeout = idleTimeout;
     this.client =
         HttpClient.newBuilder()
             .connectTimeout(CONNECT_TIMEOUT)
@@ -95,8 +135,8 @@ public final class Updater implements AutoCloseable {
    * if its version is newer than the running one.
    *
    * <p>The future fails with an {@link UpdateRejectedException} for a signature that isn't the one
-   * of the key, or a manifest that isn't one, and with an {@link UpdateDownloadFailedException}
-   * when either can't be downloaded.
+   * of the key, a manifest that isn't one or that expired, or a file too large to be either, and
+   * with an {@link UpdateDownloadFailedException} when either can't be downloaded.
    */
   public CompletableFuture<Optional<Update>> check() {
     return this.async(this::checkNow);
@@ -154,19 +194,30 @@ public final class Updater implements AutoCloseable {
 
   private Optional<Update> checkNow() {
     URI manifestUrl = this.parameters.manifestUrl();
-    byte[] manifest = this.fetch(manifestUrl);
-    byte[] signature = this.fetch(URI.create(manifestUrl + ".sig"));
+    byte[] manifest = this.fetch(manifestUrl, MANIFEST_LIMIT);
+    byte[] signature = this.fetch(URI.create(manifestUrl + ".sig"), SIGNATURE_LIMIT);
     UpdateSignatures.verify(this.parameters.publicKey(), manifest, signature);
     UpdateManifest parsed =
         UpdateManifest.parse(new String(manifest, StandardCharsets.UTF_8), manifestUrl);
+    if (parsed.expires() != null && Instant.now().isAfter(parsed.expires())) {
+      throw new UpdateRejectedException("The manifest expired at " + parsed.expires());
+    }
     String current = this.parameters.currentVersion();
     if (VersionOrder.compare(parsed.version(), current) <= 0) {
+      LOG.log(
+          System.Logger.Level.DEBUG,
+          () ->
+              manifestUrl + " offers " + parsed.version() + ", which isn't newer than " + current);
       return Optional.empty();
     }
     UpdateArtifact artifact = parsed.artifacts().get(UpdatePlatform.key());
     if (artifact == null) {
+      LOG.log(
+          System.Logger.Level.DEBUG,
+          () -> manifestUrl + " has no file for " + UpdatePlatform.key());
       return Optional.empty();
     }
+    LOG.log(System.Logger.Level.DEBUG, () -> manifestUrl + " offers " + parsed.version());
     boolean mandatory =
         parsed.minimumVersion() != null
             && VersionOrder.compare(current, parsed.minimumVersion()) < 0;
@@ -186,12 +237,11 @@ public final class Updater implements AutoCloseable {
       Path file = directory.resolve(".lwjwae-update-" + name);
       Path partial = directory.resolve(file.getFileName() + ".part");
       HttpResponse<InputStream> response =
-          this.client.send(
-              HttpRequest.newBuilder(artifact.url()).GET().build(),
-              HttpResponse.BodyHandlers.ofInputStream());
+          this.client.send(this.request(artifact.url()), HttpResponse.BodyHandlers.ofInputStream());
       MessageDigest digest = MessageDigest.getInstance("SHA-256");
       long written = 0;
-      try (InputStream in = response.body();
+      try (InputStream in =
+              new IdleTimeoutInputStream(response.body(), this.idleTimeout, artifact.url());
           OutputStream out = Files.newOutputStream(partial)) {
         Updater.requireOk(response, artifact.url());
         byte[] buffer = new byte[BUFFER_SIZE];
@@ -210,6 +260,9 @@ public final class Updater implements AutoCloseable {
             progress.accept(Math.min(1, fraction));
           }
         }
+      } catch (IOException | RuntimeException e) {
+        Files.deleteIfExists(partial);
+        throw e;
       }
       String sha256 = HexFormat.of().formatHex(digest.digest());
       if (written != artifact.size() || !sha256.equals(artifact.sha256())) {
@@ -231,19 +284,33 @@ public final class Updater implements AutoCloseable {
     }
   }
 
-  private byte[] fetch(URI url) {
+  /**
+   * Reads the file at {@code url}, of at most {@code limit} bytes.
+   *
+   * @throws UpdateRejectedException If the file is larger.
+   */
+  private byte[] fetch(URI url, int limit) {
     try {
-      HttpResponse<byte[]> response =
-          this.client.send(
-              HttpRequest.newBuilder(url).GET().build(), HttpResponse.BodyHandlers.ofByteArray());
-      Updater.requireOk(response, url);
-      return response.body();
+      HttpResponse<InputStream> response =
+          this.client.send(this.request(url), HttpResponse.BodyHandlers.ofInputStream());
+      try (InputStream in = new IdleTimeoutInputStream(response.body(), this.idleTimeout, url)) {
+        Updater.requireOk(response, url);
+        byte[] body = in.readNBytes(limit + 1);
+        if (body.length > limit) {
+          throw new UpdateRejectedException(url + " is larger than " + limit + " bytes");
+        }
+        return body;
+      }
     } catch (IOException e) {
       throw new UpdateDownloadFailedException("Can't download " + url, e);
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
       throw new UpdateDownloadFailedException("Interrupted while downloading " + url, e);
     }
+  }
+
+  private HttpRequest request(URI url) {
+    return HttpRequest.newBuilder(url).timeout(this.answerTimeout).GET().build();
   }
 
   private static void requireOk(HttpResponse<?> response, URI url) {

@@ -3,6 +3,7 @@ package dev.ivchenko.lwjwae;
 import dev.ivchenko.lwjwae.bridge.BridgeProtocol;
 import dev.ivchenko.lwjwae.testing.FakeApplication;
 import dev.ivchenko.lwjwae.testing.FakeWindow;
+import dev.ivchenko.lwjwae.testing.PageGrants;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
@@ -17,7 +18,7 @@ class StorePageTest {
   void thePageRunsSqlOnTheStoreOfTheApplication(@TempDir Path directory) throws Exception {
     ApplicationParameters parameters =
         ApplicationParameters.builder().name("notes").dataDirectory(directory).build();
-    try (FakeApplication application = new FakeApplication(parameters)) {
+    try (FakeApplication application = new FakeApplication(PageGrants.every(parameters))) {
       FakeWindow window = application.openFake();
       window.call(
           1,

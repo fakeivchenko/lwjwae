@@ -497,8 +497,14 @@ public interface Window extends AutoCloseable {
   /** The same as {@link #once(String, Consumer)}, with the payload decoded by the codec. */
   <T> EventSubscription once(String name, Class<T> type, Consumer<T> listener);
 
-  /** Registers a listener for the load lifecycle of every navigation. Runs on the UI thread. */
-  void onLoad(Consumer<LoadEvent> listener);
+  /**
+   * Registers a listener for the load lifecycle of every navigation.
+   *
+   * @param listener Receives the events on the UI thread, as the engine reports them, so it must
+   *     return quickly.
+   * @return The subscription, to stop listening.
+   */
+  EventSubscription onLoad(Consumer<LoadEvent> listener);
 
   /**
    * Registers a listener for every change of the window: its size, its place, minimized, maximized,
@@ -531,7 +537,7 @@ public interface Window extends AutoCloseable {
    *       place of the {@code drop} event of the page; a file that isn't local is left out.
    * </ul>
    *
-   * @param listener Receives the event on a virtual thread.
+   * @param listener Receives the events on a thread of the window, one drop after the other.
    * @return The subscription, to stop listening.
    */
   EventSubscription onFileDrop(Consumer<FileDropEvent> listener);

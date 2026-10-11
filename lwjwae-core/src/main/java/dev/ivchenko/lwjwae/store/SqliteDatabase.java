@@ -137,6 +137,14 @@ final class SqliteDatabase implements AutoCloseable {
     }
   }
 
+  /**
+   * Checks the statements compiled from now on as those of a page, or stops checking them: see
+   * {@link Sqlite#authorizeForPages}.
+   */
+  void authorizeForPages(boolean pages) {
+    this.check(Sqlite.authorizeForPages(this.database(), pages), "sqlite3_set_authorizer");
+  }
+
   /** The {@code ROWID} of the last row that an {@code INSERT} added on this connection. */
   long lastInsertRowId() {
     return Sqlite.lastInsertRowId(this.database());

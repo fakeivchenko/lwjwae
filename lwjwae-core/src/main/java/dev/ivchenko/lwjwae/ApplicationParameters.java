@@ -4,6 +4,7 @@ import dev.ivchenko.lwjwae.bridge.codec.BridgeCodec;
 import dev.ivchenko.lwjwae.update.UpdateParameters;
 import dev.ivchenko.lwjwae.util.PlatformUtil;
 import java.nio.file.Path;
+import java.util.Set;
 import lombok.Builder;
 
 /**
@@ -50,6 +51,9 @@ import lombok.Builder;
  * @param updates Where {@link Application#updater()} looks for updates, and the key that signs
  *     them. Default: the ones that the Gradle plugin writes into the application, {@link
  *     UpdateParameters#discover()}, or none.
+ * @param pageCapabilities What the pages of the application may do through {@code window.lwjwae}
+ *     beyond their own window, the functions that the application binds, and its events. Default:
+ *     none of them; see {@link PageCapability}.
  */
 @Builder(toBuilder = true)
 public record ApplicationParameters(
@@ -57,7 +61,8 @@ public record ApplicationParameters(
     BridgeCodec codec,
     String name,
     Path dataDirectory,
-    UpdateParameters updates) {
+    UpdateParameters updates,
+    Set<PageCapability> pageCapabilities) {
   /** The system property that supplies {@link #devServerUrl()} when the builder leaves it unset. */
   public static final String DEV_SERVER_URL_PROPERTY = "lwjwae.devServerUrl";
 
@@ -86,6 +91,7 @@ public record ApplicationParameters(
     if (updates == null) {
       updates = UpdateParameters.discover().orElse(null);
     }
+    pageCapabilities = pageCapabilities == null ? Set.of() : Set.copyOf(pageCapabilities);
   }
 
   /** The directory of the platform for the data of the application {@code name}. */

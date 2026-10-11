@@ -32,8 +32,9 @@ public class FakeApplication extends AbstractApplication {
   /** Every count that the icon was asked to show. */
   public final List<Integer> shownBadgeCounts = new CopyOnWriteArrayList<>();
 
+  /** The defaults, with every page capability: the tests of the page API are about the API. */
   public FakeApplication() {
-    this(ApplicationParameters.createDefault());
+    this(PageGrants.every());
   }
 
   public FakeApplication(ApplicationParameters parameters) {

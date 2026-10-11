@@ -2,6 +2,8 @@ package dev.ivchenko.lwjwae.bridge;
 
 import dev.ivchenko.lwjwae.Window;
 import dev.ivchenko.lwjwae.util.ThrowableUtil;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -49,7 +51,8 @@ public final class MessageRpcCalls {
       ThrowableUtil.report(new IllegalStateException("Malformed bridge message"));
       return null;
     }
-    if (!fields[1].equals(this.token)) {
+    if (!MessageDigest.isEqual(
+        fields[1].getBytes(StandardCharsets.UTF_8), this.token.getBytes(StandardCharsets.UTF_8))) {
       ThrowableUtil.report(new IllegalStateException("Bridge message without the window token"));
       return null;
     }
@@ -65,7 +68,7 @@ public final class MessageRpcCalls {
     System.arraycopy(fields, 2, callFields, 0, 6);
     MessageRpcExchange exchange;
     try {
-      exchange = new MessageRpcExchange(this, this.channel, this.window, callFields);
+      exchange = new MessageRpcExchange(this, this.channel, this.window, fields[1], callFields);
     } catch (IllegalArgumentException e) {
       // A body that isn't Base64: dropped like any other malformed message, since this runs in a
       // callback of the engine, where an exception must not unwind into native code.

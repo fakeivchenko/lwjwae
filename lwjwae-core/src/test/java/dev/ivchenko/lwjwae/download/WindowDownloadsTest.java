@@ -12,6 +12,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -27,6 +28,15 @@ class WindowDownloadsTest {
 
   private WindowDownloads downloads(Optional<Path> asked) {
     return new WindowDownloads(null, this.page::add, _ -> CompletableFuture.completedFuture(asked));
+  }
+
+  /** Downloads that go to {@code folder} without a handler, and that never ask. */
+  private WindowDownloads downloads(Path folder) {
+    return new WindowDownloads(
+        null,
+        this.page::add,
+        _ -> CompletableFuture.completedFuture(Optional.empty()),
+        () -> folder);
   }
 
   @Test
@@ -76,12 +86,79 @@ class WindowDownloadsTest {
   void takenNameGetsNumber(@TempDir Path directory) throws Exception {
     Assertions.assertEquals(
         directory.resolve("report.pdf"), WindowDownloads.unique(directory, "report.pdf"));
-    Files.createFile(directory.resolve("report.pdf"));
+    Assertions.assertTrue(Files.exists(directory.resolve("report.pdf")), "the name is claimed");
     Files.createFile(directory.resolve("report (1).pdf"));
     Assertions.assertEquals(
         directory.resolve("report (2).pdf"), WindowDownloads.unique(directory, "report.pdf"));
     Assertions.assertEquals(
         directory.resolve("download"), WindowDownloads.unique(directory, "a/b/.."));
+  }
+
+  @Test
+  void claimedNameStaysTakenUntilItsDownloadEnds(@TempDir Path directory) throws Exception {
+    Path first = WindowDownloads.unique(directory, "notes.txt");
+    // As WebKit on macOS needs: the backend removes the file before the engine writes it.
+    Files.delete(first);
+
+    Assertions.assertEquals(
+        directory.resolve("notes (1).txt"), WindowDownloads.unique(directory, "notes.txt"));
+    WindowDownloads.release(first, false);
+    Assertions.assertEquals(first, WindowDownloads.unique(directory, "notes.txt"));
+  }
+
+  @Test
+  void withoutHandlerTheFileGoesToTheDownloadsFolder(@TempDir Path directory) throws Exception {
+    WindowDownloads downloads = this.downloads(directory);
+
+    Path path = downloads.request(REQUEST).get().orElseThrow();
+    Assertions.assertEquals(directory.resolve("report.pdf"), path);
+    long id = downloads.started(URL, path, 1000, () -> {});
+    Files.write(path, new byte[1000]);
+    downloads.ended(id, DownloadState.COMPLETED, "");
+
+    Assertions.assertEquals(1000, Files.size(path), "a completed download keeps its file");
+  }
+
+  @Test
+  void downloadThatDoesNotCompleteTakesItsClaimedFileWithIt(@TempDir Path directory)
+      throws Exception {
+    WindowDownloads downloads = this.downloads(directory);
+
+    Path canceled = downloads.request(REQUEST).get().orElseThrow();
+    Path failed = downloads.request(REQUEST).get().orElseThrow();
+    Assertions.assertNotEquals(canceled, failed);
+    downloads.ended(downloads.started(URL, canceled, 1000, () -> {}), DownloadState.CANCELED, "");
+    downloads.ended(downloads.started(URL, failed, 1000, () -> {}), DownloadState.FAILED, "lost");
+
+    Assertions.assertFalse(Files.exists(canceled));
+    Assertions.assertFalse(Files.exists(failed));
+  }
+
+  @Test
+  void closingRemovesTheClaimedFileOfADownloadThatNeverStarted(@TempDir Path directory)
+      throws Exception {
+    WindowDownloads downloads = this.downloads(directory);
+    Path decided = downloads.request(REQUEST).get().orElseThrow();
+
+    downloads.shutdown();
+
+    Assertions.assertFalse(Files.exists(decided));
+    Assertions.assertEquals(Optional.empty(), downloads.request(REQUEST).get());
+    try (Stream<Path> left = Files.list(directory)) {
+      Assertions.assertEquals(List.of(), left.toList(), "a decision after the close claims none");
+    }
+  }
+
+  @Test
+  void fileThatTheHandlerNamesStaysWhenTheDownloadFails(@TempDir Path directory) throws Exception {
+    WindowDownloads downloads = this.downloads(directory);
+    Path own = Files.writeString(directory.resolve("own.pdf"), "the application's");
+    downloads.handler(_ -> DownloadDecision.saveTo(own));
+
+    Path path = downloads.request(REQUEST).get().orElseThrow();
+    downloads.ended(downloads.started(URL, path, 1000, () -> {}), DownloadState.FAILED, "lost");
+
+    Assertions.assertEquals("the application's", Files.readString(own));
   }
 
   @Test

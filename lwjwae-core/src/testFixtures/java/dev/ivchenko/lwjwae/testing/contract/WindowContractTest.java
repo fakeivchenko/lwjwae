@@ -34,6 +34,7 @@ import dev.ivchenko.lwjwae.taskbar.TaskbarProgress;
 import dev.ivchenko.lwjwae.testing.Icons;
 import dev.ivchenko.lwjwae.testing.Loads;
 import dev.ivchenko.lwjwae.testing.LocalPages;
+import dev.ivchenko.lwjwae.testing.PageGrants;
 import dev.ivchenko.lwjwae.testing.Screenshots;
 import dev.ivchenko.lwjwae.testing.Tags;
 import dev.ivchenko.lwjwae.theme.SystemTheme;
@@ -521,7 +522,7 @@ public abstract class WindowContractTest extends DisplayContractTest {
 
   @Test
   void windowWithoutTitleBarIsControlledFromThePage() throws Exception {
-    try (Application application = Application.create()) {
+    try (Application application = Application.create(PageGrants.every())) {
       Window window =
           application.open(
               WindowParameters.builder()
@@ -845,7 +846,7 @@ public abstract class WindowContractTest extends DisplayContractTest {
       throws Exception {
     Path first = Files.writeString(directory.resolve("a file with spaces.txt"), "one");
     Path second = Files.writeString(directory.resolve("odd #1 & 100% name.txt"), "two");
-    try (Application application = Application.create()) {
+    try (Application application = Application.create(PageGrants.every())) {
       Window window =
           application.open(
               WindowParameters.builder().title("lwjwae :: drop").size(600, 400).build());
@@ -919,7 +920,7 @@ public abstract class WindowContractTest extends DisplayContractTest {
 
   @Test
   void dialogsShowAndCancellingTheFutureClosesThem() throws Exception {
-    try (Application application = Application.create()) {
+    try (Application application = Application.create(PageGrants.every())) {
       Window window =
           application.open(
               WindowParameters.builder().title("lwjwae :: dialogs").size(640, 480).build());
@@ -1041,7 +1042,7 @@ public abstract class WindowContractTest extends DisplayContractTest {
 
   @Test
   void contextMenusOpenFromJavaAndThePage() throws Exception {
-    try (Application application = Application.create()) {
+    try (Application application = Application.create(PageGrants.every())) {
       Window window =
           application.open(
               WindowParameters.builder().title("lwjwae :: context menu").size(640, 480).build());
@@ -1147,7 +1148,7 @@ public abstract class WindowContractTest extends DisplayContractTest {
   void thePageQueriesTheStoreOfTheApplication(@TempDir Path directory) throws Exception {
     ApplicationParameters parameters =
         ApplicationParameters.builder().name("lwjwae-store").dataDirectory(directory).build();
-    try (Application application = Application.create(parameters)) {
+    try (Application application = Application.create(PageGrants.every(parameters))) {
       application.store().executeScript("CREATE TABLE tasks (title TEXT UNIQUE, hours INTEGER)");
       application.store().execute("INSERT INTO tasks VALUES (?, ?)", "from Java", 1);
       Window window =
@@ -1408,7 +1409,7 @@ public abstract class WindowContractTest extends DisplayContractTest {
   void textGoesThroughTheClipboardBetweenJavaAndThePage() throws Exception {
     Assumptions.assumeTrue(
         this.canUseClipboardUnattended(), "Wayland gives the clipboard to the focused client");
-    try (Application application = Application.create()) {
+    try (Application application = Application.create(PageGrants.every())) {
       Window window =
           application.open(
               WindowParameters.builder().title("lwjwae :: clipboard").size(400, 300).build());

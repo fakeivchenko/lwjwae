@@ -25,6 +25,7 @@ import dev.ivchenko.lwjwae.menu.MenuCommands;
 import dev.ivchenko.lwjwae.menu.MenuRole;
 import dev.ivchenko.lwjwae.permission.PermissionKind;
 import dev.ivchenko.lwjwae.shortcut.Shortcut;
+import dev.ivchenko.lwjwae.util.JsonUtil;
 import dev.ivchenko.lwjwae.util.MimeTypeUtil;
 import dev.ivchenko.lwjwae.util.ResourceUtil;
 import dev.ivchenko.lwjwae.util.ScriptUtil;
@@ -41,7 +42,6 @@ import dev.ivchenko.lwjwae.windows.binding.Wide;
 import dev.ivchenko.lwjwae.windows.binding.WinRt;
 import dev.ivchenko.lwjwae.windows.binding.WindowFrame;
 import dev.ivchenko.lwjwae.windows.exception.ComCallFailedException;
-import dev.ivchenko.lwjwae.windows.util.JsonStringUtil;
 import java.lang.foreign.MemorySegment;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
@@ -1206,30 +1206,12 @@ public class WindowsWindow extends AbstractWindow {
         .name("lwjwae-resource")
         .start(
             () -> {
-              byte[] content = null;
-              RuntimeException failure = null;
-              try {
-                content = ResourceUtil.read(path);
-              } catch (RuntimeException e) {
-                failure = e;
-              }
-              byte[] read = content;
-              ResourceNotFoundException missing =
-                  failure == null
-                      ? null
-                      : failure instanceof ResourceNotFoundException notFound
-                          ? notFound
-                          : new ResourceNotFoundException(
-                              "Could not read " + path + ": " + failure.getMessage());
+              Runnable answer = this.readAnswer(arguments, uri, path);
               this.dispatcher()
                   .post(
                       () -> {
                         try {
-                          if (read != null) {
-                            this.respond(arguments, path, read);
-                          } else {
-                            this.respondNotFound(arguments, uri, missing);
-                          }
+                          answer.run();
                           WebView2.completeDeferral(deferral);
                         } finally {
                           Com.release(deferral);
@@ -1237,6 +1219,20 @@ public class WindowsWindow extends AbstractWindow {
                         }
                       });
             });
+  }
+
+  /** Reads the resource at {@code path}, and returns how to answer the request with it. */
+  private Runnable readAnswer(MemorySegment arguments, String uri, String path) {
+    try {
+      byte[] content = ResourceUtil.read(path);
+      return () -> this.respond(arguments, path, content);
+    } catch (ResourceNotFoundException e) {
+      return () -> this.respondNotFound(arguments, uri, e);
+    } catch (RuntimeException e) {
+      ResourceNotFoundException missing =
+          new ResourceNotFoundException("Could not read " + path + ": " + e.getMessage());
+      return () -> this.respondNotFound(arguments, uri, missing);
+    }
   }
 
   private void respond(MemorySegment arguments, String path, byte[] content) {
@@ -1281,7 +1277,9 @@ public class WindowsWindow extends AbstractWindow {
       result.completeExceptionally(new ComCallFailedException("ExecuteScript", hresult));
       return;
     }
-    ScriptUtil.completeTagged(result, JsonStringUtil.decode(json));
+    // The result is the JSON of the tagged string; anything else is no outcome of the script.
+    Object value = json == null ? null : JsonUtil.parse(json);
+    ScriptUtil.completeTagged(result, value instanceof String tagged ? tagged : null);
   }
 
   private void fitWebView() {

@@ -21,6 +21,7 @@ import dev.ivchenko.lwjwae.event.DownloadEvent;
 import dev.ivchenko.lwjwae.event.Event;
 import dev.ivchenko.lwjwae.event.EventSubscription;
 import dev.ivchenko.lwjwae.event.FileDropEvent;
+import dev.ivchenko.lwjwae.event.Listeners;
 import dev.ivchenko.lwjwae.event.LoadEvent;
 import dev.ivchenko.lwjwae.event.WindowEvent;
 import dev.ivchenko.lwjwae.event.WindowEvents;
@@ -59,6 +60,7 @@ import java.net.URI;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.util.Arrays;
 import java.util.Base64;
@@ -71,7 +73,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
@@ -105,6 +106,7 @@ import java.util.stream.Collectors;
  * never sees the second event of a name before the first.
  */
 public abstract class AbstractWindow implements Window {
+  private static final System.Logger LOG = System.getLogger(AbstractWindow.class.getName());
   private static final Executor HANDLER_EXECUTOR = Executors.newVirtualThreadPerTaskExecutor();
   private static final SecureRandom TOKENS = new SecureRandom();
 
@@ -113,7 +115,7 @@ public abstract class AbstractWindow implements Window {
 
   private final AbstractApplication application;
   private final long id;
-  private final List<Consumer<LoadEvent>> loadListeners = new CopyOnWriteArrayList<>();
+  private final Listeners<LoadEvent> loadListeners = new Listeners<>("lwjwae-load");
   private final Map<String, String> bindingScripts = new ConcurrentHashMap<>();
   private final Map<String, RpcHandler> rpcHandlers = new ConcurrentHashMap<>();
   private final EventListeners listeners = new EventListeners("lwjwae-events");
@@ -122,7 +124,11 @@ public abstract class AbstractWindow implements Window {
   private final WindowDownloads downloads =
       new WindowDownloads(
           this,
-          json -> this.pageEvents.send(BridgeProtocol.DOWNLOADS_EVENT, json, false),
+          json -> {
+            if (this.allows(PageCapability.DOWNLOADS)) {
+              this.pageEvents.send(BridgeProtocol.DOWNLOADS_EVENT, json, false);
+            }
+          },
           fileName ->
               this.showSaveDialog(SaveDialogParameters.builder().fileName(fileName).build()));
   private final String token = AbstractWindow.newToken();
@@ -145,7 +151,7 @@ public abstract class AbstractWindow implements Window {
   private volatile Consumer<String> externalLinkHandler;
   private volatile Function<PermissionRequest, PermissionDecision> permissionHandler;
   private volatile EventSubscription themeSubscription;
-  private final List<Consumer<FileDropEvent>> fileDropListeners = new CopyOnWriteArrayList<>();
+  private final Listeners<FileDropEvent> fileDropListeners = new Listeners<>("lwjwae-file-drop");
 
   /**
    * Records the owner and the ID. The subclass creates the native window afterwards.
@@ -193,8 +199,8 @@ public abstract class AbstractWindow implements Window {
   }
 
   @Override
-  public final void onLoad(Consumer<LoadEvent> listener) {
-    this.loadListeners.add(Objects.requireNonNull(listener, "listener"));
+  public final EventSubscription onLoad(Consumer<LoadEvent> listener) {
+    return this.loadListeners.listen(Objects.requireNonNull(listener, "listener"));
   }
 
   @Override
@@ -350,13 +356,17 @@ public abstract class AbstractWindow implements Window {
     }
     if ("OPTIONS".equals(exchange.method())) {
       cors.put("Access-Control-Allow-Methods", "POST");
-      cors.put("Access-Control-Allow-Headers", "Content-Type");
+      cors.put("Access-Control-Allow-Headers", "Content-Type, " + RpcExchange.TOKEN_HEADER);
       cors.put("Access-Control-Max-Age", "600");
       exchange.reply(204, cors, new byte[0]);
       return;
     }
     if (origin != null && !this.isTrustedOrigin(origin)) {
       this.refuse(exchange, 403, cors, "forbidden", "Origin " + origin + " may not call Java");
+      return;
+    }
+    if (!this.carriesToken(exchange)) {
+      this.refuse(exchange, 403, cors, "forbidden", "The call doesn't carry the window token");
       return;
     }
     String path = exchange.path();
@@ -421,16 +431,60 @@ public abstract class AbstractWindow implements Window {
     return switch (name) {
       case BridgeProtocol.EVENTS_CALL -> this.pageEvents::serve;
       case BridgeProtocol.EVENT_CALL -> this::emitFromPage;
-      case BridgeProtocol.OPEN_CALL -> this::openFromPage;
-      case BridgeProtocol.CLOSE_CALL -> _ -> this.close();
+      case BridgeProtocol.OPEN_CALL ->
+          this.needing(PageCapability.OPEN_WINDOWS, this::openFromPage);
+      case BridgeProtocol.CLOSE_CALL -> this.needing(PageCapability.WINDOW, _ -> this.close());
       case BridgeProtocol.CONTROL_CALL -> this::controlFromPage;
-      case BridgeProtocol.CLIPBOARD_CALL -> this::clipboardFromPage;
-      case BridgeProtocol.DIALOG_CALL -> this::dialogFromPage;
+      case BridgeProtocol.CLIPBOARD_CALL ->
+          this.needing(PageCapability.CLIPBOARD, this::clipboardFromPage);
+      case BridgeProtocol.DIALOG_CALL -> this.needing(PageCapability.DIALOGS, this::dialogFromPage);
       case BridgeProtocol.MENU_CALL -> this::menuFromPage;
-      case BridgeProtocol.STORE_CALL -> this::storeFromPage;
-      case BridgeProtocol.UPDATE_CALL -> this::updateFromPage;
+      case BridgeProtocol.STORE_CALL -> this.needing(PageCapability.STORE, this::storeFromPage);
+      case BridgeProtocol.UPDATE_CALL -> this.needing(PageCapability.UPDATES, this::updateFromPage);
       default -> null;
     };
+  }
+
+  /** Whether the application granted its pages {@code capability}. */
+  private boolean allows(PageCapability capability) {
+    return this.application.parameters().pageCapabilities().contains(capability);
+  }
+
+  /**
+   * Refuses the call of the page unless the application granted {@code capability}.
+   *
+   * @throws RpcException With status 403 and code {@code capability}, which names it.
+   */
+  private void require(PageCapability capability) {
+    if (!this.allows(capability)) {
+      LOG.log(
+          System.Logger.Level.WARNING,
+          () -> "The page of window " + this.id + " needs PageCapability." + capability.name());
+      throw RpcException.forbidden(
+          "capability",
+          "The page needs PageCapability."
+              + capability.name()
+              + ", which ApplicationParameters.pageCapabilities grants");
+    }
+  }
+
+  /** {@code handler}, behind {@link #require}. */
+  private RpcHandler needing(PageCapability capability, RpcHandler handler) {
+    return call -> {
+      this.require(capability);
+      handler.handle(call);
+    };
+  }
+
+  /**
+   * Whether {@code exchange} carries the token of this window. The origin alone isn't enough: an
+   * engine may leave the {@code Origin} header out, and a missing one must not open the handlers.
+   */
+  private boolean carriesToken(RpcExchange exchange) {
+    String carried = exchange.header(RpcExchange.TOKEN_HEADER);
+    return carried != null
+        && MessageDigest.isEqual(
+            carried.getBytes(StandardCharsets.UTF_8), this.token.getBytes(StandardCharsets.UTF_8));
   }
 
   private boolean isTrustedOrigin(String origin) {
@@ -448,6 +502,10 @@ public abstract class AbstractWindow implements Window {
 
   private void refuse(
       RpcExchange exchange, int status, Map<String, String> cors, String code, String message) {
+    LOG.log(
+        System.Logger.Level.WARNING,
+        () ->
+            "Refused " + exchange.path() + " in window " + this.id + ": " + status + " " + message);
     Map<String, String> headers = new LinkedHashMap<>(cors);
     headers.put("Content-Type", "application/json");
     exchange.reply(
@@ -553,6 +611,15 @@ public abstract class AbstractWindow implements Window {
   private void controlFromPage(RpcCall call) {
     String[] parts = call.text().split(BridgeProtocol.SEPARATOR, 2);
     String argument = parts.length > 1 ? parts[1] : "";
+    switch (parts[0]) {
+      case "minimize", "maximize", "restore", "toggle-maximize", "fullscreen", "close" ->
+          this.require(PageCapability.WINDOW);
+      case "progress", "badge" -> this.require(PageCapability.TASKBAR);
+      case "cancel-download" -> this.require(PageCapability.DOWNLOADS);
+      default -> {
+        // Moves and resizes follow the pointer of the user, and the rest only reads.
+      }
+    }
     switch (parts[0]) {
       case "minimize" -> this.minimize();
       case "maximize" -> this.maximize();
@@ -709,9 +776,7 @@ public abstract class AbstractWindow implements Window {
 
   @Override
   public final EventSubscription onFileDrop(Consumer<FileDropEvent> listener) {
-    Objects.requireNonNull(listener, "listener");
-    this.fileDropListeners.add(listener);
-    return () -> this.fileDropListeners.remove(listener);
+    return this.fileDropListeners.listen(Objects.requireNonNull(listener, "listener"));
   }
 
   /**
@@ -732,17 +797,10 @@ public abstract class AbstractWindow implements Window {
     payload.put("paths", event.paths().stream().map(Path::toString).toList());
     payload.put("x", x);
     payload.put("y", y);
-    this.pageEvents.send(BridgeProtocol.FILES_EVENT, JsonUtil.write(payload), false);
-    for (Consumer<FileDropEvent> listener : this.fileDropListeners) {
-      HANDLER_EXECUTOR.execute(
-          () -> {
-            try {
-              listener.accept(event);
-            } catch (Throwable t) {
-              ThrowableUtil.report(t);
-            }
-          });
+    if (this.allows(PageCapability.FILES)) {
+      this.pageEvents.send(BridgeProtocol.FILES_EVENT, JsonUtil.write(payload), false);
     }
+    this.fileDropListeners.deliver(event);
   }
 
   @Override
@@ -1261,6 +1319,7 @@ public abstract class AbstractWindow implements Window {
         pageIds = Map.of();
       }
       case "popup" -> {
+        this.require(PageCapability.MENUS);
         PageMenu menu = parts.length < 4 ? null : BridgeProtocol.parseMenu(parts[3]);
         if (menu == null) {
           throw RpcException.badRequest("malformed-menu", "Malformed entries");
@@ -1367,13 +1426,7 @@ public abstract class AbstractWindow implements Window {
 
   /** Runs the load listeners. A backend calls this from its load callbacks, on the UI thread. */
   protected final void emitLoad(LoadEvent event) {
-    for (Consumer<LoadEvent> listener : this.loadListeners) {
-      try {
-        listener.accept(event);
-      } catch (Throwable t) {
-        ThrowableUtil.report(t);
-      }
-    }
+    this.loadListeners.deliverHere(event);
   }
 
   /**
@@ -1404,6 +1457,8 @@ public abstract class AbstractWindow implements Window {
     this.pageEvents.close();
     this.windowEvents.shutdown();
     this.downloads.shutdown();
+    this.fileDropListeners.shutdown();
+    this.loadListeners.shutdown();
     this.dialogs.forEach(dialog -> dialog.future().cancel(false));
     MessageRpcCalls calls = this.messageCalls;
     if (calls != null) {

@@ -675,6 +675,29 @@ class AbstractApplicationTest {
     }
   }
 
+  @Test
+  void listenerThatThrowsOnAnEarlyRequestStillHearsTheNextOne() {
+    try (FakeApplication application = new FakeApplication()) {
+      ((AbstractApplication) application).openArguments(List.of("notes://first"));
+      ((AbstractApplication) application).openArguments(List.of("notes://second"));
+      List<OpenEvent> heard = new CopyOnWriteArrayList<>();
+
+      Assertions.assertDoesNotThrow(
+          () ->
+              application.onOpen(
+                  request -> {
+                    heard.add(request);
+                    throw new IllegalStateException("thrown on purpose by the test");
+                  }));
+
+      Assertions.assertEquals(
+          List.of(
+              new OpenEvent(List.of(URI.create("notes://first")), List.of()),
+              new OpenEvent(List.of(URI.create("notes://second")), List.of())),
+          heard);
+    }
+  }
+
   private static void serveInstances(AbstractApplication application, Path directory) {
     application.serveInstances(
         InstanceLocks.claim(directory, "app", AbstractApplicationTest.start()).orElseThrow());

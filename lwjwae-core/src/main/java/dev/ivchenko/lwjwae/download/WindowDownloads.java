@@ -3,26 +3,27 @@ package dev.ivchenko.lwjwae.download;
 import dev.ivchenko.lwjwae.Window;
 import dev.ivchenko.lwjwae.event.DownloadEvent;
 import dev.ivchenko.lwjwae.event.EventSubscription;
+import dev.ivchenko.lwjwae.event.Listeners;
 import dev.ivchenko.lwjwae.util.JsonUtil;
 import dev.ivchenko.lwjwae.util.PlatformUtil;
 import dev.ivchenko.lwjwae.util.ThrowableUtil;
 import java.io.IOException;
 import java.net.URI;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 /**
  * The downloads of one window: who decides where they go, and who hears how they get on.
@@ -38,22 +39,35 @@ import java.util.function.Function;
  * second. Only the first report of each tenth of a second becomes an event, and the last state goes
  * with the event that ends the download. The listeners run on a virtual thread of the window, one
  * event after the other, so that none sees a download end before it started.
+ *
+ * <p>A file in the downloads folder is claimed when the download is decided: it's created empty,
+ * and the name stays taken in this process until the download ends, even where the engine needs to
+ * find no file there and the backend removes it first, as WebKit on macOS does. A download that
+ * doesn't complete, or never starts because its window closed, takes its claimed file with it, so
+ * no empty file stays behind. A file that the handler names belongs to the application and stays.
  */
 public final class WindowDownloads {
+  private static final System.Logger LOG = System.getLogger(WindowDownloads.class.getName());
+
   /** The shortest time between two {@link DownloadState#PROGRESSED} events of a download. */
   private static final long PROGRESS_INTERVAL_NANOS = 100_000_000L;
+
+  /** The files of the downloads folder that this process claimed and whose download goes on. */
+  private static final Set<Path> CLAIMED = ConcurrentHashMap.newKeySet();
 
   private final Window window;
   private final Consumer<String> page;
   private final Function<String, CompletableFuture<Optional<Path>>> ask;
-  private final Map<Long, Consumer<DownloadEvent>> listeners = new ConcurrentHashMap<>();
+  private final Listeners<DownloadEvent> listeners = new Listeners<>("lwjwae-downloads");
   private final Map<Long, ActiveDownload> active = new ConcurrentHashMap<>();
-  private final AtomicLong listenerIds = new AtomicLong();
   private final AtomicLong downloadIds = new AtomicLong();
-  private final ExecutorService executor =
-      Executors.newSingleThreadExecutor(Thread.ofVirtual().name("lwjwae-downloads").factory());
+  private final Supplier<Path> downloadsDirectory;
+
+  /** The claimed files of this window whose download is decided and hasn't started yet. */
+  private final Set<Path> unstarted = ConcurrentHashMap.newKeySet();
 
   private volatile Function<DownloadRequest, DownloadDecision> handler;
+  private volatile boolean shut;
 
   /**
    * Creates the downloads of {@code window}.
@@ -67,9 +81,19 @@ public final class WindowDownloads {
       Window window,
       Consumer<String> page,
       Function<String, CompletableFuture<Optional<Path>>> ask) {
+    this(window, page, ask, WindowDownloads::downloadsDirectory);
+  }
+
+  /** The same, with the folder that a download goes to without a handler. */
+  WindowDownloads(
+      Window window,
+      Consumer<String> page,
+      Function<String, CompletableFuture<Optional<Path>>> ask,
+      Supplier<Path> downloadsDirectory) {
     this.window = window;
     this.page = page;
     this.ask = ask;
+    this.downloadsDirectory = downloadsDirectory;
   }
 
   /** Sets the handler that decides where a download goes; {@code null} brings the default back. */
@@ -79,9 +103,7 @@ public final class WindowDownloads {
 
   /** Registers {@code listener} for every event from now on. */
   public EventSubscription listen(Consumer<DownloadEvent> listener) {
-    long id = this.listenerIds.incrementAndGet();
-    this.listeners.put(id, listener);
-    return () -> this.listeners.remove(id);
+    return this.listeners.listen(listener);
   }
 
   /**
@@ -97,7 +119,20 @@ public final class WindowDownloads {
         .start(
             () -> {
               try {
-                result.complete(this.decide(request));
+                Optional<Path> path = this.decide(request);
+                if (this.shut && path.isPresent() && this.unstarted.remove(path.get())) {
+                  // The window closed while the handler decided: nothing will start.
+                  WindowDownloads.release(path.get(), true);
+                  path = Optional.empty();
+                }
+                Optional<Path> decided = path;
+                LOG.log(
+                    System.Logger.Level.DEBUG,
+                    () ->
+                        "The download of "
+                            + request.url()
+                            + decided.map(file -> " goes to " + file).orElse(" is denied"));
+                result.complete(path);
               } catch (Throwable t) {
                 ThrowableUtil.report(t);
                 result.complete(Optional.empty());
@@ -114,6 +149,7 @@ public final class WindowDownloads {
    */
   public long started(URI url, Path path, long totalBytes, Runnable cancel) {
     long id = this.downloadIds.incrementAndGet();
+    this.unstarted.remove(path);
     ActiveDownload download =
         new ActiveDownload(id, url, path, cancel, Math.max(-1, totalBytes), System.nanoTime());
     this.active.put(id, download);
@@ -150,6 +186,7 @@ public final class WindowDownloads {
     if (download == null) {
       return;
     }
+    WindowDownloads.release(download.path, state != DownloadState.COMPLETED);
     if (state == DownloadState.COMPLETED) {
       try {
         download.receivedBytes = Files.size(download.path);
@@ -175,26 +212,30 @@ public final class WindowDownloads {
     return true;
   }
 
-  /** Stops the delivery: the window is gone. */
-  public void shutdown() {
-    this.active.clear();
-    this.executor.shutdown();
-  }
-
   /**
-   * A file in the downloads folder of the user for a download named {@code suggestedFileName}, with
-   * a number added to the name where a file of that name is there, as {@code report (1).pdf}.
+   * Stops the delivery: the window is gone. A claimed file whose download never started goes; one
+   * whose download goes on belongs to the engine until the download ends.
    */
-  public static Path defaultPath(String suggestedFileName) {
-    return WindowDownloads.unique(WindowDownloads.downloadsDirectory(), suggestedFileName);
+  public void shutdown() {
+    this.shut = true;
+    for (Path path : List.copyOf(this.unstarted)) {
+      if (this.unstarted.remove(path)) {
+        WindowDownloads.release(path, true);
+      }
+    }
+    this.active.clear();
+    this.listeners.shutdown();
   }
 
   private Optional<Path> decide(DownloadRequest request) throws IOException {
     Function<DownloadRequest, DownloadDecision> current = this.handler;
-    DownloadDecision decision =
-        current == null
-            ? DownloadDecision.saveTo(WindowDownloads.defaultPath(request.suggestedFileName()))
-            : current.apply(request);
+    if (current == null) {
+      Path claimed =
+          WindowDownloads.unique(this.downloadsDirectory.get(), request.suggestedFileName());
+      this.unstarted.add(claimed);
+      return Optional.of(claimed);
+    }
+    DownloadDecision decision = current.apply(request);
     if (decision == null) {
       return Optional.empty();
     }
@@ -231,24 +272,7 @@ public final class WindowDownloads {
     payload.put("totalBytes", event.totalBytes());
     payload.put("failure", event.failure());
     this.page.accept(JsonUtil.write(payload));
-    if (this.listeners.isEmpty() || this.executor.isShutdown()) {
-      return;
-    }
-    List<Consumer<DownloadEvent>> current = List.copyOf(this.listeners.values());
-    try {
-      this.executor.execute(
-          () -> {
-            for (Consumer<DownloadEvent> listener : current) {
-              try {
-                listener.accept(event);
-              } catch (Throwable t) {
-                ThrowableUtil.report(t);
-              }
-            }
-          });
-    } catch (RejectedExecutionException _) {
-      // The window closed between the check and the delivery.
-    }
+    this.listeners.deliver(event);
   }
 
   /**
@@ -294,15 +318,49 @@ public final class WindowDownloads {
     return name.isEmpty() || name.equals(".") || name.equals("..") ? "download" : name;
   }
 
-  static Path unique(Path directory, String suggested) {
+  /**
+   * Claims a file in {@code directory} for a download named {@code suggested}, with a number added
+   * to the name where a file of that name is there, as {@code report (1).pdf}, or where this
+   * process claimed the name for a download that goes on. The file is created empty, which claims
+   * the name against other processes too.
+   *
+   * @throws IOException If the file can't be created.
+   */
+  static Path unique(Path directory, String suggested) throws IOException {
     String name = WindowDownloads.fileName(suggested);
-    Path path = directory.resolve(name);
+    Path folder = directory.toAbsolutePath().normalize();
+    Path path = folder.resolve(name);
     int dot = name.lastIndexOf('.');
     String stem = dot > 0 ? name.substring(0, dot) : name;
     String extension = dot > 0 ? name.substring(dot) : "";
-    for (int number = 1; Files.exists(path); number++) {
-      path = directory.resolve(stem + " (" + number + ")" + extension);
+    for (int number = 1; ; number++) {
+      if (CLAIMED.add(path)) {
+        try {
+          return Files.createFile(path);
+        } catch (FileAlreadyExistsException _) {
+          CLAIMED.remove(path);
+        } catch (IOException | RuntimeException e) {
+          CLAIMED.remove(path);
+          throw e;
+        }
+      }
+      path = folder.resolve(stem + " (" + number + ")" + extension);
     }
-    return path;
+  }
+
+  /**
+   * Gives up the claim of this process on {@code path}, if it has one, and removes the file if
+   * {@code discard}: the download that it was claimed for didn't complete, so nothing in it is
+   * worth keeping. A file that this process didn't claim is never touched.
+   */
+  static void release(Path path, boolean discard) {
+    if (!CLAIMED.remove(path.toAbsolutePath().normalize()) || !discard) {
+      return;
+    }
+    try {
+      Files.deleteIfExists(path);
+    } catch (IOException e) {
+      ThrowableUtil.report(e);
+    }
   }
 }

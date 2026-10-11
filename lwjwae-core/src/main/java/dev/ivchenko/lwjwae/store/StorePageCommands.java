@@ -17,6 +17,9 @@ import lombok.experimental.UtilityClass;
  * {"changes": n, "lastInsertRowId": id}} for an execute, nothing for a script, and the rows of
  * every statement of a transaction, which {@code RETURNING} fills for a write. JSON has no bytes,
  * so a {@code BLOB} goes to the page as Base64.
+ *
+ * <p>A command runs under {@link Store#forPage}: the SQL of a page keeps to the file of the store,
+ * and may not attach another one, write a copy elsewhere, or change how SQLite writes.
  */
 @UtilityClass
 public class StorePageCommands {
@@ -28,6 +31,10 @@ public class StorePageCommands {
    *     number of statements or parameters.
    */
   public String run(Store store, String json) {
+    return store.forPage(_ -> StorePageCommands.command(store, json));
+  }
+
+  private String command(Store store, String json) {
     if (!(JsonUtil.parse(json) instanceof Map<?, ?> command)) {
       throw new IllegalArgumentException("A command is a JSON object: " + json);
     }

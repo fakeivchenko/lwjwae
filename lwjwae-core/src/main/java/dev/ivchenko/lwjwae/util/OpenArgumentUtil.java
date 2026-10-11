@@ -9,7 +9,6 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import java.util.regex.Pattern;
 import lombok.experimental.UtilityClass;
 
 /**
@@ -23,9 +22,6 @@ import lombok.experimental.UtilityClass;
  */
 @UtilityClass
 public class OpenArgumentUtil {
-  /** A scheme and its colon, as RFC 3986 spells it, of two letters or more to leave out C:. */
-  private final Pattern URL_SCHEME = Pattern.compile("[a-zA-Z][a-zA-Z0-9+.-]+:.*");
-
   /**
    * The links and the files among {@code arguments}: a URI of a scheme other than {@code file} is a
    * link, a local {@code file:} URI and a path that exists, relative to {@code workingDirectory},
@@ -38,7 +34,7 @@ public class OpenArgumentUtil {
       if (argument.isEmpty() || argument.startsWith("-")) {
         continue;
       }
-      if (URL_SCHEME.matcher(argument).matches()) {
+      if (ResourceUtil.isUrl(argument)) {
         OpenArgumentUtil.addUrl(argument, urls, files);
         continue;
       }

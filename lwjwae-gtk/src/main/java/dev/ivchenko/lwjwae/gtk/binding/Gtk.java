@@ -256,9 +256,6 @@ public class Gtk {
       NativeLibraries.downcall(GTK, "gtk_accel_group_new", Signatures.POINTER_VOID);
   private final MethodHandle WINDOW_ADD_ACCEL_GROUP =
       NativeLibraries.downcall(GTK, "gtk_window_add_accel_group", Signatures.VOID_POINTER_POINTER);
-  private final MethodHandle WINDOW_REMOVE_ACCEL_GROUP =
-      NativeLibraries.downcall(
-          GTK, "gtk_window_remove_accel_group", Signatures.VOID_POINTER_POINTER);
   private final MethodHandle WIDGET_ADD_ACCELERATOR =
       NativeLibraries.downcall(
           GTK, "gtk_widget_add_accelerator", Signatures.GTK_WIDGET_ADD_ACCELERATOR);
@@ -1071,12 +1068,6 @@ public class Gtk {
   @SneakyThrows
   public void windowAddAccelGroup(MemorySegment window, MemorySegment group) {
     WINDOW_ADD_ACCEL_GROUP.invokeExact(window, group);
-  }
-
-  /** Calls {@code gtk_window_remove_accel_group}. */
-  @SneakyThrows
-  public void windowRemoveAccelGroup(MemorySegment window, MemorySegment group) {
-    WINDOW_REMOVE_ACCEL_GROUP.invokeExact(window, group);
   }
 
   /**

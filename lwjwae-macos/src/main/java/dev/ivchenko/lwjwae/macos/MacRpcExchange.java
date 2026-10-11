@@ -30,6 +30,7 @@ final class MacRpcExchange implements RpcExchange {
   private final String method;
   private final String path;
   private final String origin;
+  private final String token;
   private final String contentType;
   private final byte[] body;
   private final Semaphore inFlight = new Semaphore(IN_FLIGHT);
@@ -43,6 +44,7 @@ final class MacRpcExchange implements RpcExchange {
     this.method = WebKit.taskMethod(task);
     this.path = WebKit.taskPath(task);
     this.origin = WebKit.taskHeader(task, "Origin");
+    this.token = WebKit.taskHeader(task, TOKEN_HEADER);
     this.contentType = WebKit.taskHeader(task, "Content-Type");
     this.body = WebKit.taskBody(task);
   }
@@ -93,6 +95,9 @@ final class MacRpcExchange implements RpcExchange {
   public String header(String name) {
     if ("Origin".equalsIgnoreCase(name)) {
       return this.origin;
+    }
+    if (TOKEN_HEADER.equalsIgnoreCase(name)) {
+      return this.token;
     }
     return "Content-Type".equalsIgnoreCase(name) ? this.contentType : null;
   }

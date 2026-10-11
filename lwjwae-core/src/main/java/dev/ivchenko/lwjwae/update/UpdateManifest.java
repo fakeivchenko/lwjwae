@@ -3,6 +3,8 @@ package dev.ivchenko.lwjwae.update;
 import dev.ivchenko.lwjwae.exception.UpdateRejectedException;
 import dev.ivchenko.lwjwae.util.JsonUtil;
 import java.net.URI;
+import java.time.Instant;
+import java.time.format.DateTimeParseException;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
@@ -13,16 +15,23 @@ import java.util.Map;
  *
  * <pre>{@code
  * {"version": "1.4.0", "notes": "...", "minimumVersion": "1.0.0",
+ *  "expires": "2026-12-01T00:00:00Z",
  *  "artifacts": {"linux-x64": {"url": "app-1.4.0-x86_64.AppImage", "sha256": "...", "size": 1}}}
  * }</pre>
  *
  * @param version The newest version.
  * @param notes What changed, empty for nothing.
  * @param minimumVersion The oldest version that may keep running, or {@code null} for any.
+ * @param expires The instant after which the manifest is no longer believed, or {@code null} for
+ *     never.
  * @param artifacts The file of every platform, by the key of {@link UpdatePlatform#key()}.
  */
 record UpdateManifest(
-    String version, String notes, String minimumVersion, Map<String, UpdateArtifact> artifacts) {
+    String version,
+    String notes,
+    String minimumVersion,
+    Instant expires,
+    Map<String, UpdateArtifact> artifacts) {
   /**
    * Reads a manifest, resolving the URL of every file against {@code base}.
    *
@@ -49,12 +58,14 @@ record UpdateManifest(
       }
       Object notes = fields.get("notes");
       Object minimum = fields.get("minimumVersion");
+      Object expires = fields.get("expires");
       return new UpdateManifest(
           UpdateManifest.text(fields, "version"),
           notes instanceof String text ? text : "",
           minimum instanceof String text ? text : null,
+          expires instanceof String text ? Instant.parse(text) : null,
           artifacts);
-    } catch (IllegalArgumentException e) {
+    } catch (IllegalArgumentException | DateTimeParseException e) {
       throw new UpdateRejectedException("Not a manifest: " + e.getMessage(), e);
     }
   }

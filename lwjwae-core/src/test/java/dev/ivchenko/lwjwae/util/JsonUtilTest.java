@@ -45,4 +45,19 @@ class JsonUtilTest {
       Assertions.assertThrows(IllegalArgumentException.class, () -> JsonUtil.parse(text), text);
     }
   }
+
+  @Test
+  void readsNestingUpToTheLimitAndRefusesDeeper() {
+    String deepest = "[".repeat(JsonReader.MAX_DEPTH) + "]".repeat(JsonReader.MAX_DEPTH);
+    Assertions.assertInstanceOf(List.class, JsonUtil.parse(deepest));
+    String objects =
+        "{\"a\":".repeat(JsonReader.MAX_DEPTH) + "1" + "}".repeat(JsonReader.MAX_DEPTH);
+    Assertions.assertInstanceOf(Map.class, JsonUtil.parse(objects));
+
+    int far = 100_000;
+    String tooDeep = "[".repeat(far) + "]".repeat(far);
+    Assertions.assertThrows(IllegalArgumentException.class, () -> JsonUtil.parse(tooDeep));
+    Assertions.assertThrows(
+        IllegalArgumentException.class, () -> JsonUtil.parse("[".repeat(JsonReader.MAX_DEPTH + 1)));
+  }
 }

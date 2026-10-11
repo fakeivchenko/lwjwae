@@ -14,32 +14,11 @@ public class ScriptUtil {
    * code ends up inside a script that the engine executes, so an unescaped quote isn't a formatting
    * bug but an injection. Control characters and the line and paragraph separators (U+2028 and
    * U+2029) are escaped too: the separators are legal inside a Java string, but a syntax error
-   * inside a JavaScript string literal before ES2019.
+   * inside a JavaScript string literal before ES2019. A JSON string, as {@link JsonUtil#write}
+   * renders it, is such a literal.
    */
   public String quote(String value) {
-    if (value == null) {
-      return "null";
-    }
-
-    StringBuilder quoted = new StringBuilder(value.length() + 16).append('"');
-    for (int i = 0; i < value.length(); i++) {
-      char c = value.charAt(i);
-      switch (c) {
-        case '"' -> quoted.append("\\\"");
-        case '\\' -> quoted.append("\\\\");
-        case '\n' -> quoted.append("\\n");
-        case '\r' -> quoted.append("\\r");
-        case '\t' -> quoted.append("\\t");
-        default -> {
-          if (c < 0x20 || c == '\u2028' || c == '\u2029') {
-            quoted.append(String.format("\\u%04x", (int) c));
-          } else {
-            quoted.append(c);
-          }
-        }
-      }
-    }
-    return quoted.append('"').toString();
+    return JsonUtil.write(value);
   }
 
   /**

@@ -31,6 +31,13 @@ class PlatformUtilTest {
   }
 
   @Test
+  void skipsEmptyValues() {
+    Assertions.assertEquals(
+        List.of("alpine"),
+        PlatformUtil.distributionIds(List.of("ID=alpine", "ID_LIKE=\"\"", "ID_LIKE=\" \"")));
+  }
+
+  @Test
   void emptyWithoutAnId() {
     Assertions.assertTrue(PlatformUtil.distributionIds(List.of()).isEmpty());
   }

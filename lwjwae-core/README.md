@@ -620,9 +620,41 @@ document of a trusted origin: the one that serves the resources of the window, t
 server while it is in use, and a top-level `about:blank`, which is what `Window.html` shows on
 WebView2 (elsewhere, inline HTML gets the resource origin). The check runs in the bootstrap, before
 any script of the document, and Java drops a message without the token. A request to the RPC path
-of the resource origin carries `Origin`, which Java checks against the same list. A page of any
+of the resource origin carries the token in `X-Lwjwae-Token`, and `Origin`, which Java checks
+against the same list; a request without the token is refused whatever its origin. A page of any
 other origin, a site that the window navigated to or a frame that the application embeds, can't
 reach a handler.
+
+### What a page may do
+
+A trusted page calls the functions that the application binds, the handlers that it registers, and
+the events that it listens to, reads the theme and the state of its window, follows a link to the
+browser of the system, and moves and resizes a window without a frame from its drag regions.
+Everything else in `window.lwjwae` is a `PageCapability`, which the page has only if the
+application grants it:
+
+```java
+Application.create(
+    ApplicationParameters.builder()
+        .pageCapabilities(Set.of(PageCapability.STORE, PageCapability.DIALOGS))
+        .build());
+```
+
+| Capability     | What the page gets                                                       |
+|----------------|--------------------------------------------------------------------------|
+| `WINDOW`       | `lwjwae.window.minimize`, `maximize`, `restore`, `fullscreen`, `close`   |
+| `OPEN_WINDOWS` | `lwjwae.open`                                                            |
+| `DIALOGS`      | `lwjwae.dialog`                                                          |
+| `CLIPBOARD`    | `lwjwae.clipboard`                                                       |
+| `MENUS`        | `lwjwae.menu.popup`                                                      |
+| `TASKBAR`      | `lwjwae.taskbar`                                                         |
+| `DOWNLOADS`    | `lwjwae.downloads`                                                       |
+| `FILES`        | `lwjwae.files`                                                           |
+| `STORE`        | `lwjwae.store`, which keeps to the file of the store: no `ATTACH`, no `VACUUM INTO`, and no `PRAGMA` that changes how SQLite writes |
+| `UPDATES`      | `lwjwae.updates`                                                         |
+
+A call without its capability fails with an `RpcError` of status 403 and code `capability`, and an
+event without it doesn't reach the page. Java hears everything either way.
 
 ### From the page to Java: `bind`
 

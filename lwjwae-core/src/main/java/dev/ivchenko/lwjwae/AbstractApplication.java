@@ -6,6 +6,7 @@ import dev.ivchenko.lwjwae.clipboard.Clipboard;
 import dev.ivchenko.lwjwae.cookie.Cookies;
 import dev.ivchenko.lwjwae.event.Event;
 import dev.ivchenko.lwjwae.event.EventSubscription;
+import dev.ivchenko.lwjwae.event.Listeners;
 import dev.ivchenko.lwjwae.event.OpenEvent;
 import dev.ivchenko.lwjwae.event.SecondInstanceEvent;
 import dev.ivchenko.lwjwae.exception.ShortcutUnavailableException;
@@ -44,7 +45,6 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -76,6 +76,7 @@ import java.util.function.Function;
  * #rpcHandler} before it answers {@code 404}.
  */
 public abstract class AbstractApplication implements Application {
+  private static final System.Logger LOG = System.getLogger(AbstractApplication.class.getName());
   private static final Set<String> EXTERNAL_SCHEMES = Set.of("http", "https", "mailto");
 
   /** How much of the top of a window must be on a screen for the user to grab it, in units. */
@@ -115,11 +116,8 @@ public abstract class AbstractApplication implements Application {
 
   private final AtomicBoolean closed = new AtomicBoolean();
 
-  private final List<Consumer<SystemTheme>> themeListeners = new CopyOnWriteArrayList<>();
-
-  /** Tells the listeners of a theme change one at a time and in order, off the UI thread. */
-  private final ExecutorService themeNotifier =
-      Executors.newSingleThreadExecutor(Thread.ofVirtual().name("lwjwae-theme").factory());
+  /** The listeners of a theme change, which hear one at a time and in order, off the UI thread. */
+  private final Listeners<SystemTheme> themeListeners = new Listeners<>("lwjwae-theme");
 
   private volatile SystemTheme theme = SystemTheme.LIGHT;
   private volatile Clipboard clipboard;
@@ -132,18 +130,17 @@ public abstract class AbstractApplication implements Application {
   private Updater updater;
   private final Map<Shortcut, EventSubscription> globalShortcuts = new HashMap<>();
 
-  // --- single instance, under the lock of the listener list ---
-  private final List<Consumer<SecondInstanceEvent>> secondInstanceListeners = new ArrayList<>();
+  // --- single instance: a start before any listener waits in the list, under its lock ---
+  private final Listeners<SecondInstanceEvent> secondInstanceListeners =
+      new Listeners<>("lwjwae-second-instance");
   private final List<SecondInstanceEvent> unheardStarts = new ArrayList<>();
   private volatile InstanceLock instanceLock;
 
-  // --- requests to open, under the lock of the listener list ---
-  private final List<Consumer<OpenEvent>> openListeners = new ArrayList<>();
-  private final List<OpenEvent> unheardOpens = new ArrayList<>();
+  // --- requests to open: one before any listener waits in the list, under its lock ---
+  /** The listeners of a request to open, which hear one at a time and in order. */
+  private final Listeners<OpenEvent> openListeners = new Listeners<>("lwjwae-open");
 
-  /** Tells the listeners of a request to open one request at a time and in order. */
-  private final ExecutorService openNotifier =
-      Executors.newSingleThreadExecutor(Thread.ofVirtual().name("lwjwae-open").factory());
+  private final List<OpenEvent> unheardOpens = new ArrayList<>();
 
   /**
    * Creates an application on the UI thread of a toolkit. Opens no window.
@@ -158,6 +155,13 @@ public abstract class AbstractApplication implements Application {
         parameters.dataDirectory() == null
             ? null
             : new WindowStateStore(parameters.dataDirectory());
+    LOG.log(
+        System.Logger.Level.DEBUG,
+        () ->
+            "Started "
+                + this.getClass().getSimpleName()
+                + ", pages may use "
+                + parameters.pageCapabilities());
   }
 
   /** The UI thread of the toolkit, shared by every window. */
@@ -460,19 +464,12 @@ public abstract class AbstractApplication implements Application {
     this.checkOpen();
     this.menu = bar;
     this.forEachWindow(AbstractWindow::applicationMenuChanged);
-    this.menuChanged(bar);
   }
 
   @Override
   public final List<MenuItem> menu() {
     return this.menu;
   }
-
-  /**
-   * Tells the backend that the menu of the application is now {@code items}, after every window
-   * heard of it. For a platform whose menu bar belongs to the process; nothing by default.
-   */
-  protected void menuChanged(List<MenuItem> items) {}
 
   @Override
   public final synchronized Store store() {
@@ -708,8 +705,7 @@ public abstract class AbstractApplication implements Application {
   @Override
   public final EventSubscription onThemeChange(Consumer<SystemTheme> listener) {
     Objects.requireNonNull(listener, "listener");
-    this.themeListeners.add(listener);
-    return () -> this.themeListeners.remove(listener);
+    return this.themeListeners.listen(listener);
   }
 
   /**
@@ -724,37 +720,13 @@ public abstract class AbstractApplication implements Application {
       return;
     }
     this.theme = newTheme;
-    try {
-      this.themeNotifier.execute(
-          () -> {
-            for (Consumer<SystemTheme> listener : this.themeListeners) {
-              try {
-                listener.accept(newTheme);
-              } catch (Throwable t) {
-                ThrowableUtil.report(t);
-              }
-            }
-          });
-    } catch (RejectedExecutionException _) {
-      // The application is closed, and nobody is left to tell.
-    }
+    this.themeListeners.deliver(newTheme);
   }
 
   @Override
   public final EventSubscription onSecondInstance(Consumer<SecondInstanceEvent> listener) {
-    Objects.requireNonNull(listener, "listener");
-    List<SecondInstanceEvent> unheard;
-    synchronized (this.secondInstanceListeners) {
-      this.secondInstanceListeners.add(listener);
-      unheard = List.copyOf(this.unheardStarts);
-      this.unheardStarts.clear();
-    }
-    unheard.forEach(listener);
-    return () -> {
-      synchronized (this.secondInstanceListeners) {
-        this.secondInstanceListeners.remove(listener);
-      }
-    };
+    return AbstractApplication.listenAfterUnheard(
+        this.secondInstanceListeners, this.unheardStarts, listener);
   }
 
   /**
@@ -771,19 +743,7 @@ public abstract class AbstractApplication implements Application {
 
   @Override
   public final EventSubscription onOpen(Consumer<OpenEvent> listener) {
-    Objects.requireNonNull(listener, "listener");
-    List<OpenEvent> unheard;
-    synchronized (this.openListeners) {
-      this.openListeners.add(listener);
-      unheard = List.copyOf(this.unheardOpens);
-      this.unheardOpens.clear();
-    }
-    unheard.forEach(listener);
-    return () -> {
-      synchronized (this.openListeners) {
-        this.openListeners.remove(listener);
-      }
-    };
+    return AbstractApplication.listenAfterUnheard(this.openListeners, this.unheardOpens, listener);
   }
 
   /**
@@ -794,27 +754,13 @@ public abstract class AbstractApplication implements Application {
     if (request.isEmpty()) {
       return;
     }
-    List<Consumer<OpenEvent>> listeners;
-    synchronized (this.openListeners) {
+    // Queued under the lock: two requests that race reach the listeners in the order they took it.
+    synchronized (this.unheardOpens) {
       if (this.openListeners.isEmpty()) {
         this.unheardOpens.add(request);
-        return;
+      } else {
+        this.openListeners.deliver(request);
       }
-      listeners = List.copyOf(this.openListeners);
-    }
-    try {
-      this.openNotifier.execute(
-          () -> {
-            for (Consumer<OpenEvent> listener : listeners) {
-              try {
-                listener.accept(request);
-              } catch (Throwable t) {
-                ThrowableUtil.report(t);
-              }
-            }
-          });
-    } catch (RejectedExecutionException _) {
-      // The application is closed, and nobody is left to tell.
     }
   }
 
@@ -837,20 +783,33 @@ public abstract class AbstractApplication implements Application {
         ThrowableUtil.report(t);
       }
     }
-    List<Consumer<SecondInstanceEvent>> listeners;
-    synchronized (this.secondInstanceListeners) {
+    synchronized (this.unheardStarts) {
       if (this.secondInstanceListeners.isEmpty()) {
         this.unheardStarts.add(start);
         return;
       }
-      listeners = List.copyOf(this.secondInstanceListeners);
     }
-    for (Consumer<SecondInstanceEvent> listener : listeners) {
-      try {
-        listener.accept(start);
-      } catch (Throwable t) {
-        ThrowableUtil.report(t);
+    this.secondInstanceListeners.deliverHere(start);
+  }
+
+  /**
+   * Registers {@code listener} once it heard the events of {@code unheard}, which came before any
+   * listener, on this thread. An event that comes meanwhile waits in {@code unheard} too, and is
+   * heard next, so the listener hears the events in order and never two at once.
+   */
+  private static <E> EventSubscription listenAfterUnheard(
+      Listeners<E> listeners, List<E> unheard, Consumer<E> listener) {
+    Objects.requireNonNull(listener, "listener");
+    while (true) {
+      List<E> held;
+      synchronized (unheard) {
+        if (unheard.isEmpty()) {
+          return listeners.listen(listener);
+        }
+        held = List.copyOf(unheard);
+        unheard.clear();
       }
+      held.forEach(event -> Listeners.tell(listener, event));
     }
   }
 
@@ -998,8 +957,9 @@ public abstract class AbstractApplication implements Application {
       lock.close();
     }
     this.listeners.shutdown();
-    this.themeNotifier.shutdown();
-    this.openNotifier.shutdown();
+    this.themeListeners.shutdown();
+    this.openListeners.shutdown();
+    this.secondInstanceListeners.shutdown();
     this.stateSaver.shutdown();
     try {
       if (!this.stateSaver.awaitTermination(STATE_SAVE_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
