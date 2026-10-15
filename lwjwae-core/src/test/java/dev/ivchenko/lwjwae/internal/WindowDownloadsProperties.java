@@ -50,5 +50,10 @@ class WindowDownloadsProperties {
     Assertions.assertTrue(name.getBytes(StandardCharsets.UTF_8).length <= 255, name);
     Assertions.assertTrue(name.chars().noneMatch(c -> c < 0x20 || "/\\<>:\"|?*".indexOf(c) >= 0));
     Assertions.assertFalse(name.endsWith(".") || name.endsWith(" "), name);
+    Assertions.assertTrue(
+        name.codePoints()
+            .map(Character::getType)
+            .noneMatch(type -> type == Character.UNASSIGNED || type == Character.SURROGATE),
+        name);
   }
 }

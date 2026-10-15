@@ -31,7 +31,13 @@ public final class SmokeApplication {
 
   private SmokeApplication() {}
 
-  /** Runs the check, and exits with its outcome. */
+  /**
+   * Runs the check, and exits with its outcome.
+   *
+   * <p>The check waits on another thread while this one runs the application, as a program does: in
+   * a native executable on macOS, this thread is the one of AppKit, and the window gets nothing
+   * done while it waits.
+   */
   public static void main(String[] args) throws IOException {
     Path data = Files.createTempDirectory("lwjwae-smoke");
     ApplicationParameters parameters =
@@ -42,7 +48,32 @@ public final class SmokeApplication {
             .build();
     int status;
     try (Application application = Application.create(parameters)) {
-      status = SmokeApplication.check(application);
+      CompletableFuture<String> reported = new CompletableFuture<>();
+      application.handle("echo", call -> call.reply("echo:" + call.text()));
+      Window window = application.open(WindowParameters.of("lwjwae smoke", 480, 320));
+      window.bind(
+          "report",
+          report -> {
+            reported.complete(report);
+            return "ok";
+          });
+      window.loadResource("smoke/index.html");
+      window.show();
+      CompletableFuture<Integer> outcome = new CompletableFuture<>();
+      Thread.ofVirtual()
+          .name("lwjwae-smoke")
+          .start(
+              () -> {
+                try {
+                  outcome.complete(SmokeApplication.check(application, window, reported));
+                } catch (Throwable t) {
+                  outcome.completeExceptionally(t);
+                } finally {
+                  application.quit();
+                }
+              });
+      application.run();
+      status = outcome.join();
     } catch (Throwable t) {
       t.printStackTrace();
       status = 1;
@@ -50,19 +81,8 @@ public final class SmokeApplication {
     System.exit(status);
   }
 
-  private static int check(Application application) throws Exception {
-    CompletableFuture<String> reported = new CompletableFuture<>();
-    application.handle("echo", call -> call.reply("echo:" + call.text()));
-    Window window = application.open(WindowParameters.of("lwjwae smoke", 480, 320));
-    window.bind(
-        "report",
-        report -> {
-          reported.complete(report);
-          return "ok";
-        });
-    window.loadResource("smoke/index.html");
-    window.show();
-
+  private static int check(
+      Application application, Window window, CompletableFuture<String> reported) throws Exception {
     String report;
     try {
       report = reported.get(TIMEOUT_SECONDS, TimeUnit.SECONDS);

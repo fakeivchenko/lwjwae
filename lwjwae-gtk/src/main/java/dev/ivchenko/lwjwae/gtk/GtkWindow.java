@@ -294,13 +294,18 @@ public class GtkWindow extends WebKitGtkWindow {
             });
   }
 
+  /** Keeps the size within the limits itself, which GTK leaves to the window manager. */
   @Override
   public void size(int width, int height) {
     this.dispatcher()
         .run(
             () -> {
-              Gtk.windowSetDefaultSize(this.window(), width, height);
-              Gtk.windowResize(this.window(), width, height);
+              int limitedWidth =
+                  GtkWindow.limited(width, this.minimumSize.width(), this.maximumSize.width());
+              int limitedHeight =
+                  GtkWindow.limited(height, this.minimumSize.height(), this.maximumSize.height());
+              Gtk.windowSetDefaultSize(this.window(), limitedWidth, limitedHeight);
+              Gtk.windowResize(this.window(), limitedWidth, limitedHeight);
             });
   }
 
@@ -380,13 +385,31 @@ public class GtkWindow extends WebKitGtkWindow {
     this.dispatcher().run(this::applySizeLimits);
   }
 
+  /**
+   * Sets the limits, and brings the window within them. A window manager of X11 resizes a window
+   * whose hints it no longer fits, but a compositor of Wayland only learns the limits for the next
+   * resize of the user, so the window resizes itself.
+   */
   private void applySizeLimits() {
+    MemorySegment current = this.window();
     Gtk.windowSetSizeLimits(
-        this.window(),
+        current,
         this.minimumSize.width(),
         this.minimumSize.height(),
         this.maximumSize.width(),
         this.maximumSize.height());
+    int[] size = Gtk.windowGetSize(current);
+    int width = GtkWindow.limited(size[0], this.minimumSize.width(), this.maximumSize.width());
+    int height = GtkWindow.limited(size[1], this.minimumSize.height(), this.maximumSize.height());
+    if (width != size[0] || height != size[1]) {
+      Gtk.windowResize(current, width, height);
+    }
+  }
+
+  /** {@code value} within {@code minimum} and {@code maximum}, where 0 is no limit. */
+  private static int limited(int value, int minimum, int maximum) {
+    int raised = Math.max(value, minimum);
+    return maximum > 0 ? Math.min(raised, maximum) : raised;
   }
 
   @Override

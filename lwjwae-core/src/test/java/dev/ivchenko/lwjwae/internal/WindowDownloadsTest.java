@@ -108,6 +108,8 @@ class WindowDownloadsTest {
     Assertions.assertEquals("notes", WindowDownloads.fileName("notes. . ."));
     Assertions.assertEquals("_con.txt", WindowDownloads.fileName("con.txt"));
     Assertions.assertEquals("download", WindowDownloads.fileName(" .. "));
+    // APFS refuses a code point that Unicode never assigned, and half of a surrogate pair.
+    Assertions.assertEquals("a_b_.txt", WindowDownloads.fileName("a\u0378b\ud800.txt"));
 
     String longName = WindowDownloads.fileName("é".repeat(300) + ".pdf");
     Assertions.assertTrue(longName.endsWith(".pdf"), "the extension stays");

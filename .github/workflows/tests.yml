@@ -1,8 +1,5 @@
 name: Tests
 
-# Every push to dev and every pull request into it, a step of the release workflow, and a run by
-# hand, which can pick one platform and some of the display tests, for a fix that only a runner can
-# check, such as one for macOS.
 on:
   push:
     branches: [dev]
@@ -24,30 +21,22 @@ on:
 permissions:
   contents: read
 
-# A push that supersedes a running build cancels it.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:
-  # The Gradle client itself loads a native library; without this, every run starts with a warning.
   GRADLE_OPTS: --enable-native-access=ALL-UNNAMED
-  # Runners have no GPU: keep WebKit on the software path, and GTK on X11 for Xvfb.
   GDK_BACKEND: x11
   WEBKIT_DISABLE_DMABUF_RENDERER: "1"
   WEBKIT_DISABLE_COMPOSITING_MODE: "1"
-  # GTK 4 draws with OpenGL or Vulkan by default; Xvfb has neither.
   GSK_RENDERER: cairo
-  # The display tests that a run by hand asks for, read by the steps through the environment.
   TESTS: ${{ inputs.tests }}
 
 jobs:
-  # Formatting fails fast, before any machine opens a window. Checkstyle only warns, as Google's
-  # configuration does; its findings are in the log and in the uploaded reports.
   style:
     name: Style
     runs-on: ubuntu-24.04
-    # A test that hangs fails the job, rather than holding a runner for six hours.
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -71,7 +60,6 @@ jobs:
     needs: style
     if: inputs.platform == '' || inputs.platform == 'all' || inputs.platform == 'linux'
     runs-on: ${{ matrix.runner }}
-    # A test that hangs fails the job, rather than holding a runner for six hours.
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -89,22 +77,15 @@ jobs:
           java-version: 25
       - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
 
-      # The same script as Dockerfile.test, so that a run in Docker sees what this job sees.
       - name: Install GTK 3 and 4, WebKitGTK, displays, a notification server, a keyring, and a portal
         run: sudo scripts/linux/install-test-packages.sh
 
       - name: Headless tests
         run: ./gradlew test
 
-      # WebKitGTK 6.0 always runs its web processes in a bubblewrap sandbox, which needs unprivileged
-      # user namespaces; Ubuntu 24.04 restricts them through AppArmor, and WebKit aborts without them.
       - name: Allow the WebKitGTK 6.0 sandbox
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
 
-      # A display test that silently skips on CI is a false pass. The runner has no session bus, so
-      # dbus-run-session gives the tests one, for the notifications and GNOME Keyring, the Secret
-      # Service of the secrets; openbox manages the windows, so minimize, maximize, and full screen
-      # have someone to answer them.
       - name: Display tests under Xvfb
         id: display
         run: >-
@@ -113,12 +94,10 @@ jobs:
           ./gradlew displayTest ${TESTS:+--tests "$TESTS"}
           -Dlwjwae.requireDisplay=true -Dlwjwae.screenshots=true
 
-      # The application of the smoke test on the module path, where only the exported API is there.
       - name: Smoke test on the module path
         run: xvfb-run -a dbus-run-session -- ./gradlew :lwjwae-smoke:run
 
       - name: Screenshots
-        # Only after the display tests ran: a failure before them has no pictures to upload.
         if: always() && steps.display.outcome != 'skipped'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -145,14 +124,12 @@ jobs:
             **/build/reports/tests/
             **/build/test-results/
 
-  # The display tests of both GTK backends on Wayland, under a headless Weston. Report only for now:
-  # GTK 3 on Weston doesn't restore a maximized window to its size, and doesn't report the change,
-  # and a screenshot can't see a Wayland window; the job shows what Wayland does without failing the
-  # build over it.
   test-wayland:
     name: Tests (Linux Wayland)
     needs: style
-    if: inputs.platform == '' || inputs.platform == 'all' || inputs.platform == 'linux'
+    if: >-
+      github.actor != 'dependabot[bot]'
+      && (inputs.platform == '' || inputs.platform == 'all' || inputs.platform == 'linux')
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     continue-on-error: true
@@ -167,8 +144,6 @@ jobs:
         run: sudo scripts/linux/install-test-packages.sh
       - name: Allow the WebKitGTK 6.0 sandbox
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-      # Xvfb stays for the notification server, which the session bus starts on X11; the tests
-      # alone see the Wayland display.
       - name: Display tests on Wayland
         run: >-
           xvfb-run -a dbus-run-session -- scripts/linux/with-secret-service.sh
@@ -187,9 +162,10 @@ jobs:
   test-windows:
     name: Tests (Windows)
     needs: style
-    if: inputs.platform == '' || inputs.platform == 'all' || inputs.platform == 'windows'
+    if: >-
+      github.actor != 'dependabot[bot]'
+      && (inputs.platform == '' || inputs.platform == 'all' || inputs.platform == 'windows')
     runs-on: windows-2025
-    # A test that hangs fails the job, rather than holding a runner for six hours.
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -202,7 +178,6 @@ jobs:
       - name: Headless tests
         run: ./gradlew test
 
-      # The session of the runner has a desktop, so WebView2 can attach; no Xvfb equivalent needed.
       - name: Display tests
         id: display
         run: |
@@ -213,7 +188,6 @@ jobs:
         run: ./gradlew :lwjwae-smoke:run
 
       - name: Screenshots
-        # Only after the display tests ran: a failure before them has no pictures to upload.
         if: always() && steps.display.outcome != 'skipped'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -233,9 +207,10 @@ jobs:
   test-macos:
     name: Tests (macOS ${{ matrix.arch }})
     needs: style
-    if: inputs.platform == '' || inputs.platform == 'all' || inputs.platform == 'macos'
+    if: >-
+      github.actor != 'dependabot[bot]'
+      && (inputs.platform == '' || inputs.platform == 'all' || inputs.platform == 'macos')
     runs-on: ${{ matrix.runner }}
-    # A test that hangs fails the job, rather than holding a runner for six hours.
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -256,7 +231,6 @@ jobs:
       - name: Headless tests
         run: ./gradlew test
 
-      # The session of the runner has a window server, so AppKit windows come up without any display setup.
       - name: Display tests
         id: display
         run: >-
@@ -267,7 +241,6 @@ jobs:
         run: ./gradlew :lwjwae-smoke:run
 
       - name: Screenshots
-        # Only after the display tests ran: a failure before them has no pictures to upload.
         if: always() && steps.display.outcome != 'skipped'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -284,13 +257,10 @@ jobs:
             **/build/reports/tests/
             **/build/test-results/
 
-  # The smoke application as a native executable on each platform, which runs every way of the
-  # bridge once: a native call or a callback that the reachability metadata misses fails only here.
   native:
     name: Native image (${{ matrix.name }})
     needs: style
-    # A run by hand for one platform leaves the native images out.
-    if: inputs.platform == '' || inputs.platform == 'all'
+    if: github.actor != 'dependabot[bot]' && (inputs.platform == '' || inputs.platform == 'all')
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
     strategy:
@@ -305,7 +275,6 @@ jobs:
             name: macOS
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # Sets up the C toolchain too: MSVC on Windows, Xcode on macOS.
       - uses: graalvm/setup-graalvm@27b360dbb857524eaf0b4c4cef364d38e5b4f173 # v1.6.7
         with:
           java-version: 25
@@ -322,7 +291,6 @@ jobs:
       - name: Build the smoke application
         run: ./gradlew :lwjwae-smoke:nativeCompile
 
-      # The executable exits with 0 once every way of the bridge answered, with 1 otherwise.
       - name: Run it on GTK 3 and GTK 4
         if: runner.os == 'Linux'
         run: |

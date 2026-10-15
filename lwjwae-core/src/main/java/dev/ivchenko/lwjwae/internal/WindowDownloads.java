@@ -335,16 +335,15 @@ public final class WindowDownloads implements Downloads {
    * last part of it as a path, with every character that a file system of Windows, macOS, or Linux
    * refuses replaced by {@code _}, without the dots and spaces that Windows drops from the end, and
    * short enough for every file system, the extension kept.
+   *
+   * <p>APFS refuses what isn't a character of Unicode: a code point that no version assigned, and a
+   * half of a surrogate pair without the other half. Both become {@code _} too.
    */
   static String fileName(String suggested) {
     String name = suggested.replace('\\', '/');
     name = name.substring(name.lastIndexOf('/') + 1);
     StringBuilder safe = new StringBuilder(name.length());
-    name.codePoints()
-        .forEach(
-            c ->
-                safe.appendCodePoint(
-                    c < 0x20 || c == 0x7f || "<>:\"|?*".indexOf(c) >= 0 ? '_' : c));
+    name.codePoints().forEach(c -> safe.appendCodePoint(WindowDownloads.isRefused(c) ? '_' : c));
     name = safe.toString().strip().replaceAll("[. ]+$", "");
     if (name.isEmpty() || name.chars().allMatch(c -> c == '.')) {
       return "download";
@@ -353,6 +352,16 @@ public final class WindowDownloads implements Downloads {
       name = "_" + name;
     }
     return WindowDownloads.shortened(name);
+  }
+
+  /** Whether a file system of Windows, macOS, or Linux refuses {@code c} in a file name. */
+  private static boolean isRefused(int c) {
+    int type = Character.getType(c);
+    return c < 0x20
+        || c == 0x7f
+        || "<>:\"|?*".indexOf(c) >= 0
+        || type == Character.UNASSIGNED
+        || type == Character.SURROGATE;
   }
 
   /**

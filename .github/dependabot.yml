@@ -1,6 +1,3 @@
-# Weekly updates, one pull request per ecosystem: the versions of the build in
-# gradle/libs.versions.toml, the actions of the workflows, which are pinned to commits, and the base
-# image of Dockerfile.test.
 version: 2
 updates:
   - package-ecosystem: gradle
@@ -10,6 +7,9 @@ updates:
     groups:
       gradle:
         patterns: ["*"]
+    ignore:
+      - dependency-name: com.google.googlejavaformat:google-java-format
+        versions: ["1.37.x"]
   - package-ecosystem: github-actions
     directory: /
     schedule:
