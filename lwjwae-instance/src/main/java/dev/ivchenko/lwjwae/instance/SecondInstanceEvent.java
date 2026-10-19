@@ -1,4 +1,4 @@
-package dev.ivchenko.lwjwae.event;
+package dev.ivchenko.lwjwae.instance;
 
 import java.nio.file.Path;
 import java.util.List;

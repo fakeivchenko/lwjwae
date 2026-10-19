@@ -7,9 +7,7 @@ import dev.ivchenko.lwjwae.cookie.Cookies;
 import dev.ivchenko.lwjwae.event.Event;
 import dev.ivchenko.lwjwae.event.EventSubscription;
 import dev.ivchenko.lwjwae.event.OpenEvent;
-import dev.ivchenko.lwjwae.event.SecondInstanceEvent;
 import dev.ivchenko.lwjwae.exception.ShortcutUnavailableException;
-import dev.ivchenko.lwjwae.instance.InstanceLock;
 import dev.ivchenko.lwjwae.internal.Listeners;
 import dev.ivchenko.lwjwae.menu.MenuItem;
 import dev.ivchenko.lwjwae.module.ApplicationModule;
@@ -99,8 +97,7 @@ public abstract class AbstractApplication implements Application {
   private final Map<String, String> bindingScripts = new ConcurrentHashMap<>();
   private final EventListeners listeners = new EventListeners("lwjwae-application-events");
 
-  // --- modules: started once by create(), each with its page calls and its part of the page API
-  // ---
+  // --- modules: started by create(), with their page calls and their parts of the page API ---
   private final List<ApplicationModule> modules = new CopyOnWriteArrayList<>();
   private final Map<String, ModuleCall> moduleCalls = new ConcurrentHashMap<>();
   private final Map<String, String> modulePageApis = new ConcurrentHashMap<>();
@@ -132,12 +129,6 @@ public abstract class AbstractApplication implements Application {
   private volatile Secrets secrets;
   private volatile List<MenuItem> menu = List.of();
   private Store store;
-
-  // --- single instance: a start before any listener waits in the list, under its lock ---
-  private final Listeners<SecondInstanceEvent> secondInstanceListeners =
-      new Listeners<>("lwjwae-second-instance");
-  private final List<SecondInstanceEvent> unheardStarts = new ArrayList<>();
-  private volatile InstanceLock instanceLock;
 
   // --- requests to open: one before any listener waits in the list, under its lock ---
   /** The listeners of a request to open, which hear one at a time and in order. */
@@ -647,24 +638,6 @@ public abstract class AbstractApplication implements Application {
   }
 
   @Override
-  public final EventSubscription onSecondInstance(Consumer<SecondInstanceEvent> listener) {
-    return AbstractApplication.listenAfterUnheard(
-        this.secondInstanceListeners, this.unheardStarts, listener);
-  }
-
-  /**
-   * Takes over {@code lock}, whose name this application now holds, and answers the processes that
-   * start after it, until {@link #quit()}.
-   */
-  final void serveInstances(InstanceLock lock) {
-    this.instanceLock = lock;
-    lock.serve(this::secondInstanceStarted);
-    if (this.closed.get()) {
-      lock.close();
-    }
-  }
-
-  @Override
   public final EventSubscription onOpen(Consumer<OpenEvent> listener) {
     return AbstractApplication.listenAfterUnheard(this.openListeners, this.unheardOpens, listener);
   }
@@ -690,29 +663,6 @@ public abstract class AbstractApplication implements Application {
   /** Hands the links and the files among the arguments of this process to {@link #onOpen}. */
   final void openArguments(List<String> arguments) {
     this.openRequested(OpenArgumentUtil.of(arguments, Path.of("").toAbsolutePath()));
-  }
-
-  /**
-   * Another process of the application started and handed its start over: the oldest window comes
-   * to the front, and the listeners hear of it, and of the links and the files among its arguments.
-   */
-  private void secondInstanceStarted(SecondInstanceEvent start) {
-    this.openRequested(OpenArgumentUtil.of(start.arguments(), start.workingDirectory()));
-    List<Window> open = this.windows();
-    if (!open.isEmpty()) {
-      try {
-        open.getFirst().focus();
-      } catch (Throwable t) {
-        ThrowableUtil.report(t);
-      }
-    }
-    synchronized (this.unheardStarts) {
-      if (this.secondInstanceListeners.isEmpty()) {
-        this.unheardStarts.add(start);
-        return;
-      }
-    }
-    this.secondInstanceListeners.deliverHere(start);
   }
 
   /**
@@ -841,14 +791,9 @@ public abstract class AbstractApplication implements Application {
     }
     this.notifications.closeAll();
     this.shortcuts.releaseAll();
-    InstanceLock lock = this.instanceLock;
-    if (lock != null) {
-      lock.close();
-    }
     this.listeners.shutdown();
     this.theme.shutdown();
     this.openListeners.shutdown();
-    this.secondInstanceListeners.shutdown();
     this.stateSaver.shutdown();
     try {
       if (!this.stateSaver.awaitTermination(STATE_SAVE_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {

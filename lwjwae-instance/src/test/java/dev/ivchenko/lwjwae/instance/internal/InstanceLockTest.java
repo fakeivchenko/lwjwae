@@ -1,6 +1,6 @@
-package dev.ivchenko.lwjwae.instance;
+package dev.ivchenko.lwjwae.instance.internal;
 
-import dev.ivchenko.lwjwae.event.SecondInstanceEvent;
+import dev.ivchenko.lwjwae.instance.SecondInstanceEvent;
 import dev.ivchenko.lwjwae.testing.ShortTemporaryDirectories;
 import java.io.IOException;
 import java.nio.file.Files;

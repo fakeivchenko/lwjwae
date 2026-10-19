@@ -90,6 +90,7 @@ application as soon as it is on the class path or the module path:
 | Module | What it adds |
 |---|---|
 | [`lwjwae-updater`](lwjwae-updater) | `Updater.of(application)` and `lwjwae.updates`: signed updates |
+| [`lwjwae-instance`](lwjwae-instance) | `SingleInstance.create`: one process per user, a second start hands its arguments over |
 
 ## Get started
 

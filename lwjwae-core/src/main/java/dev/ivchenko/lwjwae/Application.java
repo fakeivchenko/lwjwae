@@ -6,9 +6,7 @@ import dev.ivchenko.lwjwae.cookie.Cookies;
 import dev.ivchenko.lwjwae.event.Event;
 import dev.ivchenko.lwjwae.event.EventSubscription;
 import dev.ivchenko.lwjwae.event.OpenEvent;
-import dev.ivchenko.lwjwae.event.SecondInstanceEvent;
 import dev.ivchenko.lwjwae.exception.BackendNotAvailableException;
-import dev.ivchenko.lwjwae.instance.InstanceLock;
 import dev.ivchenko.lwjwae.menu.MenuItem;
 import dev.ivchenko.lwjwae.module.ApplicationModule;
 import dev.ivchenko.lwjwae.notification.Notifications;
@@ -22,8 +20,6 @@ import dev.ivchenko.lwjwae.tray.Tray;
 import dev.ivchenko.lwjwae.tray.TrayIcon;
 import dev.ivchenko.lwjwae.tray.TrayMenuItem;
 import dev.ivchenko.lwjwae.util.PlatformUtil;
-import java.io.UncheckedIOException;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -169,73 +165,6 @@ public interface Application extends AutoCloseable {
       window.show();
       application.run();
     }
-  }
-
-  /**
-   * Creates the application unless another process of it runs already. That one gets the arguments
-   * of this process, its oldest window comes to the front, and its {@link #onSecondInstance}
-   * listeners hear of it; this process gets nothing and should end, having opened nothing, not even
-   * the toolkit.
-   *
-   * <pre>{@code
-   * public static void main(String[] args) {
-   *   ApplicationParameters parameters = ApplicationParameters.builder().name("notes").build();
-   *   Optional<Application> created = Application.createSingleInstance(parameters, args);
-   *   if (created.isEmpty()) {
-   *     return;
-   *   }
-   *   try (Application application = created.get()) {
-   *     application.onSecondInstance(start -> openFiles(start.arguments()));
-   *     ...
-   *   }
-   * }
-   * }</pre>
-   *
-   * <p>The processes find each other by {@link ApplicationParameters#name()} and the user, so two
-   * users each run their own.
-   *
-   * <p>Platforms:
-   *
-   * <ul>
-   *   <li>Windows: The socket is in the temporary directory of the user, which needs Windows 10 or
-   *       later. The window comes forward from the background too.
-   *   <li>macOS: The socket is in the temporary directory of the user, or in {@code /tmp} when that
-   *       path leaves no room for it.
-   *   <li>Linux, GTK 3: The socket is in {@code $XDG_RUNTIME_DIR}. X11: as described. Wayland: the
-   *       window comes back but may only ask for attention.
-   *   <li>Linux, GTK 4: As on GTK 3.
-   * </ul>
-   *
-   * @param parameters The parameters of the application, with a name.
-   * @param arguments The arguments of this process, as {@code main} received them.
-   * @return The application, or empty when another process of it runs and took over.
-   * @throws IllegalArgumentException If {@code parameters} has no name.
-   * @throws UncheckedIOException If the processes can't reach each other.
-   * @throws BackendNotAvailableException If no backend on the classpath supports this machine.
-   */
-  static Optional<Application> createSingleInstance(
-      ApplicationParameters parameters, String... arguments) {
-    if (parameters.name() == null) {
-      throw new IllegalArgumentException("A single instance needs the name of the application");
-    }
-    SecondInstanceEvent start =
-        new SecondInstanceEvent(List.of(arguments), Path.of("").toAbsolutePath());
-    Optional<InstanceLock> claimed = InstanceLock.claim(parameters.name(), start);
-    if (claimed.isEmpty()) {
-      return Optional.empty();
-    }
-    InstanceLock lock = claimed.get();
-    Application application;
-    try {
-      application = Application.create(parameters);
-    } catch (RuntimeException | Error e) {
-      try (lock) {
-        throw e;
-      }
-    }
-    ((AbstractApplication) application).serveInstances(lock);
-    ((AbstractApplication) application).openArguments(List.of(arguments));
-    return Optional.of(application);
   }
 
   /**
@@ -630,23 +559,14 @@ public interface Application extends AutoCloseable {
   Secrets secrets();
 
   /**
-   * Listens to the starts of other processes of the application, when it was created by {@link
-   * #createSingleInstance}; before the listeners hear of one, the oldest window has come to the
-   * front. A listener runs on a virtual thread, and the process that started waits until every
-   * listener returned. A start that came before any listener reaches the first one on the thread
-   * that registers it.
-   */
-  EventSubscription onSecondInstance(Consumer<SecondInstanceEvent> listener);
-
-  /**
    * Listens to the requests of the system to open links or files: a link of a scheme that the
    * application registered, such as {@code notes://today}, or a file of a type that it registered,
    * which the user opened from the file manager. The Gradle plugin registers both when it packages
    * the application, from {@code urlScheme} and {@code fileType}.
    *
    * <p>The links and the files among the arguments of the process count as a request too: those
-   * that {@link #create(ApplicationParameters, String...)} or {@link #createSingleInstance} was
-   * given, and, for a single instance, those of every later start. A request that came before any
+   * that {@link #create(ApplicationParameters, String...)} was given, and, for a single instance of
+   * the {@code lwjwae-instance} module, those of every later start. A request that came before any
    * listener reaches the first one on the thread that registers it; the later ones reach the
    * listeners on a virtual thread, one request after the other.
    *
@@ -654,7 +574,8 @@ public interface Application extends AutoCloseable {
    *
    * <ul>
    *   <li>Windows: The system starts the executable with the link or the file as an argument, so a
-   *       running application hears of it only as a {@link #createSingleInstance single instance}.
+   *       running application hears of it only as a single instance of the {@code lwjwae-instance}
+   *       module.
    *   <li>macOS: AppKit hands the links and the files to the process that runs, through {@code
    *       application:openURLs:} of the delegate of the application, and starts it first when none
    *       runs; no second process starts.

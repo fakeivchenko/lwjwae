@@ -5,10 +5,9 @@
  * <p>An application reads the exported packages, and a backend extends their base classes. The
  * helpers of native binding, the bridge protocol, and the utilities go only to the backend modules
  * and the feature modules of the library, so that a change to them is no change to the API; the
- * implementation behind the API, in {@code internal}, {@code instance}, and {@code state}, goes to
- * no module at all. A feature that not every application needs, such as the updater, is a module of
- * its own, which joins the application through {@link
- * dev.ivchenko.lwjwae.module.ApplicationModule}.
+ * implementation behind the API, in {@code internal} and {@code state}, goes to no module at all. A
+ * feature that not every application needs, such as the updater, is a module of its own, which
+ * joins the application through {@link dev.ivchenko.lwjwae.module.ApplicationModule}.
  *
  * <p>On the class path, which is where most applications run, none of this applies, and every
  * public type is visible. On the module path, the backend calls native code, so the application
@@ -62,7 +61,8 @@ module dev.ivchenko.lwjwae {
       dev.ivchenko.lwjwae.gtk4,
       dev.ivchenko.lwjwae.macos,
       dev.ivchenko.lwjwae.windows,
-      dev.ivchenko.lwjwae.updater;
+      dev.ivchenko.lwjwae.updater,
+      dev.ivchenko.lwjwae.instance;
 
   uses dev.ivchenko.lwjwae.BackendProvider;
   uses dev.ivchenko.lwjwae.bridge.codec.BridgeCodec;
