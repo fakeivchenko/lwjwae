@@ -7,6 +7,7 @@ import dev.ivchenko.lwjwae.glib.binding.Glib;
 import dev.ivchenko.lwjwae.glib.binding.Libsecret;
 import dev.ivchenko.lwjwae.glib.binding.Soup;
 import dev.ivchenko.lwjwae.glib.binding.Unix;
+import dev.ivchenko.lwjwae.glib.binding.WebKitGtk;
 import dev.ivchenko.lwjwae.glib.binding.X11;
 import dev.ivchenko.lwjwae.testing.contract.NativeImageMetadataContractTest;
 import dev.ivchenko.lwjwae.util.PlatformUtil;
@@ -18,6 +19,11 @@ class GlibNativeImageMetadataTest extends NativeImageMetadataContractTest {
   @BeforeEach
   void requireLinux() {
     Assumptions.assumeTrue(PlatformUtil.isUnixDesktop(), "Binds GLib libraries: Linux only");
+  }
+
+  @Override
+  protected String modulePackage() {
+    return "dev.ivchenko.lwjwae.glib";
   }
 
   @Override
@@ -41,6 +47,9 @@ class GlibNativeImageMetadataTest extends NativeImageMetadataContractTest {
         PortalShortcuts.class,
         Soup.class,
         WebKitCookies.class,
+        WebKitGtk.class,
+        WebKitGtkWindow.class,
+        WebKitScheme.class,
         Libsecret.class);
   }
 }

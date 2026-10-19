@@ -8,7 +8,6 @@ import dev.ivchenko.lwjwae.WindowParameters;
 import dev.ivchenko.lwjwae.clipboard.Clipboard;
 import dev.ivchenko.lwjwae.cookie.Cookies;
 import dev.ivchenko.lwjwae.event.EventSubscription;
-import dev.ivchenko.lwjwae.exception.ResourceNotFoundException;
 import dev.ivchenko.lwjwae.foreign.NativeLibraries;
 import dev.ivchenko.lwjwae.glib.DesktopServices;
 import dev.ivchenko.lwjwae.glib.DesktopTheme;
@@ -16,6 +15,7 @@ import dev.ivchenko.lwjwae.glib.PortalDialogs;
 import dev.ivchenko.lwjwae.glib.SecretServiceSecrets;
 import dev.ivchenko.lwjwae.glib.StatusNotifierTray;
 import dev.ivchenko.lwjwae.glib.WebKitCookies;
+import dev.ivchenko.lwjwae.glib.WebKitScheme;
 import dev.ivchenko.lwjwae.glib.X11Shortcuts;
 import dev.ivchenko.lwjwae.glib.binding.Glib;
 import dev.ivchenko.lwjwae.gtk4.binding.Gtk;
@@ -23,14 +23,11 @@ import dev.ivchenko.lwjwae.gtk4.binding.Signatures;
 import dev.ivchenko.lwjwae.gtk4.binding.WebKit;
 import dev.ivchenko.lwjwae.notification.Notification;
 import dev.ivchenko.lwjwae.notification.NotificationHandle;
-import dev.ivchenko.lwjwae.rpc.RpcExchange;
 import dev.ivchenko.lwjwae.secret.Secrets;
 import dev.ivchenko.lwjwae.shortcut.Shortcut;
 import dev.ivchenko.lwjwae.taskbar.TaskbarProgress;
 import dev.ivchenko.lwjwae.tray.Tray;
 import dev.ivchenko.lwjwae.tray.TrayIcon;
-import dev.ivchenko.lwjwae.util.MimeTypeUtil;
-import dev.ivchenko.lwjwae.util.ResourceUtil;
 import dev.ivchenko.lwjwae.util.ThrowableUtil;
 import java.lang.foreign.MemorySegment;
 import java.lang.invoke.MethodHandles;
@@ -50,15 +47,6 @@ import java.util.function.Consumer;
  * notification a {@link dev.ivchenko.lwjwae.glib.FreedesktopNotification}.
  */
 public class Gtk4Application extends AbstractApplication {
-  private static final String ERROR_DOMAIN = "lwjwae";
-
-  private static final MemorySegment ON_RESOURCE_REQUEST =
-      NativeLibraries.upcall(
-          MethodHandles.lookup(),
-          Gtk4Application.class,
-          "onResourceRequest",
-          MethodType.methodType(void.class, MemorySegment.class, MemorySegment.class),
-          Signatures.URI_SCHEME_REQUEST_CALLBACK);
 
   private static final MemorySegment ON_XLIB_EVENT =
       NativeLibraries.upcall(
@@ -99,14 +87,14 @@ public class Gtk4Application extends AbstractApplication {
         .run(
             () -> {
               WebKit.retainDefaultWebContext();
-              WebKit.registerUriScheme(ResourceUtil.SCHEME, ON_RESOURCE_REQUEST);
+              WebKitScheme.register(WebKit.SHARED, Gtk4Dispatcher.instance());
               this.themeWatcher = new DesktopTheme(Gtk.settingsGetDefault(), this::themeChanged);
             });
   }
 
   @Override
   public String engine() {
-    return "WebKitGTK " + WebKit.version();
+    return "WebKitGTK " + WebKit.SHARED.version();
   }
 
   @Override
@@ -202,49 +190,6 @@ public class Gtk4Application extends AbstractApplication {
     } catch (Throwable t) {
       ThrowableUtil.report(t);
       return 0;
-    }
-  }
-
-  /**
-   * Serves one {@code app://} request from the classpath.
-   *
-   * <p>This handler isn't tied to a window or to an application. The scheme is registered on the
-   * process-wide default web context, so a single handler answers for every web view.
-   *
-   * <p>Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
-   * binds it by name, so no Java code calls it and the compiler sees a dead private method.
-   */
-  @SuppressWarnings("unused")
-  private static void onResourceRequest(MemorySegment request, MemorySegment userData) {
-    String path = "";
-    try {
-      String requested = WebKit.uriSchemeRequestPath(request);
-      if (requested != null && requested.startsWith(RpcExchange.PATH_PREFIX)) {
-        Gtk4Window window = Gtk4Window.ofWebView(WebKit.uriSchemeRequestWebView(request));
-        if (window != null) {
-          window.rpc(new Gtk4RpcExchange(Gtk4Dispatcher.instance(), request, requested));
-          return;
-        }
-      }
-      path = ResourceUtil.servedPath(requested == null ? "" : requested);
-      long size = ResourceUtil.servedSize(path);
-      if (size < 0 || size >= ResourceUtil.STREAM_THRESHOLD) {
-        ResourceUtil.stream(new Gtk4RpcExchange(Gtk4Dispatcher.instance(), request, path), path);
-        return;
-      }
-      byte[] content = ResourceUtil.read(path);
-      MemorySegment stream = Glib.memoryInputStream(Glib.copyToNative(content), content.length);
-      try {
-        WebKit.uriSchemeRequestFinish(request, stream, content.length, MimeTypeUtil.of(path));
-      } finally {
-        Glib.unref(stream);
-      }
-    } catch (ResourceNotFoundException e) {
-      WebKit.uriSchemeRequestFinishError(request, Glib.error(ERROR_DOMAIN, 404, e.getMessage()));
-    } catch (Throwable t) {
-      ThrowableUtil.report(t);
-      WebKit.uriSchemeRequestFinishError(
-          request, Glib.error(ERROR_DOMAIN, 500, "Could not serve " + path));
     }
   }
 }

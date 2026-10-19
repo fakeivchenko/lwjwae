@@ -35,6 +35,8 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import org.junit.jupiter.api.Assertions;
@@ -553,7 +555,7 @@ class AbstractWindowTest {
       Assertions.assertEquals(1, application.launched.size(), "no file: URL leaves");
 
       BlockingQueue<String> handled = new LinkedBlockingQueue<>();
-      window.externalLinkHandler(handled::add);
+      window.webView().externalLinkHandler(handled::add);
       window.call(3, BridgeProtocol.CONTROL_CALL, "open-external" + SEP + "mailto:a@b.c");
       window.awaitReply(3);
       Assertions.assertEquals("mailto:a@b.c", handled.poll(5, TimeUnit.SECONDS));
@@ -566,7 +568,7 @@ class AbstractWindowTest {
     try (FakeApplication application = new FakeApplication()) {
       FakeWindow window = application.openFake();
       BlockingQueue<String> handled = new LinkedBlockingQueue<>();
-      window.externalLinkHandler(handled::add);
+      window.webView().externalLinkHandler(handled::add);
 
       window.requestNewWindow("app://local/page.html");
       window.requestNewWindow("about:blank");
@@ -582,15 +584,15 @@ class AbstractWindowTest {
   void themeStartsLightAndEveryChangeReachesJavaAndThePageOnce() throws Exception {
     try (FakeApplication application = new FakeApplication()) {
       final FakeWindow window = application.openFake();
-      Assertions.assertEquals(SystemTheme.LIGHT, application.theme());
+      Assertions.assertEquals(SystemTheme.LIGHT, application.theme().current());
 
       BlockingQueue<SystemTheme> heard = new LinkedBlockingQueue<>();
-      final EventSubscription subscription = application.onThemeChange(heard::add);
+      final EventSubscription subscription = application.theme().onChange(heard::add);
       application.changeTheme(SystemTheme.LIGHT);
       application.changeTheme(SystemTheme.DARK);
       application.changeTheme(SystemTheme.DARK);
       Assertions.assertEquals(SystemTheme.DARK, heard.poll(5, TimeUnit.SECONDS));
-      Assertions.assertEquals(SystemTheme.DARK, application.theme());
+      Assertions.assertEquals(SystemTheme.DARK, application.theme().current());
       Assertions.assertNull(
           heard.poll(200, TimeUnit.MILLISECONDS), "a theme that it has already is no change");
       window.call(1, BridgeProtocol.CONTROL_CALL, "theme");
@@ -609,8 +611,8 @@ class AbstractWindowTest {
       FakeWindow window = application.openFake();
       BlockingQueue<FileDropEvent> first = new LinkedBlockingQueue<>();
       BlockingQueue<FileDropEvent> second = new LinkedBlockingQueue<>();
-      final EventSubscription subscription = window.onFileDrop(first::add);
-      window.onFileDrop(second::add);
+      final EventSubscription subscription = window.webView().onFileDrop(first::add);
+      window.webView().onFileDrop(second::add);
 
       List<Path> paths = List.of(Path.of("/tmp/a.txt"), Path.of("/tmp/some folder"));
       window.dropFiles(paths, 120, 80);
@@ -634,34 +636,70 @@ class AbstractWindowTest {
   }
 
   @Test
+  void dropsReachSlowListenerOneAfterTheOtherInOrder() throws Exception {
+    try (FakeApplication application = new FakeApplication()) {
+      FakeWindow window = application.openFake();
+      BlockingQueue<Integer> heard = new LinkedBlockingQueue<>();
+      AtomicInteger hearing = new AtomicInteger();
+      AtomicBoolean overlapped = new AtomicBoolean();
+      window
+          .webView()
+          .onFileDrop(
+              event -> {
+                overlapped.compareAndSet(false, hearing.incrementAndGet() > 1);
+                try {
+                  Thread.sleep(20);
+                } catch (InterruptedException _) {
+                  Thread.currentThread().interrupt();
+                }
+                hearing.decrementAndGet();
+                heard.add(event.x());
+              });
+
+      for (int x = 0; x < 10; x++) {
+        window.dropFiles(List.of(Path.of("/tmp/a.txt")), x, 0);
+      }
+
+      List<Integer> order = new ArrayList<>();
+      while (order.size() < 10) {
+        Integer x = heard.poll(5, TimeUnit.SECONDS);
+        Assertions.assertNotNull(x, "every drop is heard; so far " + order);
+        order.add(x);
+      }
+      Assertions.assertEquals(List.of(0, 1, 2, 3, 4, 5, 6, 7, 8, 9), order);
+      Assertions.assertFalse(overlapped.get(), "never two drops at once");
+    }
+  }
+
+  @Test
   void zoomIsCheckedAndReachesTheBackend() {
     try (FakeApplication application = new FakeApplication()) {
       FakeWindow window = application.openFake();
-      Assertions.assertEquals(1.0, window.zoom(), "a page starts at 100%");
+      Assertions.assertEquals(1.0, window.webView().zoom(), "a page starts at 100%");
 
-      window.zoom(1.5);
-      Assertions.assertEquals(1.5, window.zoom());
-      window.zoom(Window.MINIMUM_ZOOM);
-      window.zoom(Window.MAXIMUM_ZOOM);
+      window.webView().zoom(1.5);
+      Assertions.assertEquals(1.5, window.webView().zoom());
+      window.webView().zoom(WebView.MINIMUM_ZOOM);
+      window.webView().zoom(WebView.MAXIMUM_ZOOM);
       Assertions.assertEquals(List.of(1.5, 0.25, 5.0), window.zooms);
 
       for (double wrong :
           new double[] {
             0,
             -1,
-            Window.MINIMUM_ZOOM - 0.01,
-            Window.MAXIMUM_ZOOM + 0.01,
+            WebView.MINIMUM_ZOOM - 0.01,
+            WebView.MAXIMUM_ZOOM + 0.01,
             Double.NaN,
             Double.POSITIVE_INFINITY
           }) {
         Assertions.assertThrows(
-            IllegalArgumentException.class, () -> window.zoom(wrong), "zoom " + wrong);
+            IllegalArgumentException.class, () -> window.webView().zoom(wrong), "zoom " + wrong);
       }
       Assertions.assertEquals(3, window.zooms.size(), "a refused zoom reaches nobody");
 
       window.close();
-      Assertions.assertThrows(IllegalStateException.class, () -> window.zoom(2));
-      Assertions.assertThrows(IllegalStateException.class, window::zoom);
+      Assertions.assertThrows(IllegalStateException.class, () -> window.webView().zoom(2));
+      Assertions.assertThrows(IllegalStateException.class, window.webView()::zoom);
     }
   }
 
@@ -701,13 +739,15 @@ class AbstractWindowTest {
           "no handler, no permission");
 
       List<PermissionRequest> seen = new CopyOnWriteArrayList<>();
-      window.permissionHandler(
-          request -> {
-            seen.add(request);
-            return request.kind() == PermissionKind.CAMERA
-                ? PermissionDecision.GRANT
-                : PermissionDecision.DENY;
-          });
+      window
+          .webView()
+          .permissionHandler(
+              request -> {
+                seen.add(request);
+                return request.kind() == PermissionKind.CAMERA
+                    ? PermissionDecision.GRANT
+                    : PermissionDecision.DENY;
+              });
       Assertions.assertTrue(window.requestPermission("https://example.com", PermissionKind.CAMERA));
       Assertions.assertFalse(
           window.requestPermission(
@@ -721,11 +761,13 @@ class AbstractWindowTest {
           seen);
 
       seen.clear();
-      window.permissionHandler(
-          request -> {
-            seen.add(request);
-            return PermissionDecision.DENY;
-          });
+      window
+          .webView()
+          .permissionHandler(
+              request -> {
+                seen.add(request);
+                return PermissionDecision.DENY;
+              });
       window.requestPermission("app://local/test-app/page.html?x=1", PermissionKind.CAMERA);
       window.requestPermission("http://app.localhost/", PermissionKind.CAMERA);
       window.requestPermission(null, PermissionKind.CAMERA);
@@ -737,15 +779,17 @@ class AbstractWindowTest {
           seen,
           "the handler gets the origin of the page, whatever the engine reports");
 
-      window.permissionHandler(
-          _ -> {
-            throw new IllegalStateException("handler failed");
-          });
+      window
+          .webView()
+          .permissionHandler(
+              _ -> {
+                throw new IllegalStateException("handler failed");
+              });
       Assertions.assertFalse(
           window.requestPermission("https://example.com", PermissionKind.CAMERA),
           "a handler that throws denies");
 
-      window.permissionHandler(null);
+      window.webView().permissionHandler(null);
       Assertions.assertFalse(
           window.requestPermission("https://example.com", PermissionKind.CAMERA),
           "null brings the default back");
@@ -771,7 +815,7 @@ class AbstractWindowTest {
     try (FakeApplication application = new FakeApplication()) {
       FakeWindow window = application.openFake();
       final CompletableFuture<List<Path>> opened =
-          window.showOpenDialog(OpenDialogParameters.builder().multiple(true).build());
+          window.dialogs().open(OpenDialogParameters.builder().multiple(true).build());
       PresentedDialog open = window.dialogs.poll(5, TimeUnit.SECONDS);
       Assertions.assertNotNull(open);
       Assertions.assertTrue(((OpenDialogParameters) open.parameters()).multiple());
@@ -780,14 +824,14 @@ class AbstractWindowTest {
           List.of(Path.of("/a"), Path.of("/b")), opened.get(5, TimeUnit.SECONDS));
 
       CompletableFuture<Boolean> asked =
-          window.showMessageDialog(MessageDialogParameters.of("Sure?"));
+          window.dialogs().message(MessageDialogParameters.of("Sure?"));
       PresentedDialog message = window.dialogs.poll(5, TimeUnit.SECONDS);
       asked.cancel(false);
       window.awaitUiThread();
       Assertions.assertTrue(message.closed().get(), "cancelling the future closes the dialog");
 
       CompletableFuture<Optional<Path>> saved =
-          window.showSaveDialog(SaveDialogParameters.createDefault());
+          window.dialogs().save(SaveDialogParameters.createDefault());
       final PresentedDialog save = window.dialogs.poll(5, TimeUnit.SECONDS);
       window.close();
       window.awaitUiThread();
@@ -898,6 +942,22 @@ class AbstractWindowTest {
 
       Assertions.assertEquals(List.of(event), heard);
       Assertions.assertEquals("bad listener", reported.getFirst().getMessage());
+    }
+  }
+
+  @Test
+  void loadListenerThatLeftHearsNoMore() {
+    try (FakeApplication application = new FakeApplication()) {
+      FakeWindow window = application.openFake();
+      List<LoadEvent> heard = new ArrayList<>();
+      EventSubscription subscription = window.onLoad(heard::add);
+      LoadEvent started = LoadEvent.of(LoadState.STARTED, "app://local/x");
+      window.emit(started);
+
+      subscription.unlisten();
+      window.emit(LoadEvent.of(LoadState.FINISHED, "app://local/x"));
+
+      Assertions.assertEquals(List.of(started), heard);
     }
   }
 

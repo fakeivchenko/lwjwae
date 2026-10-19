@@ -50,7 +50,7 @@ import java.util.function.Supplier;
  * that handler, the item says it is only a menu ({@code ItemIsMenu}), and the panel opens the menu
  * on any click. Menu entries have the IDs 1 and up in their order; the root of the layout is 0.
  */
-public class StatusNotifierTray implements Tray {
+public final class StatusNotifierTray implements Tray {
   private static final String ITEM_INTERFACE = "org.kde.StatusNotifierItem";
   private static final String MENU_INTERFACE = "com.canonical.dbusmenu";
   private static final String ITEM_PATH = "/StatusNotifierItem";

@@ -14,17 +14,24 @@ top of Google, and how to get a file into shape.
 
 ## Tools
 
-Three tools share the work. Each owns one concern, and none of them overlaps with another.
+Four tools share the work. Each owns one concern, and none of them overlaps with another.
 
 | Tool                                                                                        | Owns                                                   | Changes code | Task                                                         |
 |---------------------------------------------------------------------------------------------|--------------------------------------------------------|--------------|--------------------------------------------------------------|
 | [google-java-format](https://github.com/google/google-java-format) 1.33.0, through Spotless | Layout: indentation, wrapping, imports, Javadoc reflow | Yes          | `spotlessApply` to format, `spotlessCheck` to verify         |
 | [Checkstyle](https://checkstyle.org/) 11.1.0 with `google_checks.xml`                       | Naming, braces, Javadoc presence, wording              | No           | `checkstyleMain`, `checkstyleTest`, `checkstyleTestFixtures` |
 | `javadoc` with `-Xdoclint:all,-missing`                                                     | Broken `{@link}` targets, malformed HTML, unknown tags | No           | `javadoc`, part of `assemble`                                |
+| `javac` with `-Xlint:all -Werror`                                                           | Compiler warnings: escapes of `this`, closes, modules   | No           | every `compileJava`                                          |
 
 The configuration lives in one place, the root [`build.gradle.kts`](../build.gradle.kts), under
 `subprojects { plugins.withId(...) }`. A module opts in by listing the plugins in its own
-`plugins {}` block and configures nothing else.
+`plugins {}` block and configures nothing else. The versions of the tools and the libraries live in
+[`gradle/libs.versions.toml`](../gradle/libs.versions.toml), where Dependabot updates them.
+
+Every warning of `javac` fails the compilation, except three kinds: `restricted`, which every call
+of the Foreign Function and Memory API is; `processing`, which Lombok raises for the annotations of
+others; and `missing-explicit-ctor`, which doesn't see the constructors that Lombok writes. A
+warning that is wrong at one site is suppressed there, documented as the next section says.
 
 [`.editorconfig`](../.editorconfig) carries the same values (two-space indentation, 100 columns,
 LF, IntelliJ import settings) so that an editor doesn't fight the formatter.
@@ -258,6 +265,9 @@ To run the style checks in the environment of the Linux CI job:
 ```bash
 scripts/linux/test-in-docker.sh spotlessCheck checkstyleMain checkstyleTest checkstyleTestFixtures
 ```
+
+[`scripts/git-hooks/pre-commit`](../scripts/git-hooks/pre-commit) runs `spotlessCheck` before a
+commit with Java in it, once a clone opts in with `git config core.hooksPath scripts/git-hooks`.
 
 ## Changing a rule
 

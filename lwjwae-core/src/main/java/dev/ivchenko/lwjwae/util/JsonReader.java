@@ -6,10 +6,20 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/** Reads JSON from a string, one character at a time, for {@link JsonUtil#parse}. */
+/**
+ * Reads JSON from a string, one character at a time, for {@link JsonUtil#parse}.
+ *
+ * <p>Objects and arrays are read by recursion, so the nesting is capped: text from a page that
+ * opens a hundred thousand arrays would otherwise end the reading thread in a {@link
+ * StackOverflowError} rather than in the {@link IllegalArgumentException} of text that isn't JSON.
+ */
 final class JsonReader {
+  /** The deepest nesting of objects and arrays that a text may have. */
+  static final int MAX_DEPTH = 512;
+
   private final String text;
   private int position;
+  private int depth;
 
   JsonReader(String text) {
     this.text = text;
@@ -40,11 +50,13 @@ final class JsonReader {
   }
 
   private Map<String, Object> object() {
+    this.enter();
     Map<String, Object> object = new LinkedHashMap<>();
     this.position++;
     this.skipSpace();
     if (this.peek() == '}') {
       this.position++;
+      this.depth--;
       return object;
     }
     while (true) {
@@ -60,6 +72,7 @@ final class JsonReader {
       char next = this.peek();
       this.position++;
       if (next == '}') {
+        this.depth--;
         return object;
       }
       if (next != ',') {
@@ -69,11 +82,13 @@ final class JsonReader {
   }
 
   private List<Object> array() {
+    this.enter();
     List<Object> array = new ArrayList<>();
     this.position++;
     this.skipSpace();
     if (this.peek() == ']') {
       this.position++;
+      this.depth--;
       return array;
     }
     while (true) {
@@ -82,6 +97,7 @@ final class JsonReader {
       char next = this.peek();
       this.position++;
       if (next == ']') {
+        this.depth--;
         return array;
       }
       if (next != ',') {
@@ -182,6 +198,14 @@ final class JsonReader {
     while (this.position < this.text.length()
         && Character.isWhitespace(this.text.charAt(this.position))) {
       this.position++;
+    }
+  }
+
+  /** Goes one level deeper into an object or an array, as far as {@link #MAX_DEPTH}. */
+  private void enter() {
+    if (++this.depth > MAX_DEPTH) {
+      throw new IllegalArgumentException(
+          "Nested deeper than " + MAX_DEPTH + " levels at " + this.position);
     }
   }
 

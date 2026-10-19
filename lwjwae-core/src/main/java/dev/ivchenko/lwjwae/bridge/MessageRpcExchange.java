@@ -2,6 +2,7 @@ package dev.ivchenko.lwjwae.bridge;
 
 import dev.ivchenko.lwjwae.Window;
 import dev.ivchenko.lwjwae.rpc.RpcExchange;
+import dev.ivchenko.lwjwae.rpc.RpcMessageChannel;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.Locale;
@@ -45,6 +46,7 @@ public final class MessageRpcExchange implements RpcExchange {
   private final String doc;
   private final String id;
   private final String path;
+  private final String token;
   private final String contentType;
   private final byte[] body;
   private final Semaphore inFlight = new Semaphore(IN_FLIGHT);
@@ -57,14 +59,20 @@ public final class MessageRpcExchange implements RpcExchange {
    * Takes a call from its message.
    *
    * @param calls The running calls of the window, which this one leaves once it has answered.
+   * @param token The token of the window that the message carried.
    * @param fields The fields of a call message after the token: {@code doc}, {@code id}, the name,
    *     the media type, the encoding, and the body.
    */
   MessageRpcExchange(
-      MessageRpcCalls calls, RpcMessageChannel channel, Window window, String[] fields) {
+      MessageRpcCalls calls,
+      RpcMessageChannel channel,
+      Window window,
+      String token,
+      String[] fields) {
     this.calls = calls;
     this.channel = channel;
     this.window = window;
+    this.token = token;
     this.doc = fields[0];
     this.id = fields[1];
     this.path = PATH_PREFIX + fields[2];
@@ -94,9 +102,15 @@ public final class MessageRpcExchange implements RpcExchange {
     return this.path;
   }
 
-  /** {@code Content-Type} only; the token vouched for the origin already. */
+  /**
+   * {@code Content-Type}, and the token that the message carried as {@link #TOKEN_HEADER}; the
+   * token vouches for the origin, which a message doesn't carry.
+   */
   @Override
   public String header(String name) {
+    if (TOKEN_HEADER.equalsIgnoreCase(name)) {
+      return this.token;
+    }
     return "Content-Type".equalsIgnoreCase(name) ? this.contentType : null;
   }
 

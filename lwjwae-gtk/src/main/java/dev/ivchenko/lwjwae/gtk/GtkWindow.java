@@ -1,6 +1,5 @@
 package dev.ivchenko.lwjwae.gtk;
 
-import dev.ivchenko.lwjwae.AbstractWindow;
 import dev.ivchenko.lwjwae.Screen;
 import dev.ivchenko.lwjwae.WindowEdge;
 import dev.ivchenko.lwjwae.WindowParameters;
@@ -11,57 +10,36 @@ import dev.ivchenko.lwjwae.dialog.DialogCompletion;
 import dev.ivchenko.lwjwae.dialog.MessageDialogParameters;
 import dev.ivchenko.lwjwae.dialog.OpenDialogParameters;
 import dev.ivchenko.lwjwae.dialog.SaveDialogParameters;
-import dev.ivchenko.lwjwae.event.LoadEvent;
-import dev.ivchenko.lwjwae.event.LoadState;
-import dev.ivchenko.lwjwae.foreign.CallbackRegistry;
 import dev.ivchenko.lwjwae.foreign.NativeLibraries;
 import dev.ivchenko.lwjwae.glib.PortalShortcuts;
+import dev.ivchenko.lwjwae.glib.WebKitGtkWindow;
 import dev.ivchenko.lwjwae.glib.binding.GdkPixbuf;
 import dev.ivchenko.lwjwae.glib.binding.Glib;
 import dev.ivchenko.lwjwae.glib.util.DecorationLayoutUtil;
-import dev.ivchenko.lwjwae.glib.util.WebKitEditingUtil;
 import dev.ivchenko.lwjwae.gtk.binding.Gdk;
 import dev.ivchenko.lwjwae.gtk.binding.Gtk;
 import dev.ivchenko.lwjwae.gtk.binding.Signatures;
 import dev.ivchenko.lwjwae.gtk.binding.WebKit;
 import dev.ivchenko.lwjwae.menu.MenuCommands;
-import dev.ivchenko.lwjwae.menu.MenuRole;
-import dev.ivchenko.lwjwae.permission.PermissionKind;
-import dev.ivchenko.lwjwae.rpc.RpcExchange;
 import dev.ivchenko.lwjwae.util.FileDropUtil;
 import dev.ivchenko.lwjwae.util.ThrowableUtil;
 import java.lang.foreign.MemorySegment;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * A window backed by GTK 3 and WebKitGTK 4.1, opened by a {@link GtkApplication}.
+ * A window backed by GTK 3 and WebKitGTK 4.1, opened by a {@link GtkApplication}: the {@code
+ * GtkWindow} around the web view, whose WebKitGTK half is {@link WebKitGtkWindow}'s.
  *
  * <p>Instances are safe to use from any thread. Every call is forwarded to the shared GTK thread.
- * Native callbacks are static and dispatch through {@link CallbackRegistry}, so a single upcall
- * stub serves every window instead of one stub per instance.
+ * Native callbacks are static and dispatch through the registry of {@link WebKitGtkWindow}, so a
+ * single upcall stub serves every window instead of one stub per instance.
  */
-public class GtkWindow extends AbstractWindow {
-  private static final CallbackRegistry<GtkWindow> WINDOWS = new CallbackRegistry<>();
-  private static final Map<Long, GtkWindow> BY_WEB_VIEW = new ConcurrentHashMap<>();
-  private static final CallbackRegistry<CompletableFuture<String>> PENDING_EVALUATIONS =
-      new CallbackRegistry<>();
+public class GtkWindow extends WebKitGtkWindow {
 
-  private static final MemorySegment ON_DESTROY =
-      NativeLibraries.upcall(
-          MethodHandles.lookup(),
-          GtkWindow.class,
-          "onDestroy",
-          MethodType.methodType(void.class, MemorySegment.class, MemorySegment.class),
-          Signatures.WIDGET_CALLBACK);
   private static final MemorySegment ON_DELETE_EVENT =
       NativeLibraries.upcall(
           MethodHandles.lookup(),
@@ -78,34 +56,14 @@ public class GtkWindow extends AbstractWindow {
           MethodType.methodType(
               int.class, MemorySegment.class, MemorySegment.class, MemorySegment.class),
           Signatures.DELETE_EVENT_CALLBACK);
-  private static final MemorySegment ON_LOAD_CHANGED =
+  private static final MemorySegment ON_TICK =
       NativeLibraries.upcall(
           MethodHandles.lookup(),
           GtkWindow.class,
-          "onLoadChanged",
-          MethodType.methodType(void.class, MemorySegment.class, int.class, MemorySegment.class),
-          Signatures.LOAD_CHANGED_CALLBACK);
-  private static final MemorySegment ON_LOAD_FAILED =
-      NativeLibraries.upcall(
-          MethodHandles.lookup(),
-          GtkWindow.class,
-          "onLoadFailed",
+          "onTick",
           MethodType.methodType(
-              int.class,
-              MemorySegment.class,
-              int.class,
-              MemorySegment.class,
-              MemorySegment.class,
-              MemorySegment.class),
-          Signatures.LOAD_FAILED_CALLBACK);
-  private static final MemorySegment ON_CREATE =
-      NativeLibraries.upcall(
-          MethodHandles.lookup(),
-          GtkWindow.class,
-          "onCreate",
-          MethodType.methodType(
-              MemorySegment.class, MemorySegment.class, MemorySegment.class, MemorySegment.class),
-          Signatures.CREATE_CALLBACK);
+              int.class, MemorySegment.class, MemorySegment.class, MemorySegment.class),
+          Signatures.TICK_CALLBACK);
   private static final MemorySegment ON_DRAG_MOTION =
       NativeLibraries.upcall(
           MethodHandles.lookup(),
@@ -136,14 +94,6 @@ public class GtkWindow extends AbstractWindow {
               int.class,
               MemorySegment.class),
           Signatures.DRAG_DATA_RECEIVED_CALLBACK);
-  private static final MemorySegment ON_PERMISSION_REQUEST =
-      NativeLibraries.upcall(
-          MethodHandles.lookup(),
-          GtkWindow.class,
-          "onPermissionRequest",
-          MethodType.methodType(
-              int.class, MemorySegment.class, MemorySegment.class, MemorySegment.class),
-          Signatures.DELETE_EVENT_CALLBACK);
   private static final MemorySegment ON_CONTEXT_MENU =
       NativeLibraries.upcall(
           MethodHandles.lookup(),
@@ -157,36 +107,15 @@ public class GtkWindow extends AbstractWindow {
               MemorySegment.class,
               MemorySegment.class),
           Signatures.CONTEXT_MENU_CALLBACK);
-  private static final MemorySegment ON_EVALUATION_READY =
-      NativeLibraries.upcall(
-          MethodHandles.lookup(),
-          GtkWindow.class,
-          "onEvaluationReady",
-          MethodType.methodType(
-              void.class, MemorySegment.class, MemorySegment.class, MemorySegment.class),
-          Signatures.G_ASYNC_READY_CALLBACK);
-  private static final MemorySegment ON_BRIDGE_MESSAGE =
-      NativeLibraries.upcall(
-          MethodHandles.lookup(),
-          GtkWindow.class,
-          "onBridgeMessage",
-          MethodType.methodType(
-              void.class, MemorySegment.class, MemorySegment.class, MemorySegment.class),
-          Signatures.SCRIPT_MESSAGE_CALLBACK);
+
   private static final String FRAMELESS_CSS =
       "decoration, window { box-shadow: none; border: none; border-radius: 0; margin: 0;"
           + " background: none; }";
-  private final long callbackId;
-  private final boolean frameless;
-
-  private volatile MemorySegment window;
-  private volatile MemorySegment webView;
 
   /** Where the pointer was at the last motion of a drag over the web view. */
   private volatile int dragX;
 
   private volatile int dragY;
-  private volatile MemorySegment userContentManager;
   private volatile MemorySegment headerBar;
 
   /** The box that holds the menu bar, if any, above the web view. */
@@ -203,23 +132,19 @@ public class GtkWindow extends AbstractWindow {
   private volatile WindowSize maximumSize = WindowSize.NONE;
   private volatile boolean alwaysOnTop;
 
+  /** The frames to wait before the unmaximize of {@link #restore()} goes again. GTK thread only. */
+  private int unmaximizeFrames;
+
   /**
    * Creates the native window on the GTK thread and returns when it exists. The window is hidden
    * until {@link #show()}.
-   *
-   * <p>Suppressed warnings: {@code resource}: on the failure path, {@code unregister} hands back
-   * this window, which looks like an unclosed resource. It is not: there is no native window left
-   * to close, and the exception tells the caller that nothing was opened.
    */
-  @SuppressWarnings("resource")
   GtkWindow(GtkApplication application, long id, WindowParameters parameters) {
-    super(application, id, parameters);
-    this.frameless = !parameters.decorated() && parameters.transparent();
-    this.callbackId = WINDOWS.register(this);
+    super(application, id, parameters, WebKit.SHARED);
     try {
       this.dispatcher().run(() -> this.createWindow(parameters));
     } catch (RuntimeException | Error e) {
-      WINDOWS.unregister(this.callbackId);
+      this.forgetFailedWindow();
       throw e;
     }
   }
@@ -266,12 +191,8 @@ public class GtkWindow extends AbstractWindow {
       Gtk.windowClearBackground(newWindow);
     }
 
-    MemorySegment userData = CallbackRegistry.userData(this.callbackId);
-
-    // Connect before registering, otherwise early messages race the signal handler.
     MemorySegment manager = WebKit.userContentManagerNew();
-    Glib.signalConnect(
-        manager, "script-message-received::" + BridgeProtocol.CHANNEL, ON_BRIDGE_MESSAGE, userData);
+    this.listenToBridge(manager);
     if (!WebKit.registerScriptMessageHandler(manager, BridgeProtocol.CHANNEL)) {
       throw new IllegalStateException(
           "Message handler '" + BridgeProtocol.CHANNEL + "' already registered");
@@ -281,12 +202,7 @@ public class GtkWindow extends AbstractWindow {
     if (parameters.transparent()) {
       WebKit.setTransparentBackground(newWebView);
     }
-    WebKit.setUserAgent(newWebView, this.userAgent(WebKit.userAgent(newWebView)));
-    WebKit.setMediaStreamEnabled(newWebView, true);
-    // Set by the tests of the library only, which run where no camera is.
-    if (Boolean.getBoolean("lwjwae.mockCaptureDevices")) {
-      WebKit.setMockCaptureDevicesEnabled(newWebView, true);
-    }
+    this.configureWebView(newWebView);
     MemorySegment newBox = Gtk.boxNew(Gtk.ORIENTATION_VERTICAL, 0);
     Gtk.boxPackStart(newBox, newWebView, true);
     Gtk.containerAdd(newWindow, newBox);
@@ -294,28 +210,35 @@ public class GtkWindow extends AbstractWindow {
     Gtk.windowAddAccelGroup(newWindow, group);
     Glib.unref(group);
 
+    MemorySegment userData = this.callbackData();
     Glib.signalConnect(newWindow, "delete-event", ON_DELETE_EVENT, userData);
-    Glib.signalConnect(newWindow, "destroy", ON_DESTROY, userData);
     // Every change that a window event reports comes through one of these.
     for (String signal :
         List.of("configure-event", "window-state-event", "focus-in-event", "focus-out-event")) {
       Glib.signalConnect(newWindow, signal, ON_WINDOW_EVENT, userData);
     }
-    Glib.signalConnect(newWebView, "load-changed", ON_LOAD_CHANGED, userData);
-    Glib.signalConnect(newWebView, "load-failed", ON_LOAD_FAILED, userData);
     Glib.signalConnect(newWebView, "context-menu", ON_CONTEXT_MENU, userData);
-    Glib.signalConnect(newWebView, "create", ON_CREATE, userData);
-    Glib.signalConnect(newWebView, "permission-request", ON_PERMISSION_REQUEST, userData);
     Glib.signalConnect(newWebView, "drag-motion", ON_DRAG_MOTION, userData);
     Glib.signalConnect(newWebView, "drag-data-received", ON_DRAG_DATA_RECEIVED, userData);
 
-    this.window = newWindow;
-    this.webView = newWebView;
     this.box = newBox;
     this.accelGroup = group;
-    BY_WEB_VIEW.put(newWebView.address(), this);
-    this.userContentManager = manager;
-    this.installBridge();
+    this.adopt(newWindow, newWebView, manager);
+  }
+
+  @Override
+  protected MemorySegment downloadSource(MemorySegment webView) {
+    return WebKit.downloadSource(webView);
+  }
+
+  @Override
+  protected void downloadDestination(MemorySegment download, Path destination) {
+    WebKit.downloadSetDestination(download, destination);
+  }
+
+  @Override
+  protected void receiveBridgeMessage(MemorySegment message) {
+    this.handleBridgeMessage(WebKit.scriptMessageText(message));
   }
 
   /**
@@ -336,12 +259,6 @@ public class GtkWindow extends AbstractWindow {
     return bar;
   }
 
-  /** Every edge of a transparent window without a title bar, which has no frame to resize from. */
-  @Override
-  protected List<WindowEdge> pageResizeEdges() {
-    return this.frameless ? List.of(WindowEdge.values()) : List.of();
-  }
-
   /**
    * The icon of the title bar and the taskbar on X11; Wayland takes it from the {@code .desktop}.
    */
@@ -358,16 +275,6 @@ public class GtkWindow extends AbstractWindow {
     } finally {
       Glib.unref(pixbuf);
     }
-  }
-
-  @Override
-  protected void presentZoom(double factor) {
-    WebKit.setZoomLevel(this.webView, factor);
-  }
-
-  @Override
-  protected double currentZoom() {
-    return WebKit.zoomLevel(this.webView);
   }
 
   @Override
@@ -398,13 +305,18 @@ public class GtkWindow extends AbstractWindow {
             });
   }
 
+  /** Keeps the size within the limits itself, which GTK leaves to the window manager. */
   @Override
   public void size(int width, int height) {
     this.dispatcher()
         .run(
             () -> {
-              Gtk.windowSetDefaultSize(this.window(), width, height);
-              Gtk.windowResize(this.window(), width, height);
+              int limitedWidth =
+                  GtkWindow.limited(width, this.minimumSize.width(), this.maximumSize.width());
+              int limitedHeight =
+                  GtkWindow.limited(height, this.minimumSize.height(), this.maximumSize.height());
+              Gtk.windowSetDefaultSize(this.window(), limitedWidth, limitedHeight);
+              Gtk.windowResize(this.window(), limitedWidth, limitedHeight);
             });
   }
 
@@ -484,13 +396,31 @@ public class GtkWindow extends AbstractWindow {
     this.dispatcher().run(this::applySizeLimits);
   }
 
+  /**
+   * Sets the limits, and brings the window within them. A window manager of X11 resizes a window
+   * whose hints it no longer fits, but a compositor of Wayland only learns the limits for the next
+   * resize of the user, so the window resizes itself.
+   */
   private void applySizeLimits() {
+    MemorySegment current = this.window();
     Gtk.windowSetSizeLimits(
-        this.window(),
+        current,
         this.minimumSize.width(),
         this.minimumSize.height(),
         this.maximumSize.width(),
         this.maximumSize.height());
+    int[] size = Gtk.windowGetSize(current);
+    int width = GtkWindow.limited(size[0], this.minimumSize.width(), this.maximumSize.width());
+    int height = GtkWindow.limited(size[1], this.minimumSize.height(), this.maximumSize.height());
+    if (width != size[0] || height != size[1]) {
+      Gtk.windowResize(current, width, height);
+    }
+  }
+
+  /** {@code value} within {@code minimum} and {@code maximum}, where 0 is no limit. */
+  private static int limited(int value, int minimum, int maximum) {
+    int raised = Math.max(value, minimum);
+    return maximum > 0 ? Math.min(raised, maximum) : raised;
   }
 
   @Override
@@ -513,13 +443,25 @@ public class GtkWindow extends AbstractWindow {
     this.dispatcher().run(() -> Gtk.windowMaximize(this.window()));
   }
 
+  /**
+   * On Wayland, asks again two frames later while the window is still maximized: a compositor such
+   * as Weston drops an unmaximize that comes before the window drew its maximized frame, and sends
+   * nothing back, so the window would stay maximized.
+   */
   @Override
   public void restore() {
     this.dispatcher()
         .run(
             () -> {
-              Gtk.windowDeiconify(this.window());
-              Gtk.windowUnmaximize(this.window());
+              MemorySegment current = this.window();
+              Gtk.windowDeiconify(current);
+              Gtk.windowUnmaximize(current);
+              if (Gdk.isWayland() && Gtk.isWindowMaximized(current)) {
+                if (this.unmaximizeFrames == 0) {
+                  Gtk.widgetAddTickCallback(current, ON_TICK, this.callbackData());
+                }
+                this.unmaximizeFrames = 2;
+              }
             });
   }
 
@@ -602,7 +544,7 @@ public class GtkWindow extends AbstractWindow {
   @Override
   protected void presentContextMenu(
       MenuCommands commands, WindowPosition place, DialogCompletion<Integer> picked) {
-    MemorySegment view = this.webView;
+    MemorySegment view = this.viewIfAny();
     if (view == null) {
       picked.complete(0);
       return;
@@ -624,14 +566,6 @@ public class GtkWindow extends AbstractWindow {
     MemorySegment gdkWindow = Gtk.widgetGetWindow(view);
     int[] at = place != null ? new int[] {place.x(), place.y()} : Gdk.pointerPosition(gdkWindow);
     Gtk.menuPopupAt(menu, gdkWindow, at[0], at[1]);
-  }
-
-  @Override
-  protected void performEditing(MenuRole role) {
-    MemorySegment view = this.webView;
-    if (view != null) {
-      WebKit.executeEditingCommand(view, WebKitEditingUtil.command(role));
-    }
   }
 
   @Override
@@ -680,68 +614,6 @@ public class GtkWindow extends AbstractWindow {
   }
 
   @Override
-  public boolean isDevToolsEnabled() {
-    return this.dispatcher().call(() -> WebKit.isDeveloperExtrasEnabled(this.webView()));
-  }
-
-  @Override
-  public void devToolsEnabled(boolean devToolsEnabled) {
-    this.dispatcher().run(() -> WebKit.setDeveloperExtrasEnabled(this.webView(), devToolsEnabled));
-  }
-
-  @Override
-  public void navigate(String url) {
-    Objects.requireNonNull(url, "url");
-    this.dispatcher().run(() -> WebKit.loadUri(this.webView(), url));
-  }
-
-  @Override
-  public void html(String html) {
-    Objects.requireNonNull(html, "html");
-    this.dispatcher().run(() -> WebKit.loadHtml(this.webView(), html, this.resourceUrl("")));
-  }
-
-  @Override
-  public String url() {
-    return this.dispatcher().call(() -> WebKit.uri(this.webView()));
-  }
-
-  @Override
-  public CompletableFuture<String> eval(String script) {
-    Objects.requireNonNull(script, "script");
-    CompletableFuture<String> result = new CompletableFuture<>();
-    long evaluationId = PENDING_EVALUATIONS.register(result);
-    this.dispatcher()
-        .post(
-            () -> {
-              try {
-                WebKit.evaluateJavascript(
-                    this.webView(),
-                    script,
-                    ON_EVALUATION_READY,
-                    CallbackRegistry.userData(evaluationId));
-              } catch (Throwable t) {
-                CompletableFuture<String> pending = PENDING_EVALUATIONS.unregister(evaluationId);
-                if (pending != null) {
-                  pending.completeExceptionally(t);
-                }
-              }
-            });
-    return result;
-  }
-
-  @Override
-  protected void injectOnDocumentStart(String script) {
-    this.dispatcher().run(() -> WebKit.addUserScript(this.userContentManager(), script));
-  }
-
-  @Override
-  protected String bridgeTransportScript() {
-    return "(message) => window.webkit.messageHandlers.%s.postMessage(message)"
-        .formatted(BridgeProtocol.CHANNEL);
-  }
-
-  @Override
   public void show() {
     this.dispatcher()
         .run(
@@ -781,52 +653,15 @@ public class GtkWindow extends AbstractWindow {
     this.dispatcher()
         .run(
             () -> {
-              MemorySegment current = this.window;
+              MemorySegment current = this.windowIfAny();
               if (!this.isClosed() && current != null) {
                 Gtk.widgetDestroy(current);
               }
             });
   }
 
-  /** The window that shows {@code webView}, or {@code null}. */
-  static GtkWindow ofWebView(MemorySegment webView) {
-    return BY_WEB_VIEW.get(webView.address());
-  }
-
-  /** Serves an RPC request of the page of this window. */
-  void rpc(RpcExchange exchange) {
-    this.serveRpc(exchange);
-  }
-
-  /** The native {@code GtkWindow}. Call on the GTK thread. */
-  MemorySegment window() {
-    return this.alive(this.window);
-  }
-
-  private MemorySegment webView() {
-    return this.alive(this.webView);
-  }
-
-  private MemorySegment userContentManager() {
-    return this.alive(this.userContentManager);
-  }
-
-  private MemorySegment alive(MemorySegment handle) {
-    this.checkOpen();
-    if (handle == null) {
-      throw new IllegalStateException("The window is closed");
-    }
-    return handle;
-  }
-
-  private void handleDestroyed() {
-    MemorySegment view = this.webView;
-    if (view != null) {
-      BY_WEB_VIEW.remove(view.address());
-    }
-    this.window = null;
-    this.webView = null;
-    this.userContentManager = null;
+  @Override
+  protected void releaseWidgets() {
     this.headerBar = null;
     this.box = null;
     this.accelGroup = null;
@@ -836,7 +671,6 @@ public class GtkWindow extends AbstractWindow {
     if (builder != null) {
       builder.release();
     }
-    this.markClosed();
   }
 
   // --- signal handlers, bound by name from the upcall stubs above; signatures are GTK's ---
@@ -856,7 +690,7 @@ public class GtkWindow extends AbstractWindow {
   private static int onDeleteEvent(
       MemorySegment widget, MemorySegment event, MemorySegment userData) {
     try {
-      GtkWindow window = WINDOWS.lookup(userData);
+      GtkWindow window = WebKitGtkWindow.windowOf(userData, GtkWindow.class);
       if (window != null && window.refusesCloseRequest()) {
         return 1;
       }
@@ -884,7 +718,7 @@ public class GtkWindow extends AbstractWindow {
   private static int onWindowEvent(
       MemorySegment widget, MemorySegment event, MemorySegment userData) {
     try {
-      GtkWindow window = WINDOWS.lookup(userData);
+      GtkWindow window = WebKitGtkWindow.windowOf(userData, GtkWindow.class);
       if (window != null) {
         window.windowChanged();
       }
@@ -895,103 +729,34 @@ public class GtkWindow extends AbstractWindow {
   }
 
   /**
-   * Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
-   * binds it by name, so no Java code calls it and the compiler sees a dead private method. {@code
-   * resource}: the window is {@code AutoCloseable}, and a lookup that returns it looks like an
-   * unclosed resource. It is not: the application owns the window and closes it, this method only
-   * borrows it.
-   */
-  @SuppressWarnings({"unused", "resource"})
-  private static void onDestroy(MemorySegment widget, MemorySegment userData) {
-    try {
-      GtkWindow window = WINDOWS.unregister(userData);
-      if (window != null) {
-        window.handleDestroyed();
-      }
-    } catch (Throwable t) {
-      ThrowableUtil.report(t);
-    }
-  }
-
-  /**
-   * Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
-   * binds it by name, so no Java code calls it and the compiler sees a dead private method. {@code
-   * resource}: the window is {@code AutoCloseable}, and a lookup that returns it looks like an
-   * unclosed resource. It is not: the application owns the window and closes it, this method only
-   * borrows it.
-   */
-  @SuppressWarnings({"unused", "resource"})
-  private static void onLoadChanged(MemorySegment webView, int loadEvent, MemorySegment userData) {
-    try {
-      GtkWindow window = WINDOWS.lookup(userData);
-      if (window == null) {
-        return;
-      }
-
-      LoadState state =
-          switch (loadEvent) {
-            case WebKit.LOAD_STARTED -> LoadState.STARTED;
-            case WebKit.LOAD_REDIRECTED -> LoadState.REDIRECTED;
-            case WebKit.LOAD_COMMITTED -> LoadState.COMMITTED;
-            case WebKit.LOAD_FINISHED -> LoadState.FINISHED;
-            default -> null;
-          };
-      if (state != null) {
-        window.emitLoad(LoadEvent.of(state, WebKit.uri(webView)));
-      }
-    } catch (Throwable t) {
-      ThrowableUtil.report(t);
-    }
-  }
-
-  /**
-   * Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
-   * binds it by name, so no Java code calls it and the compiler sees a dead private method. {@code
-   * resource}: the window is {@code AutoCloseable}, and a lookup that returns it looks like an
-   * unclosed resource. It is not: the application owns the window and closes it, this method only
-   * borrows it.
-   */
-  @SuppressWarnings({"unused", "resource"})
-  private static int onLoadFailed(
-      MemorySegment webView,
-      int loadEvent,
-      MemorySegment failingUri,
-      MemorySegment error,
-      MemorySegment userData) {
-    try {
-      GtkWindow window = WINDOWS.lookup(userData);
-      if (window != null) {
-        window.emitLoad(
-            LoadEvent.failed(NativeLibraries.string(failingUri), Glib.errorMessage(error)));
-      }
-    } catch (Throwable t) {
-      ThrowableUtil.report(t);
-    }
-    return 0; // FALSE: let WebKit render its own error page
-  }
-
-  /**
-   * The page asked for a new window, with {@code target="_blank"} or {@code window.open}. No web
-   * view opens: the window decides where the URL goes, and {@code NULL} declines the request.
+   * A frame of a window that waits to unmaximize, see {@link #restore()}.
    *
    * <p>Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
    * binds it by name, so no Java code calls it and the compiler sees a dead private method. {@code
    * resource}: the window is {@code AutoCloseable}, and a lookup that returns it looks like an
    * unclosed resource. It is not: the application owns the window and closes it, this method only
    * borrows it.
+   *
+   * @return {@code TRUE} to hear the next frame, {@code FALSE} once done.
    */
   @SuppressWarnings({"unused", "resource"})
-  private static MemorySegment onCreate(
-      MemorySegment webView, MemorySegment action, MemorySegment userData) {
+  private static int onTick(
+      MemorySegment widget, MemorySegment frameClock, MemorySegment userData) {
     try {
-      GtkWindow window = WINDOWS.lookup(userData);
-      if (window != null) {
-        window.newWindowRequested(WebKit.navigationActionUri(action));
+      GtkWindow window = WebKitGtkWindow.windowOf(userData, GtkWindow.class);
+      if (window == null) {
+        return 0;
+      }
+      if (--window.unmaximizeFrames > 0) {
+        return 1;
+      }
+      if (Gtk.isWindowMaximized(widget)) {
+        Gtk.windowUnmaximize(widget);
       }
     } catch (Throwable t) {
       ThrowableUtil.report(t);
     }
-    return MemorySegment.NULL;
+    return 0;
   }
 
   /**
@@ -1012,7 +777,7 @@ public class GtkWindow extends AbstractWindow {
       int y,
       int time,
       MemorySegment userData) {
-    GtkWindow window = WINDOWS.lookup(userData);
+    GtkWindow window = WebKitGtkWindow.windowOf(userData, GtkWindow.class);
     if (window != null) {
       window.dragX = x;
       window.dragY = y;
@@ -1041,7 +806,7 @@ public class GtkWindow extends AbstractWindow {
       int time,
       MemorySegment userData) {
     try {
-      GtkWindow window = WINDOWS.lookup(userData);
+      GtkWindow window = WebKitGtkWindow.windowOf(userData, GtkWindow.class);
       if (window != null) {
         // WebKit asks for the data from its own handler of the drop, and the coordinates that come
         // with it are not the ones of the pointer; the last motion has them.
@@ -1053,47 +818,6 @@ public class GtkWindow extends AbstractWindow {
     } catch (Throwable t) {
       ThrowableUtil.report(t);
     }
-  }
-
-  /**
-   * The page asks for a permission, and WebKit waits for the answer. Only the camera and the
-   * microphone reach the handler; the position, notifications, and a capture of the screen are
-   * denied here, so that the engine never shows a prompt of its own.
-   *
-   * <p>Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
-   * binds it by name, so no Java code calls it and the compiler sees a dead private method. {@code
-   * resource}: the window is {@code AutoCloseable}, and a lookup that returns it looks like an
-   * unclosed resource. It is not: the application owns the window and closes it, this method only
-   * borrows it.
-   */
-  @SuppressWarnings({"unused", "resource"})
-  private static int onPermissionRequest(
-      MemorySegment webView, MemorySegment request, MemorySegment userData) {
-    boolean granted = false;
-    try {
-      GtkWindow window = WINDOWS.lookup(userData);
-      if (window != null
-          && WebKit.isUserMediaRequest(request)
-          && !WebKit.isForDisplayDevice(request)) {
-        List<PermissionKind> kinds = new ArrayList<>();
-        if (WebKit.isForVideoDevice(request)) {
-          kinds.add(PermissionKind.CAMERA);
-        }
-        if (WebKit.isForAudioDevice(request)) {
-          kinds.add(PermissionKind.MICROPHONE);
-        }
-        granted =
-            window.permissionRequested(WebKit.uri(webView), kinds.toArray(PermissionKind[]::new));
-      }
-    } catch (Throwable t) {
-      ThrowableUtil.report(t);
-    }
-    try {
-      WebKit.answerPermissionRequest(request, granted);
-    } catch (Throwable t) {
-      ThrowableUtil.report(t);
-    }
-    return 1;
   }
 
   /**
@@ -1115,54 +839,13 @@ public class GtkWindow extends AbstractWindow {
       MemorySegment hitTest,
       MemorySegment userData) {
     try {
-      GtkWindow window = WINDOWS.lookup(userData);
-      if (window != null && WebKit.isDeveloperExtrasEnabled(webView)) {
+      GtkWindow window = WebKitGtkWindow.windowOf(userData, GtkWindow.class);
+      if (window != null && WebKit.SHARED.isDeveloperExtrasEnabled(webView)) {
         return 0;
       }
     } catch (Throwable t) {
       ThrowableUtil.report(t);
     }
     return 1;
-  }
-
-  /**
-   * Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
-   * binds it by name, so no Java code calls it and the compiler sees a dead private method.
-   */
-  @SuppressWarnings("unused")
-  private static void onEvaluationReady(
-      MemorySegment source, MemorySegment result, MemorySegment userData) {
-    CompletableFuture<String> pending = PENDING_EVALUATIONS.unregister(userData);
-    if (pending == null) {
-      return;
-    }
-
-    try {
-      pending.complete(WebKit.evaluateJavascriptFinish(source, result));
-    } catch (Throwable t) {
-      pending.completeExceptionally(t);
-    }
-  }
-
-  /**
-   * Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
-   * binds it by name, so no Java code calls it and the compiler sees a dead private method. {@code
-   * resource}: the window is {@code AutoCloseable}, and a lookup that returns it looks like an
-   * unclosed resource. It is not: the application owns the window and closes it, this method only
-   * borrows it.
-   */
-  @SuppressWarnings({"unused", "resource"})
-  private static void onBridgeMessage(
-      MemorySegment manager, MemorySegment javascriptResult, MemorySegment userData) {
-    try {
-      GtkWindow window = WINDOWS.lookup(userData);
-      if (window == null) {
-        return;
-      }
-
-      window.handleBridgeMessage(WebKit.scriptMessageText(javascriptResult));
-    } catch (Throwable t) {
-      ThrowableUtil.report(t);
-    }
   }
 }

@@ -1,8 +1,9 @@
-package dev.ivchenko.lwjwae.event;
+package dev.ivchenko.lwjwae.internal;
 
 import dev.ivchenko.lwjwae.Window;
 import dev.ivchenko.lwjwae.WindowPosition;
 import dev.ivchenko.lwjwae.WindowSize;
+import dev.ivchenko.lwjwae.event.WindowEventType;
 import java.util.ArrayList;
 import java.util.List;
 

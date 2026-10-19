@@ -1,23 +1,14 @@
 package dev.ivchenko.lwjwae;
 
-import dev.ivchenko.lwjwae.dialog.FileType;
-import dev.ivchenko.lwjwae.dialog.MessageButtons;
-import dev.ivchenko.lwjwae.dialog.MessageDialogParameters;
-import dev.ivchenko.lwjwae.dialog.MessageLevel;
-import dev.ivchenko.lwjwae.dialog.OpenDialogParameters;
-import dev.ivchenko.lwjwae.dialog.SaveDialogParameters;
+import dev.ivchenko.lwjwae.dialog.Dialogs;
+import dev.ivchenko.lwjwae.download.Downloads;
 import dev.ivchenko.lwjwae.event.Event;
 import dev.ivchenko.lwjwae.event.EventSubscription;
-import dev.ivchenko.lwjwae.event.FileDropEvent;
 import dev.ivchenko.lwjwae.event.LoadEvent;
 import dev.ivchenko.lwjwae.event.WindowEvent;
-import dev.ivchenko.lwjwae.menu.MenuItem;
-import dev.ivchenko.lwjwae.permission.PermissionDecision;
-import dev.ivchenko.lwjwae.permission.PermissionRequest;
+import dev.ivchenko.lwjwae.menu.Menus;
 import dev.ivchenko.lwjwae.rpc.RpcHandler;
 import dev.ivchenko.lwjwae.util.ResourceUtil;
-import java.nio.file.Path;
-import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
@@ -35,10 +26,15 @@ import java.util.function.Function;
  * CloseAction#HIDE} and the application has a tray icon up: then it is hidden, stays open, and
  * {@link #show()} brings it back.
  *
+ * <p>What the window does besides its frame, its page, and the bridge is grouped by feature, each
+ * group behind a method of its own: {@link #dialogs()}, {@link #menus()}, {@link #downloads()}, and
+ * {@link #webView()}.
+ *
  * <p>Every method is safe to call from any thread. The backend forwards the call to the UI thread
  * of its toolkit, and a getter blocks until the UI thread has answered. Once the window is closed,
  * from Java or by the user, every method throws {@link IllegalStateException}, except {@link
- * #isClosed()}, {@link #close()}, and the ones that only register a listener.
+ * #isClosed()}, {@link #close()}, the ones that only register a listener, and the ones that hand
+ * out a group, whose own methods say what they do then.
  */
 public interface Window extends AutoCloseable {
   /** A number that identifies this window within its application, unique for the process. */
@@ -330,25 +326,6 @@ public interface Window extends AutoCloseable {
    */
   void focus();
 
-  /** Whether the developer tools of the engine are reachable from the context menu. */
-  boolean isDevToolsEnabled();
-
-  /**
-   * Makes the developer tools of the engine reachable from the context menu, or not.
-   *
-   * <p>Platforms:
-   *
-   * <ul>
-   *   <li>Windows: Turns the default context menu of WebView2 on too, with Reload and View source,
-   *       since Inspect lives in it.
-   *   <li>macOS: Lets the context menu of the page through, with Inspect Element, through {@code
-   *       developerExtrasEnabled}, a private key that every embedding application uses.
-   *   <li>Linux, GTK 3: Adds Inspect Element to the context menu, which is suppressed otherwise.
-   *   <li>Linux, GTK 4: As on GTK 3.
-   * </ul>
-   */
-  void devToolsEnabled(boolean devToolsEnabled);
-
   /**
    * The URL of the current document, or {@code null} before the first navigation.
    *
@@ -494,8 +471,14 @@ public interface Window extends AutoCloseable {
   /** The same as {@link #once(String, Consumer)}, with the payload decoded by the codec. */
   <T> EventSubscription once(String name, Class<T> type, Consumer<T> listener);
 
-  /** Registers a listener for the load lifecycle of every navigation. Runs on the UI thread. */
-  void onLoad(Consumer<LoadEvent> listener);
+  /**
+   * Registers a listener for the load lifecycle of every navigation.
+   *
+   * @param listener Receives the events on the UI thread, as the engine reports them, so it must
+   *     return quickly.
+   * @return The subscription, to stop listening.
+   */
+  EventSubscription onLoad(Consumer<LoadEvent> listener);
 
   /**
    * Registers a listener for every change of the window: its size, its place, minimized, maximized,
@@ -503,70 +486,6 @@ public interface Window extends AutoCloseable {
    * hears the same events through {@code window.lwjwae.window.listen}.
    */
   EventSubscription onWindowEvent(Consumer<WindowEvent> listener);
-
-  /**
-   * Calls {@code listener} when the user drops files from the file manager of the desktop onto the
-   * page, with their paths, which a page can't read from the files that the browser gives it. A
-   * page hears the same through {@code lwjwae.files.listen}.
-   *
-   * <p>A file dropped on a page doesn't open in the window: the library stops the engine from
-   * navigating to it, unless the page handles {@code drop} itself and stops it first. The {@code
-   * dragenter}, {@code dragover}, and {@code drop} events still reach the page, for the highlight
-   * of a drop zone.
-   *
-   * <p>Platforms:
-   *
-   * <ul>
-   *   <li>Windows: Through the files that a {@code drop} event of the page hands to the host, which
-   *       needs the WebView2 runtime 1.0.1264 or later. The window must have the focus of the page
-   *       script, as for any drop.
-   *   <li>macOS: The file URLs on the pasteboard of the drag, which the web view reads as it takes
-   *       the drop, at the place of the {@code drop} event of the page.
-   *   <li>Linux, GTK 3: The URI list of the drop, so a file that lives only in a remote location
-   *       that the file manager mounted is left out.
-   *   <li>Linux, GTK 4: The files that the drag offers, read as it comes over the page, at the
-   *       place of the {@code drop} event of the page; a file that isn't local is left out.
-   * </ul>
-   *
-   * @param listener Receives the event on a virtual thread.
-   * @return The subscription, to stop listening.
-   */
-  EventSubscription onFileDrop(Consumer<FileDropEvent> listener);
-
-  /** The smallest zoom of a page, 25%. */
-  double MINIMUM_ZOOM = 0.25;
-
-  /** The largest zoom of a page, 500%. */
-  double MAXIMUM_ZOOM = 5.0;
-
-  /**
-   * The zoom of the page: 1 is 100%, 1.5 is 150%, and 0.5 is 50%. A page starts at 1, and the
-   * answer is what the engine shows now, which is what {@link #zoom(double)} set last.
-   *
-   * @throws IllegalStateException If the window is closed.
-   */
-  double zoom();
-
-  /**
-   * Zooms the page, the whole of its content, as the zoom of a browser does: text, images, and
-   * layout grow together, and the page sees a narrower viewport in CSS pixels. The user can't zoom
-   * the page with the keyboard or the wheel; only Java does. The zoom belongs to the window and
-   * stays through navigations.
-   *
-   * <p>Platforms:
-   *
-   * <ul>
-   *   <li>Windows: The zoom factor of the web view.
-   *   <li>macOS: The page zoom of the web view, which needs macOS 11 or later.
-   *   <li>Linux, GTK 3: The zoom level of the web view.
-   *   <li>Linux, GTK 4: As on GTK 3.
-   * </ul>
-   *
-   * @param factor The zoom, from {@link #MINIMUM_ZOOM} to {@link #MAXIMUM_ZOOM}.
-   * @throws IllegalArgumentException If {@code factor} is outside that range, or isn't a number.
-   * @throws IllegalStateException If the window is closed.
-   */
-  void zoom(double factor);
 
   /**
    * Sets the icon of the window: the one in its title bar, in the taskbar or the Dock, and in the
@@ -603,244 +522,20 @@ public interface Window extends AutoCloseable {
     this.icon(ResourceUtil.read(resource));
   }
 
-  /**
-   * Decides where a link that leaves the application goes: a click in a page of the application on
-   * a link to another origin, a {@code mailto:} link, {@code window.open} of such a URL, a link
-   * with {@code target="_blank"} or another request for a new window, and {@code
-   * window.lwjwae.openExternal(url)}. By default, {@link Application#openExternal} opens it in the
-   * browser or the mail client of the system, and the window stays where it is.
-   *
-   * <p>A new window of the application's own origin opens in this window instead, since a web view
-   * has no tabs; a link inside the application, or a navigation of a page from elsewhere, stays in
-   * the window, as does a navigation from Java.
-   *
-   * @param handler Receives the absolute URL on a virtual thread, and may open it anywhere, {@link
-   *     #navigate} to it, or drop it; {@code null} brings the default back.
-   */
-  void externalLinkHandler(Consumer<String> handler);
+  /** The dialogs of the platform over this window: files to open, a file to save, and messages. */
+  Dialogs dialogs();
+
+  /** The menus of this window: its menu bar, its context menu, and menus at the pointer. */
+  Menus menus();
+
+  /** The downloads of the page: where they go, how they get on, and how they stop. */
+  Downloads downloads();
 
   /**
-   * Decides what a page may use that needs the permission of the user: the camera, the microphone,
-   * the position, and notifications. By default, every request is denied, on every platform, so
-   * that the page fails the same way everywhere and no engine shows a prompt of its own.
-   *
-   * <p>Platforms:
-   *
-   * <ul>
-   *   <li>Windows: Every kind. The prompt of WebView2 never shows.
-   *   <li>macOS: The camera and the microphone. After the handler grants one, the system asks the
-   *       user for its own permission of the application, which needs the usage description of the
-   *       camera or the microphone in {@code Info.plist}. WKWebView has no hook for the position
-   *       and notifications, so the handler doesn't hear of them there.
-   *   <li>Linux, GTK 3 and GTK 4: The camera and the microphone. The position and notifications are
-   *       always denied, and the handler doesn't hear of them.
-   * </ul>
-   *
-   * @param handler Receives each request on the UI thread, so it must answer without waiting. A
-   *     handler that throws denies the request. {@code null} brings the default back.
+   * The web view of this window as an engine: its zoom, its developer tools, and what it does with
+   * links, permissions, and files that leave or enter the page.
    */
-  void permissionHandler(Function<PermissionRequest, PermissionDecision> handler);
-
-  /**
-   * Shows the dialog of the platform that opens files, or folders, over this window, and returns
-   * without waiting for the user.
-   *
-   * <p>Platforms:
-   *
-   * <ul>
-   *   <li>Windows: The common item dialog, modal to the window; the kinds of file are the filters
-   *       of the dialog.
-   *   <li>macOS: A sheet of the window. The title shows above the files, since a sheet has no title
-   *       bar, and the kinds of file merge into one list of extensions, since a panel has no menu
-   *       of them.
-   *   <li>Linux, GTK 3: {@code GtkFileChooserNative} through the desktop portal wherever the
-   *       session has one, so the dialog is the one of the desktop, such as Dolphin's on KDE
-   *       Plasma, and the dialog of GTK without a portal. {@code GTK_USE_PORTAL=0} keeps the one of
-   *       GTK.
-   *   <li>Linux, GTK 4: As on GTK 3; {@code GDK_DEBUG=no-portals} keeps the one of GTK.
-   * </ul>
-   *
-   * @return The files or folders that the user picked, or none if they canceled. Canceling the
-   *     future closes the dialog.
-   */
-  CompletableFuture<List<Path>> showOpenDialog(OpenDialogParameters parameters);
-
-  /**
-   * Shows the dialog of the platform that saves a file over this window, and returns without
-   * waiting for the user. The dialog asks before it picks a file that exists; nothing is written.
-   *
-   * <p>Platforms:
-   *
-   * <ul>
-   *   <li>Windows: The common item dialog, modal to the window.
-   *   <li>macOS: A sheet of the window, with the title above the name, as for opening.
-   *   <li>Linux, GTK 3: {@code GtkFileChooserNative}, through the desktop portal, as for opening.
-   *   <li>Linux, GTK 4: As on GTK 3.
-   * </ul>
-   *
-   * @return The file that the user picked, or empty if they canceled. Canceling the future closes
-   *     the dialog.
-   */
-  CompletableFuture<Optional<Path>> showSaveDialog(SaveDialogParameters parameters);
-
-  /**
-   * Shows a message over this window, and returns without waiting for the user.
-   *
-   * <p>Platforms:
-   *
-   * <ul>
-   *   <li>Windows: A message box, modal to the window. The detail follows the message after a blank
-   *       line, and without a title the title bar shows the title of the window.
-   *   <li>macOS: An alert sheet of the window. The message is in bold and the detail under it; the
-   *       title isn't shown, since a sheet has no title bar.
-   *   <li>Linux, GTK 3: A {@code GtkMessageDialog}, with the detail as its secondary text and the
-   *       buttons in the language of the user, from the translations of GTK.
-   *   <li>Linux, GTK 4: As on GTK 3.
-   * </ul>
-   *
-   * @return {@code true} if the user chose OK or yes, {@code false} for cancel, no, or a closed
-   *     dialog. Canceling the future closes the dialog.
-   */
-  CompletableFuture<Boolean> showMessageDialog(MessageDialogParameters parameters);
-
-  /**
-   * Shows {@code message} with an OK button, the way {@code alert} does on a page, and returns
-   * without waiting for the user. The future completes when the user closed the message.
-   */
-  default CompletableFuture<Void> alert(String message) {
-    return Window.following(
-        this.showMessageDialog(MessageDialogParameters.of(message)), _ -> (Void) null);
-  }
-
-  /**
-   * Asks {@code message} with OK and Cancel, the way {@code confirm} does on a page, and returns
-   * without waiting for the user.
-   *
-   * @return {@code true} for OK. Canceling the future closes the dialog.
-   */
-  default CompletableFuture<Boolean> confirm(String message) {
-    return this.showMessageDialog(
-        MessageDialogParameters.builder()
-            .message(message)
-            .level(MessageLevel.QUESTION)
-            .buttons(MessageButtons.OK_CANCEL)
-            .build());
-  }
-
-  /**
-   * Lets the user pick one file to open, of one of {@code types}, or of any type without them.
-   *
-   * @return The file, or empty if the user canceled. Canceling the future closes the dialog.
-   */
-  default CompletableFuture<Optional<Path>> pickFile(FileType... types) {
-    return Window.following(
-        this.showOpenDialog(OpenDialogParameters.builder().fileTypes(List.of(types)).build()),
-        files -> files.stream().findFirst());
-  }
-
-  /**
-   * Lets the user pick files to open, of {@code types}, or of any type without them.
-   *
-   * @return The files, or none if the user canceled. Canceling the future closes the dialog.
-   */
-  default CompletableFuture<List<Path>> pickFiles(FileType... types) {
-    return this.showOpenDialog(
-        OpenDialogParameters.builder().fileTypes(List.of(types)).multiple(true).build());
-  }
-
-  /**
-   * Lets the user pick a folder.
-   *
-   * @return The folder, or empty if the user canceled. Canceling the future closes the dialog.
-   */
-  default CompletableFuture<Optional<Path>> pickFolder() {
-    return Window.following(
-        this.showOpenDialog(OpenDialogParameters.builder().directories(true).build()),
-        folders -> folders.stream().findFirst());
-  }
-
-  /**
-   * Lets the user pick where to save a file, suggesting {@code fileName}, of one of {@code types}.
-   *
-   * @return The file, or empty if the user canceled. Canceling the future closes the dialog.
-   */
-  default CompletableFuture<Optional<Path>> pickSaveFile(String fileName, FileType... types) {
-    return this.showSaveDialog(
-        SaveDialogParameters.builder().fileName(fileName).fileTypes(List.of(types)).build());
-  }
-
-  /** The menu bar of the window: its own, or the one of the application. Empty for none. */
-  List<MenuItem> menu();
-
-  /**
-   * Gives the window a menu bar of its own, instead of the one of the application, see {@link
-   * Application#menu(List)}. An empty list takes the bar away from this window. {@link
-   * #useApplicationMenu()} goes back to the menu of the application.
-   *
-   * <p>Platforms:
-   *
-   * <ul>
-   *   <li>Windows: As described.
-   *   <li>macOS: The menu bar at the top of the screen shows it while the window is in front.
-   *   <li>Linux, GTK 3: As described.
-   *   <li>Linux, GTK 4: As described.
-   * </ul>
-   *
-   * @throws IllegalArgumentException If an entry of the top level isn't a submenu.
-   * @throws IllegalStateException If the window is closed.
-   */
-  void menu(List<MenuItem> items);
-
-  /** The same as {@link #menu(List)}. */
-  default void menu(MenuItem... items) {
-    this.menu(List.of(items));
-  }
-
-  /** Makes the window show the menu bar of the application again. */
-  void useApplicationMenu();
-
-  /**
-   * Sets the menu that a right click on the page opens, in place of the one of the engine. The page
-   * still decides first: one that handles {@code contextmenu} and calls {@code preventDefault()}
-   * keeps the click to itself. An empty list takes the menu away, which leaves the engine as {@link
-   * #devToolsEnabled(boolean)} says.
-   *
-   * <p>A check mark of the menu keeps its state from one opening to the next, until the menu is set
-   * again. The accelerators of the entries are only shown: a context menu has no keys.
-   *
-   * @throws IllegalStateException If the window is closed.
-   */
-  void contextMenu(List<MenuItem> items);
-
-  /** The same as {@link #contextMenu(List)}. */
-  default void contextMenu(MenuItem... items) {
-    this.contextMenu(List.of(items));
-  }
-
-  /**
-   * Opens {@code items} as a menu at the pointer, over this window, and completes once it closes
-   * and the entry picked, if any, has started. Canceling the future closes the menu, and so does
-   * closing the window.
-   *
-   * <p>Platforms:
-   *
-   * <ul>
-   *   <li>Windows: As described.
-   *   <li>macOS: A role goes along the responder chain, the way every Mac menu sends it, and the
-   *       page that opened the menu hears of it as of no pick.
-   *   <li>Linux, GTK 3: Wayland: the compositor opens the menu only near a click or a key press
-   *       that it saw last, which is where the pointer is for a menu opened from one.
-   *   <li>Linux, GTK 4: As on GTK 3.
-   * </ul>
-   *
-   * @throws IllegalStateException If the window is closed.
-   */
-  CompletableFuture<Void> showContextMenu(List<MenuItem> items);
-
-  /** The same as {@link #showContextMenu(List)}. */
-  default CompletableFuture<Void> showContextMenu(MenuItem... items) {
-    return this.showContextMenu(List.of(items));
-  }
+  WebView webView();
 
   /**
    * Puts the window on screen, or back on it after {@link #hide()}, and brings it to the front.
@@ -894,20 +589,4 @@ public interface Window extends AutoCloseable {
    */
   @Override
   void close();
-
-  /**
-   * {@code dialog} with its answer turned by {@code answer}, where canceling the result cancels
-   * {@code dialog} too, which closes it, as canceling {@code dialog} itself does.
-   */
-  private static <T, R> CompletableFuture<R> following(
-      CompletableFuture<T> dialog, Function<T, R> answer) {
-    CompletableFuture<R> result = dialog.thenApply(answer);
-    result.whenComplete(
-        (_, _) -> {
-          if (result.isCancelled()) {
-            dialog.cancel(true);
-          }
-        });
-    return result;
-  }
 }

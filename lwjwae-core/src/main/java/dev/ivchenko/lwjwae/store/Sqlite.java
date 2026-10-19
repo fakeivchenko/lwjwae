@@ -2,11 +2,16 @@ package dev.ivchenko.lwjwae.store;
 
 import dev.ivchenko.lwjwae.foreign.Layouts;
 import dev.ivchenko.lwjwae.foreign.NativeLibraries;
+import dev.ivchenko.lwjwae.util.ThrowableUtil;
 import java.lang.foreign.FunctionDescriptor;
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.SymbolLookup;
 import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.MethodType;
 import java.nio.charset.StandardCharsets;
+import java.util.Locale;
+import java.util.Set;
 import lombok.SneakyThrows;
 import lombok.experimental.UtilityClass;
 
@@ -38,6 +43,28 @@ class Sqlite {
 
   /** {@code SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX}. */
   final int OPEN_FLAGS = 0x2 | 0x4 | 0x10000;
+
+  /** {@code SQLITE_DENY}: the authorizer refuses the statement, which then fails to compile. */
+  private final int DENY = 1;
+
+  /** {@code SQLITE_PRAGMA}, {@code SQLITE_ATTACH}, {@code SQLITE_DETACH}: authorizer actions. */
+  private final int PRAGMA = 19;
+
+  private final int ATTACH = 24;
+  private final int DETACH = 25;
+
+  /**
+   * The {@code PRAGMA}s that a page may not run: where SQLite writes its files, whether it trusts
+   * the schema, and how the file is journaled and locked, which the store decides.
+   */
+  private final Set<String> PRAGMAS_REFUSED_TO_PAGES =
+      Set.of(
+          "data_store_directory",
+          "journal_mode",
+          "locking_mode",
+          "temp_store_directory",
+          "trusted_schema",
+          "writable_schema");
 
   /** {@code SQLITE_TRANSIENT}: SQLite copies a bound value before the call returns. */
   private final MemorySegment TRANSIENT = MemorySegment.ofAddress(-1L);
@@ -160,6 +187,35 @@ class Sqlite {
           FunctionDescriptor.of(Layouts.C_LONG_LONG, Layouts.C_POINTER));
   private final MethodHandle BUSY_TIMEOUT =
       NativeLibraries.downcall(SQLITE, "sqlite3_busy_timeout", INT_POINTER_INT);
+  private final MethodHandle SET_AUTHORIZER =
+      NativeLibraries.downcall(
+          SQLITE,
+          "sqlite3_set_authorizer",
+          FunctionDescriptor.of(
+              Layouts.C_INT, Layouts.C_POINTER, Layouts.C_POINTER, Layouts.C_POINTER));
+
+  /** The C side of {@link #authorizeForPage}. */
+  private final MemorySegment PAGE_AUTHORIZER =
+      NativeLibraries.upcall(
+          MethodHandles.lookup(),
+          Sqlite.class,
+          "authorizeForPage",
+          MethodType.methodType(
+              int.class,
+              MemorySegment.class,
+              int.class,
+              MemorySegment.class,
+              MemorySegment.class,
+              MemorySegment.class,
+              MemorySegment.class),
+          FunctionDescriptor.of(
+              Layouts.C_INT,
+              Layouts.C_POINTER,
+              Layouts.C_INT,
+              Layouts.C_POINTER,
+              Layouts.C_POINTER,
+              Layouts.C_POINTER,
+              Layouts.C_POINTER));
 
   @SneakyThrows
   int open(MemorySegment filename, MemorySegment database) {
@@ -284,5 +340,51 @@ class Sqlite {
   @SneakyThrows
   int busyTimeout(MemorySegment database, int milliseconds) {
     return (int) BUSY_TIMEOUT.invokeExact(database, milliseconds);
+  }
+
+  /**
+   * Calls {@code sqlite3_set_authorizer} with {@link #authorizeForPage} while {@code pages} is
+   * true, and with none otherwise. Statements compiled meanwhile are checked.
+   */
+  @SneakyThrows
+  int authorizeForPages(MemorySegment database, boolean pages) {
+    MemorySegment authorizer = pages ? PAGE_AUTHORIZER : MemorySegment.NULL;
+    return (int) SET_AUTHORIZER.invokeExact(database, authorizer, MemorySegment.NULL);
+  }
+
+  /**
+   * Decides whether a statement of a page may do {@code action}, as SQLite compiles it. A page
+   * keeps to the file of the store: {@code ATTACH}, which {@code VACUUM INTO} runs as well, would
+   * open or create any file that the process may write, and {@link #PRAGMAS_REFUSED_TO_PAGES}
+   * change where and how SQLite writes.
+   *
+   * <p>Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
+   * binds it by name, so no Java code calls it and the compiler sees a dead private method.
+   *
+   * @param first The name of the pragma for {@code SQLITE_PRAGMA}.
+   */
+  @SuppressWarnings("unused")
+  private int authorizeForPage(
+      MemorySegment userData,
+      int action,
+      MemorySegment first,
+      MemorySegment second,
+      MemorySegment database,
+      MemorySegment trigger) {
+    try {
+      return switch (action) {
+        case ATTACH, DETACH -> DENY;
+        case PRAGMA -> {
+          String pragma = NativeLibraries.string(first);
+          yield pragma != null && PRAGMAS_REFUSED_TO_PAGES.contains(pragma.toLowerCase(Locale.ROOT))
+              ? DENY
+              : OK;
+        }
+        default -> OK;
+      };
+    } catch (Throwable t) {
+      ThrowableUtil.report(t);
+      return DENY;
+    }
   }
 }

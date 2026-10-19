@@ -63,7 +63,10 @@ public class PlatformUtil {
         continue;
       }
       String key = line.substring(0, equals).strip();
-      String value = line.substring(equals + 1).strip().replace("\"", "");
+      String value = line.substring(equals + 1).replace("\"", "").strip();
+      if (value.isEmpty()) {
+        continue;
+      }
       if (key.equals("ID")) {
         ids.addFirst(value);
       } else if (key.equals("ID_LIKE")) {

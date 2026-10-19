@@ -19,10 +19,15 @@ import java.nio.channels.FileLock;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.nio.file.attribute.PosixFileAttributes;
+import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
+import java.nio.file.attribute.UserPrincipal;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
@@ -31,6 +36,7 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Consumer;
 
 /**
@@ -44,12 +50,19 @@ import java.util.function.Consumer;
  * The first process binds it and accepts. A later one connects, sends its arguments and its working
  * directory, waits until the first one answers that it handled them, and ends.
  *
+ * <p>Where that directory is the temporary one, which every user may share, as {@code /tmp} on
+ * Linux without {@code $XDG_RUNTIME_DIR}, the socket goes into a directory of its own inside it,
+ * which only the user may enter. Another user could otherwise bind the name first, take the
+ * arguments of every later start, and keep the application from running. A directory of that name
+ * that someone else owns is refused.
+ *
  * <p>Two processes that start at the same moment would both find no one to connect to, so a claim
  * runs under a lock on a file next to the socket. A socket file stays when its process ends, since
  * removing it on the way out could remove the socket of a process that claimed the name in the
  * meantime; it takes no connection, and the next claim replaces it.
  */
 public final class InstanceLock implements AutoCloseable {
+  private static final System.Logger LOG = System.getLogger(InstanceLock.class.getName());
   private static final int VERSION = 1;
   private static final byte HANDLED = 1;
   private static final int ARGUMENT_LIMIT = 64 * 1024;
@@ -61,6 +74,19 @@ public final class InstanceLock implements AutoCloseable {
 
   /** The bytes that the name of the socket adds to its directory, the separator included. */
   private static final int NAME_LENGTH = "/lwjwae-0123456789abcdef.sock".length();
+
+  /** The bytes that the private directory adds to the temporary one, the separator included. */
+  private static final int PRIVATE_LENGTH = "/lwjwae-01234567".length();
+
+  /** Permissions that let someone other than the owner in. */
+  private static final Set<PosixFilePermission> SHARED =
+      Set.of(
+          PosixFilePermission.GROUP_READ,
+          PosixFilePermission.GROUP_WRITE,
+          PosixFilePermission.GROUP_EXECUTE,
+          PosixFilePermission.OTHERS_READ,
+          PosixFilePermission.OTHERS_WRITE,
+          PosixFilePermission.OTHERS_EXECUTE);
 
   private final ServerSocketChannel server;
 
@@ -79,7 +105,13 @@ public final class InstanceLock implements AutoCloseable {
    *     answer within 30 seconds.
    */
   public static Optional<InstanceLock> claim(String name, SecondInstanceEvent start) {
-    return InstanceLock.claim(InstanceLock.defaultDirectory(), name, start);
+    Path directory;
+    try {
+      directory = InstanceLock.defaultDirectory();
+    } catch (IOException e) {
+      throw new UncheckedIOException("Could not claim the single instance of " + name, e);
+    }
+    return InstanceLock.claim(directory, name, start);
   }
 
   /** {@link #claim(String, SecondInstanceEvent)} with the socket in {@code directory}. */
@@ -97,9 +129,11 @@ public final class InstanceLock implements AutoCloseable {
                   StandardOpenOption.WRITE);
           FileLock _ = lockFile.lock()) {
         if (InstanceLock.forward(socket, start)) {
+          LOG.log(System.Logger.Level.DEBUG, () -> "Handed the start to the instance at " + socket);
           return Optional.empty();
         }
         Files.deleteIfExists(socket);
+        LOG.log(System.Logger.Level.DEBUG, () -> "Claimed " + name + " at " + socket);
         return Optional.of(new InstanceLock(InstanceLock.bind(socket)));
       }
     } catch (IOException e) {
@@ -285,20 +319,60 @@ public final class InstanceLock implements AutoCloseable {
 
   /**
    * {@code $XDG_RUNTIME_DIR} on Linux, when set, which is the user's own; the temporary directory
-   * otherwise.
+   * on Windows, which is the user's own too; and a {@link #privateDirectory} in the temporary
+   * directory elsewhere, which may be shared.
    */
-  private static Path defaultDirectory() {
+  private static Path defaultDirectory() throws IOException {
     String runtime = System.getenv("XDG_RUNTIME_DIR");
     if (PlatformUtil.isLinux() && runtime != null && !runtime.isBlank()) {
       return Path.of(runtime);
     }
     Path temporary = Path.of(System.getProperty("java.io.tmpdir"));
-    if (!PlatformUtil.isWindows()
-        && temporary.toString().getBytes(StandardCharsets.UTF_8).length + NAME_LENGTH
-            > PATH_LIMIT) {
-      return Path.of("/tmp");
+    if (PlatformUtil.isWindows()) {
+      return temporary;
     }
-    return temporary;
+    if (temporary.toString().getBytes(StandardCharsets.UTF_8).length + PRIVATE_LENGTH + NAME_LENGTH
+        > PATH_LIMIT) {
+      temporary = Path.of("/tmp");
+    }
+    String user = InstanceLock.hash(System.getProperty("user.name", "")).substring(0, 8);
+    return InstanceLock.privateDirectory(temporary.resolve("lwjwae-" + user));
+  }
+
+  /**
+   * Creates {@code directory} for this user alone, or takes the one there if this user owns it, and
+   * closes it to everyone else.
+   *
+   * @throws IOException If it can't be created, or it's a link, a file, or someone else's.
+   */
+  static Path privateDirectory(Path directory) throws IOException {
+    try {
+      Files.createDirectory(
+          directory,
+          PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwx------")));
+    } catch (FileAlreadyExistsException _) {
+      // Made by an earlier start, or by someone else: the owner tells.
+    }
+    PosixFileAttributes attributes =
+        Files.readAttributes(directory, PosixFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+    UserPrincipal self = InstanceLock.currentUser(directory.getParent());
+    if (!attributes.isDirectory() || !attributes.owner().equals(self)) {
+      throw new IOException(directory + " isn't a directory of " + self.getName());
+    }
+    if (attributes.permissions().stream().anyMatch(SHARED::contains)) {
+      Files.setPosixFilePermissions(directory, PosixFilePermissions.fromString("rwx------"));
+    }
+    return directory;
+  }
+
+  /** The user of this process, as the owner of a file that it creates in {@code directory}. */
+  private static UserPrincipal currentUser(Path directory) throws IOException {
+    Path probe = Files.createTempFile(directory, ".lwjwae-", ".owner");
+    try {
+      return Files.getOwner(probe);
+    } finally {
+      Files.delete(probe);
+    }
   }
 
   /** The first 16 hex digits of the SHA-256 of {@code text}. */

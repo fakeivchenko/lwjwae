@@ -319,6 +319,13 @@ public class Signatures {
       FunctionDescriptor.ofVoid(C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER);
 
   /**
+   * A delegate method with four arguments, such as {@code
+   * download:decideDestinationUsingResponse:suggestedFilename:completionHandler:}.
+   */
+  public final FunctionDescriptor DELEGATE_4 =
+      FunctionDescriptor.ofVoid(C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER);
+
+  /**
    * A delegate method with four arguments that answers an object, such as {@code
    * webView:createWebViewWithConfiguration:forNavigationAction:windowFeatures:}.
    */
@@ -363,4 +370,7 @@ public class Signatures {
 
   /** {@code void (^)(NSUInteger)}. */
   public final FunctionDescriptor CALL_BLOCK_LONG = FunctionDescriptor.ofVoid(C_POINTER, C_LONG);
+
+  /** {@code void (^)(id)}. */
+  public final FunctionDescriptor CALL_BLOCK_ID = FunctionDescriptor.ofVoid(C_POINTER, C_POINTER);
 }

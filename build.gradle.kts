@@ -1,11 +1,15 @@
 import com.diffplug.gradle.spotless.SpotlessExtension
 import io.freefair.gradle.plugins.lombok.LombokExtension
+import org.gradle.testing.jacoco.plugins.JacocoPluginExtension
+import org.gradle.testretry.TestRetryTaskExtension
 import org.gradle.api.tasks.testing.logging.TestExceptionFormat
 
 plugins {
     base
-    id("io.freefair.lombok").version("9.5.0").apply(false)
-    id("com.diffplug.spotless").version("8.2.1").apply(false)
+    alias(libs.plugins.lombok).apply(false)
+    alias(libs.plugins.spotless).apply(false)
+    alias(libs.plugins.test.retry).apply(false)
+    alias(libs.plugins.graalvm.native).apply(false)
 }
 
 group = "dev.ivchenko.lwjwae"
@@ -28,9 +32,16 @@ subprojects {
             withJavadocJar()
             withSourcesJar()
         }
+        // Every warning of javac fails the build, except three kinds: `restricted` is what each call of the Foreign
+        // Function and Memory API is, `processing` is Lombok passing on the annotations of others, and
+        // `missing-explicit-ctor` doesn't see the constructors that Lombok writes. A warning that is wrong at one site
+        // is suppressed there, with the reason in the Javadoc.
         tasks.withType<JavaCompile>().configureEach {
             options.release.set(25)
             options.encoding = "UTF-8"
+            options.compilerArgs.addAll(
+                listOf("-Xlint:all", "-Xlint:-restricted", "-Xlint:-processing", "-Xlint:-missing-explicit-ctor", "-Werror"),
+            )
         }
         tasks.withType<Javadoc>().configureEach {
             (options as StandardJavadocDocletOptions).addBooleanOption("Xdoclint:all,-missing", true)
@@ -74,16 +85,47 @@ subprojects {
         }
     }
 
+    // A test that opens a window depends on the desktop that it runs on, which on CI is shared and slow: there it gets
+    // two more tries, and one that passes on a retry is reported as flaky in the test report rather than failing the
+    // build. Locally, a failure stays a failure.
+    plugins.withId("org.gradle.test-retry") {
+        if (providers.environmentVariable("CI").isPresent) {
+            tasks.matching { it.name == "displayTest" || it.name == "networkTest" }.configureEach {
+                extensions.configure<TestRetryTaskExtension> {
+                    maxRetries.set(2)
+                    maxFailures.set(5)
+                    failOnPassedAfterRetry.set(false)
+                }
+            }
+        }
+    }
+
+    // Coverage of whichever test tasks ran, the windows of the display tests included: most of a backend is reached
+    // only through a real window.
+    plugins.withId("jacoco") {
+        configure<JacocoPluginExtension> {
+            toolVersion = libs.versions.jacoco.get()
+        }
+        tasks.named<JacocoReport>("jacocoTestReport") {
+            executionData.setFrom(fileTree(layout.buildDirectory.dir("jacoco")).include("*.exec"))
+            mustRunAfter(tasks.withType<Test>())
+            reports {
+                xml.required.set(true)
+                html.required.set(true)
+            }
+        }
+    }
+
     plugins.withId("io.freefair.lombok") {
         configure<LombokExtension> {
-            version = "1.18.48"
+            version = libs.versions.lombok.get()
         }
     }
 
     plugins.withId("com.diffplug.spotless") {
         configure<SpotlessExtension> {
             java {
-                googleJavaFormat("1.33.0").reflowLongStrings()
+                googleJavaFormat(libs.versions.google.java.format.get()).reflowLongStrings()
                 formatAnnotations()
             }
         }
@@ -91,7 +133,7 @@ subprojects {
 
     plugins.withId("checkstyle") {
         configure<CheckstyleExtension> {
-            toolVersion = "11.1.0"
+            toolVersion = libs.versions.checkstyle.get()
         }
         tasks.withType<Checkstyle>().configureEach {
             reports {

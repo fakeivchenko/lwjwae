@@ -111,6 +111,7 @@ public class ObjC {
       NativeLibraries.downcall(OBJC, "objc_msgSend", Signatures.MSG_VOID_LONG_ID);
   private final MethodHandle CALL_BLOCK = NativeLibraries.downcall(Signatures.CALL_BLOCK);
   private final MethodHandle CALL_BLOCK_LONG = NativeLibraries.downcall(Signatures.CALL_BLOCK_LONG);
+  private final MethodHandle CALL_BLOCK_ID = NativeLibraries.downcall(Signatures.CALL_BLOCK_ID);
   private final MethodHandle MSG_ID_ID_ID_LONG_ID =
       NativeLibraries.downcall(OBJC, "objc_msgSend", Signatures.MSG_ID_ID_ID_LONG_ID);
   private final MethodHandle MSG_ID_RECT_LONG_LONG_BOOL =
@@ -234,6 +235,12 @@ public class ObjC {
   @SneakyThrows
   public void callBlock(MemorySegment block, long argument) {
     CALL_BLOCK_LONG.invokeExact(ObjC.blockInvoke(block), block, argument);
+  }
+
+  /** Calls a block of type {@code void (^)(id)} that the runtime passed in. */
+  @SneakyThrows
+  public void callBlock(MemorySegment block, MemorySegment argument) {
+    CALL_BLOCK_ID.invokeExact(ObjC.blockInvoke(block), block, argument);
   }
 
   /** The invoke function of any block literal: the pointer after {@code isa} and the flags. */

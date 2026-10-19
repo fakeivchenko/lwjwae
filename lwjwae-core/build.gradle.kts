@@ -5,18 +5,21 @@ plugins {
     id("checkstyle")
     id("io.freefair.lombok")
     id("com.diffplug.spotless")
+    id("jacoco")
+    id("org.gradle.test-retry")
 }
 
 description = "The lwjwae API, page bridge, backend discovery and FFM helpers."
 
 dependencies {
     // Test fixtures (the test source set inherits them)
-    testFixturesApi(platform("org.junit:junit-bom:6.0.0"))
-    testFixturesApi("org.junit.jupiter:junit-jupiter")
-    testFixturesApi("com.fasterxml.jackson.core:jackson-databind:2.22.2")
+    testFixturesApi(platform(libs.junit.bom))
+    testFixturesApi(libs.junit.jupiter)
+    testFixturesApi(libs.jackson.databind)
 
-    // JUnit
-    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+    // JUnit, and jqwik for the properties of the parsers
+    testImplementation(libs.jqwik)
+    testRuntimeOnly(libs.junit.platform.launcher)
 }
 
 // The version of the library, which the user agent of every web view names: a resource rather than the manifest,

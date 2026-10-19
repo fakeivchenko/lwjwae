@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>lwjwae smoke</title>
+</head>
+<body>
+<p id="state">running</p>
+<script>
+    // A handler and the store in turn, then the bound function, which carries the report: what
+    // answered, or the first failure.
+    (async () => {
+        const parts = [];
+        try {
+            parts.push(await (await lwjwae.call("echo", "ping")).text());
+            await lwjwae.store.executeScript("CREATE TABLE IF NOT EXISTS answers (value INTEGER)");
+            await lwjwae.store.execute("INSERT INTO answers (value) VALUES (?)", [42]);
+            const rows = await lwjwae.store.query("SELECT value FROM answers");
+            parts.push("store:" + rows[0].value);
+        } catch (error) {
+            parts.push("failed:" + error);
+        }
+        document.getElementById("state").textContent = parts.join(",");
+        await window.report(parts.join(","));
+    })();
+</script>
+</body>
+</html>

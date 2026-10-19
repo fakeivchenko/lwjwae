@@ -4,6 +4,8 @@ plugins {
     id("checkstyle")
     id("io.freefair.lombok")
     id("com.diffplug.spotless")
+    id("jacoco")
+    id("org.gradle.test-retry")
 }
 
 description = "An annotation processor that writes the native-image metadata of the types of the lwjwae bridge."
@@ -13,7 +15,7 @@ dependencies {
     testImplementation(project(":lwjwae-core"))
 
     // JUnit
-    testImplementation(platform("org.junit:junit-bom:6.0.0"))
-    testImplementation("org.junit.jupiter:junit-jupiter")
-    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+    testImplementation(platform(libs.junit.bom))
+    testImplementation(libs.junit.jupiter)
+    testRuntimeOnly(libs.junit.platform.launcher)
 }

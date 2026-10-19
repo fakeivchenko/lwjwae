@@ -77,7 +77,7 @@ class SimpleApiTest {
     try (FakeApplication application = new FakeApplication()) {
       FakeWindow window = application.openFake();
 
-      final CompletableFuture<Void> alerted = window.alert("Saved");
+      final CompletableFuture<Void> alerted = window.dialogs().alert("Saved");
       PresentedDialog alert = window.dialogs.poll(5, TimeUnit.SECONDS);
       MessageDialogParameters alertParameters = (MessageDialogParameters) alert.parameters();
       Assertions.assertEquals("Saved", alertParameters.message());
@@ -85,7 +85,7 @@ class SimpleApiTest {
       alert.answer(true);
       alerted.get(5, TimeUnit.SECONDS);
 
-      final CompletableFuture<Boolean> confirmed = window.confirm("Delete?");
+      final CompletableFuture<Boolean> confirmed = window.dialogs().confirm("Delete?");
       PresentedDialog confirm = window.dialogs.poll(5, TimeUnit.SECONDS);
       MessageDialogParameters confirmParameters = (MessageDialogParameters) confirm.parameters();
       Assertions.assertEquals(MessageButtons.OK_CANCEL, confirmParameters.buttons());
@@ -101,26 +101,26 @@ class SimpleApiTest {
       FakeWindow window = application.openFake();
       FileType text = FileType.of("Text", "txt");
 
-      final CompletableFuture<Optional<Path>> file = window.pickFile(text);
+      final CompletableFuture<Optional<Path>> file = window.dialogs().pickFile(text);
       PresentedDialog one = window.dialogs.poll(5, TimeUnit.SECONDS);
       Assertions.assertEquals(List.of(text), ((OpenDialogParameters) one.parameters()).fileTypes());
       Assertions.assertFalse(((OpenDialogParameters) one.parameters()).multiple());
       one.answer(List.of(Path.of("/a.txt")));
       Assertions.assertEquals(Optional.of(Path.of("/a.txt")), file.get(5, TimeUnit.SECONDS));
 
-      CompletableFuture<List<Path>> files = window.pickFiles();
+      CompletableFuture<List<Path>> files = window.dialogs().pickFiles();
       PresentedDialog many = window.dialogs.poll(5, TimeUnit.SECONDS);
       Assertions.assertTrue(((OpenDialogParameters) many.parameters()).multiple());
       many.answer(List.of());
       Assertions.assertEquals(List.of(), files.get(5, TimeUnit.SECONDS));
 
-      CompletableFuture<Optional<Path>> folder = window.pickFolder();
+      CompletableFuture<Optional<Path>> folder = window.dialogs().pickFolder();
       PresentedDialog directory = window.dialogs.poll(5, TimeUnit.SECONDS);
       Assertions.assertTrue(((OpenDialogParameters) directory.parameters()).directories());
       directory.answer(List.of());
       Assertions.assertEquals(Optional.empty(), folder.get(5, TimeUnit.SECONDS));
 
-      CompletableFuture<Optional<Path>> saved = window.pickSaveFile("report.txt", text);
+      CompletableFuture<Optional<Path>> saved = window.dialogs().pickSaveFile("report.txt", text);
       PresentedDialog save = window.dialogs.poll(5, TimeUnit.SECONDS);
       Assertions.assertEquals("report.txt", ((SaveDialogParameters) save.parameters()).fileName());
       save.answer(Optional.of(Path.of("/report.txt")));
@@ -133,7 +133,7 @@ class SimpleApiTest {
     try (FakeApplication application = new FakeApplication()) {
       FakeWindow window = application.openFake();
 
-      CompletableFuture<Optional<Path>> file = window.pickFile();
+      CompletableFuture<Optional<Path>> file = window.dialogs().pickFile();
       PresentedDialog dialog = window.dialogs.poll(5, TimeUnit.SECONDS);
       file.cancel(false);
       window.awaitUiThread();
@@ -148,7 +148,7 @@ class SimpleApiTest {
       TrayMenuItem quit = new TrayMenuItem("Quit", application::quit);
 
       application.tray("fixtures/dot.png", quit);
-      application.showNotification("Saved", "report.pdf");
+      application.notifications().show("Saved", "report.pdf");
 
       Assertions.assertArrayEquals(
           ResourceUtil.read("fixtures/dot.png"), application.trayIcons.getFirst().icon());

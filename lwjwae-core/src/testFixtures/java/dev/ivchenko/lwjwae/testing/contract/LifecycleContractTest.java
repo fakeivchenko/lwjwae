@@ -7,6 +7,7 @@ import dev.ivchenko.lwjwae.event.LoadEvent;
 import dev.ivchenko.lwjwae.event.LoadState;
 import dev.ivchenko.lwjwae.exception.ScriptEvaluationFailedException;
 import dev.ivchenko.lwjwae.testing.Loads;
+import dev.ivchenko.lwjwae.testing.PageGrants;
 import dev.ivchenko.lwjwae.testing.Tags;
 import java.net.ServerSocket;
 import java.util.List;
@@ -254,7 +255,7 @@ public abstract class LifecycleContractTest extends DisplayContractTest {
 
   @Test
   void pageOpensAndClosesWindows() throws Exception {
-    try (Application application = Application.create()) {
+    try (Application application = Application.create(PageGrants.every())) {
       Window first = application.open();
       final var loaded = Loads.expectFinished(first);
       first.loadResource("test-app/index.html");

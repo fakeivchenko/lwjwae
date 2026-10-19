@@ -96,6 +96,25 @@ public class Signatures {
   /** {@code void f(T*, gint)}. */
   public final FunctionDescriptor VOID_POINTER_INT = FunctionDescriptor.ofVoid(C_POINTER, C_INT);
 
+  /** {@code void f(T*, guint, const gchar*)}: {@code webkit_uri_scheme_response_set_status}. */
+  public final FunctionDescriptor VOID_POINTER_INT_POINTER =
+      FunctionDescriptor.ofVoid(C_POINTER, C_INT, C_POINTER);
+
+  /** {@code void f(T*, U*, gint64, V*)}: {@code webkit_uri_scheme_request_finish}. */
+  public final FunctionDescriptor VOID_POINTER_POINTER_LONG_POINTER =
+      FunctionDescriptor.ofVoid(C_POINTER, C_POINTER, C_LONG, C_POINTER);
+
+  /** {@code void f(T*, gdouble)}: {@code webkit_web_view_set_zoom_level}. */
+  public final FunctionDescriptor VOID_POINTER_DOUBLE =
+      FunctionDescriptor.ofVoid(C_POINTER, ValueLayout.JAVA_DOUBLE);
+
+  /** {@code gdouble f(T*)}: {@code webkit_web_view_get_zoom_level}. */
+  public final FunctionDescriptor DOUBLE_POINTER =
+      FunctionDescriptor.of(ValueLayout.JAVA_DOUBLE, C_POINTER);
+
+  /** {@code GType f(void)}: {@code webkit_user_media_permission_request_get_type}. */
+  public final FunctionDescriptor LONG_VOID = FunctionDescriptor.of(C_LONG);
+
   /** {@code void f(T*, gint, gint)}. */
   public final FunctionDescriptor VOID_POINTER_INT_INT =
       FunctionDescriptor.ofVoid(C_POINTER, C_INT, C_INT);
@@ -203,6 +222,21 @@ public class Signatures {
   // --- named signatures, too long to describe by shape ---
 
   /**
+   * {@code WebKitUserScript* webkit_user_script_new(const gchar*, WebKitUserContentInjectedFrames,
+   * WebKitUserScriptInjectionTime, const gchar* const*, const gchar* const*)}.
+   */
+  public final FunctionDescriptor WEBKIT_USER_SCRIPT_NEW =
+      FunctionDescriptor.of(C_POINTER, C_POINTER, C_INT, C_INT, C_POINTER, C_POINTER);
+
+  /**
+   * {@code void webkit_web_view_evaluate_javascript(WebKitWebView*, const char*, gssize, const
+   * char*, const char*, GCancellable*, GAsyncReadyCallback, gpointer)}.
+   */
+  public final FunctionDescriptor WEBKIT_EVALUATE_JAVASCRIPT =
+      FunctionDescriptor.ofVoid(
+          C_POINTER, C_POINTER, C_LONG, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_POINTER);
+
+  /**
    * {@code gulong g_signal_connect_data(gpointer, const gchar*, GCallback, gpointer,
    * GClosureNotify, GConnectFlags)}.
    */
@@ -231,6 +265,24 @@ public class Signatures {
           C_POINTER, C_POINTER);
 
   // --- callbacks (upcalls) ---
+
+  /** {@code void (*)(WebKitWebView*, WebKitLoadEvent, gpointer)}: {@code load-changed}. */
+  public final FunctionDescriptor WEBKIT_LOAD_CHANGED_CALLBACK =
+      FunctionDescriptor.ofVoid(C_POINTER, C_INT, C_POINTER);
+
+  /**
+   * {@code gboolean (*)(WebKitWebView*, WebKitLoadEvent, gchar*, GError*, gpointer)}: {@code
+   * load-failed}.
+   */
+  public final FunctionDescriptor WEBKIT_LOAD_FAILED_CALLBACK =
+      FunctionDescriptor.of(C_INT, C_POINTER, C_INT, C_POINTER, C_POINTER, C_POINTER);
+
+  /**
+   * {@code void (*)(WebKitDownload*, guint64 data_length, gpointer)}: {@code received-data} of a
+   * download.
+   */
+  public final FunctionDescriptor WEBKIT_DOWNLOAD_RECEIVED_DATA_CALLBACK =
+      FunctionDescriptor.ofVoid(C_POINTER, C_LONG, C_POINTER);
 
   /** {@code gboolean (*GSourceFunc)(gpointer)}. */
   public final FunctionDescriptor G_SOURCE_FUNC = INT_POINTER;

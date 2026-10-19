@@ -10,24 +10,28 @@ import dev.ivchenko.lwjwae.event.OpenEvent;
 import dev.ivchenko.lwjwae.event.SecondInstanceEvent;
 import dev.ivchenko.lwjwae.exception.ShortcutUnavailableException;
 import dev.ivchenko.lwjwae.instance.InstanceLock;
+import dev.ivchenko.lwjwae.internal.Listeners;
 import dev.ivchenko.lwjwae.menu.MenuItem;
 import dev.ivchenko.lwjwae.notification.Notification;
 import dev.ivchenko.lwjwae.notification.NotificationHandle;
+import dev.ivchenko.lwjwae.notification.Notifications;
 import dev.ivchenko.lwjwae.rpc.RpcHandler;
 import dev.ivchenko.lwjwae.secret.Secrets;
+import dev.ivchenko.lwjwae.shortcut.GlobalShortcuts;
 import dev.ivchenko.lwjwae.shortcut.Shortcut;
 import dev.ivchenko.lwjwae.state.SavedWindowState;
 import dev.ivchenko.lwjwae.state.WindowStateStore;
 import dev.ivchenko.lwjwae.state.WindowStateTracker;
 import dev.ivchenko.lwjwae.store.Store;
+import dev.ivchenko.lwjwae.taskbar.Taskbar;
 import dev.ivchenko.lwjwae.taskbar.TaskbarProgress;
 import dev.ivchenko.lwjwae.theme.SystemTheme;
+import dev.ivchenko.lwjwae.theme.Theme;
 import dev.ivchenko.lwjwae.tray.Tray;
 import dev.ivchenko.lwjwae.tray.TrayIcon;
 import dev.ivchenko.lwjwae.ui.UiDispatcher;
 import dev.ivchenko.lwjwae.update.UpdateParameters;
 import dev.ivchenko.lwjwae.update.Updater;
-import dev.ivchenko.lwjwae.util.HandlerUtil;
 import dev.ivchenko.lwjwae.util.OpenArgumentUtil;
 import dev.ivchenko.lwjwae.util.ThrowableUtil;
 import java.net.URI;
@@ -36,7 +40,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -44,7 +47,6 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -76,6 +78,7 @@ import java.util.function.Function;
  * #rpcHandler} before it answers {@code 404}.
  */
 public abstract class AbstractApplication implements Application {
+  private static final System.Logger LOG = System.getLogger(AbstractApplication.class.getName());
   private static final Set<String> EXTERNAL_SCHEMES = Set.of("http", "https", "mailto");
 
   /** How much of the top of a window must be on a screen for the user to grab it, in units. */
@@ -86,14 +89,10 @@ public abstract class AbstractApplication implements Application {
   /** How long {@link #quit()} waits for the states of the windows to reach the disk. */
   private static final long STATE_SAVE_TIMEOUT_SECONDS = 5;
 
-  /** What a shortcut maps to while its backend binds it: nothing to give back yet. */
-  private static final EventSubscription BINDING = () -> {};
-
   private final UiDispatcher dispatcher;
   private final ApplicationParameters parameters;
   private final Map<Long, AbstractWindow> windows = new ConcurrentHashMap<>();
   private final Set<Tray> trays = ConcurrentHashMap.newKeySet();
-  private final Set<NotificationHandle> notifications = ConcurrentHashMap.newKeySet();
   private final Map<String, RpcHandler> rpcHandlers = new ConcurrentHashMap<>();
   private final AtomicLong windowIds = new AtomicLong();
   private final Map<String, String> bindingScripts = new ConcurrentHashMap<>();
@@ -115,42 +114,41 @@ public abstract class AbstractApplication implements Application {
 
   private final AtomicBoolean closed = new AtomicBoolean();
 
-  private final List<Consumer<SystemTheme>> themeListeners = new CopyOnWriteArrayList<>();
+  // --- facets: each keeps its own state, and calls back into the backend through this class ---
+  private final ApplicationTaskbar taskbar = new ApplicationTaskbar(this);
+  private final ApplicationNotifications notifications = new ApplicationNotifications(this);
+  private final ApplicationShortcuts shortcuts = new ApplicationShortcuts(this);
+  private final ApplicationTheme theme = new ApplicationTheme(this);
 
-  /** Tells the listeners of a theme change one at a time and in order, off the UI thread. */
-  private final ExecutorService themeNotifier =
-      Executors.newSingleThreadExecutor(Thread.ofVirtual().name("lwjwae-theme").factory());
-
-  private volatile SystemTheme theme = SystemTheme.LIGHT;
   private volatile Clipboard clipboard;
   private volatile Cookies cookies;
   private volatile Secrets secrets;
   private volatile List<MenuItem> menu = List.of();
-  private volatile TaskbarProgress progress = TaskbarProgress.none();
-  private volatile int badgeCount;
   private Store store;
   private Updater updater;
-  private final Map<Shortcut, EventSubscription> globalShortcuts = new HashMap<>();
 
-  // --- single instance, under the lock of the listener list ---
-  private final List<Consumer<SecondInstanceEvent>> secondInstanceListeners = new ArrayList<>();
+  // --- single instance: a start before any listener waits in the list, under its lock ---
+  private final Listeners<SecondInstanceEvent> secondInstanceListeners =
+      new Listeners<>("lwjwae-second-instance");
   private final List<SecondInstanceEvent> unheardStarts = new ArrayList<>();
   private volatile InstanceLock instanceLock;
 
-  // --- requests to open, under the lock of the listener list ---
-  private final List<Consumer<OpenEvent>> openListeners = new ArrayList<>();
-  private final List<OpenEvent> unheardOpens = new ArrayList<>();
+  // --- requests to open: one before any listener waits in the list, under its lock ---
+  /** The listeners of a request to open, which hear one at a time and in order. */
+  private final Listeners<OpenEvent> openListeners = new Listeners<>("lwjwae-open");
 
-  /** Tells the listeners of a request to open one request at a time and in order. */
-  private final ExecutorService openNotifier =
-      Executors.newSingleThreadExecutor(Thread.ofVirtual().name("lwjwae-open").factory());
+  private final List<OpenEvent> unheardOpens = new ArrayList<>();
 
   /**
    * Creates an application on the UI thread of a toolkit. Opens no window.
    *
+   * <p>Suppressed warnings: {@code this-escape}: the facets keep the application, to reach its
+   * backend when they are used, and call nothing of it while it is created.
+   *
    * @param dispatcher The UI thread of the toolkit, started.
    * @param parameters The parameters of the application, defaults applied.
    */
+  @SuppressWarnings("this-escape")
   protected AbstractApplication(UiDispatcher dispatcher, ApplicationParameters parameters) {
     this.dispatcher = Objects.requireNonNull(dispatcher, "dispatcher");
     this.parameters = Objects.requireNonNull(parameters, "parameters");
@@ -158,6 +156,13 @@ public abstract class AbstractApplication implements Application {
         parameters.dataDirectory() == null
             ? null
             : new WindowStateStore(parameters.dataDirectory());
+    LOG.log(
+        System.Logger.Level.DEBUG,
+        () ->
+            "Started "
+                + this.getClass().getSimpleName()
+                + ", pages may use "
+                + parameters.pageCapabilities());
   }
 
   /** The UI thread of the toolkit, shared by every window. */
@@ -456,23 +461,16 @@ public abstract class AbstractApplication implements Application {
 
   @Override
   public final void menu(List<MenuItem> items) {
-    List<MenuItem> bar = AbstractWindow.requireMenuBar(items);
+    List<MenuItem> bar = WindowMenus.requireBar(items);
     this.checkOpen();
     this.menu = bar;
     this.forEachWindow(AbstractWindow::applicationMenuChanged);
-    this.menuChanged(bar);
   }
 
   @Override
   public final List<MenuItem> menu() {
     return this.menu;
   }
-
-  /**
-   * Tells the backend that the menu of the application is now {@code items}, after every window
-   * heard of it. For a platform whose menu bar belongs to the process; nothing by default.
-   */
-  protected void menuChanged(List<MenuItem> items) {}
 
   @Override
   public final synchronized Store store() {
@@ -503,36 +501,28 @@ public abstract class AbstractApplication implements Application {
   }
 
   @Override
-  public final void progress(TaskbarProgress progress) {
-    Objects.requireNonNull(progress, "progress");
-    this.checkOpen();
-    this.progress = progress;
-    this.dispatcher().run(() -> this.showProgress(progress));
+  public final Taskbar taskbar() {
+    return this.taskbar;
   }
 
   @Override
-  public final TaskbarProgress progress() {
-    return this.progress;
+  public final Notifications notifications() {
+    return this.notifications;
   }
 
   @Override
-  public final void badgeCount(int count) {
-    if (count < 0) {
-      throw new IllegalArgumentException("A badge counts from 0: " + count);
-    }
-    this.checkOpen();
-    this.badgeCount = count;
-    this.dispatcher().run(() -> this.showBadgeCount(count));
+  public final GlobalShortcuts shortcuts() {
+    return this.shortcuts;
   }
 
   @Override
-  public final int badgeCount() {
-    return this.badgeCount;
+  public final Theme theme() {
+    return this.theme;
   }
 
   /**
    * Shows {@code progress} on the icon of the application, on the UI thread. A backend whose
-   * platform shows it per window reads {@link #progress()} for a window that opens later.
+   * platform shows it per window reads {@link Taskbar#progress()} for a window that opens later.
    *
    * @throws UnsupportedOperationException If this backend has no progress yet, the default.
    */
@@ -550,53 +540,9 @@ public abstract class AbstractApplication implements Application {
     throw new UnsupportedOperationException("No badge on the icon on this backend yet");
   }
 
-  @Override
-  public final EventSubscription globalShortcut(Shortcut shortcut, Runnable handler) {
-    Objects.requireNonNull(shortcut, "shortcut");
-    Objects.requireNonNull(handler, "handler");
-    this.checkOpen();
-    // The shortcut is taken under the lock and bound outside it: a backend binds on the UI thread,
-    // and a quit() there would otherwise wait on this lock while this thread waits on it.
-    synchronized (this.globalShortcuts) {
-      if (this.globalShortcuts.putIfAbsent(shortcut, BINDING) != null) {
-        throw new ShortcutUnavailableException(
-            shortcut + " is a shortcut of this application already");
-      }
-    }
-    EventSubscription binding;
-    try {
-      binding = this.bindGlobalShortcut(shortcut, () -> HandlerUtil.runOffTheUiThread(handler));
-    } catch (RuntimeException | Error e) {
-      synchronized (this.globalShortcuts) {
-        this.globalShortcuts.remove(shortcut, BINDING);
-      }
-      throw e;
-    }
-    boolean kept;
-    synchronized (this.globalShortcuts) {
-      kept = this.globalShortcuts.replace(shortcut, BINDING, binding);
-    }
-    // quit() gave the shortcuts back while this one was being bound: it missed it.
-    if (!kept) {
-      binding.unlisten();
-      throw new IllegalStateException("The application is closed");
-    }
-    return () -> this.releaseGlobalShortcut(shortcut, binding);
-  }
-
-  private void releaseGlobalShortcut(Shortcut shortcut, EventSubscription binding) {
-    boolean bound;
-    synchronized (this.globalShortcuts) {
-      bound = this.globalShortcuts.remove(shortcut, binding);
-    }
-    if (bound) {
-      binding.unlisten();
-    }
-  }
-
   /**
-   * Binds {@code shortcut} in the system, the way {@link #globalShortcut} describes. The default
-   * throws, for a backend without global shortcuts.
+   * Binds {@code shortcut} in the system, the way {@link GlobalShortcuts#register} describes. The
+   * default throws, for a backend without global shortcuts.
    *
    * @param pressed To run on every press, on any thread; it returns at once.
    * @return What gives the shortcut back to the system, called once, on any thread.
@@ -699,62 +645,19 @@ public abstract class AbstractApplication implements Application {
     throw new UnsupportedOperationException("The " + this.engine() + " backend has no tray yet");
   }
 
-  @Override
-  public final SystemTheme theme() {
-    this.checkOpen();
-    return this.theme;
-  }
-
-  @Override
-  public final EventSubscription onThemeChange(Consumer<SystemTheme> listener) {
-    Objects.requireNonNull(listener, "listener");
-    this.themeListeners.add(listener);
-    return () -> this.themeListeners.remove(listener);
-  }
-
   /**
    * The desktop is, or may be, in another theme. A backend calls this from the thread where it
    * heard of it, with the theme that it read, once at startup before any window and again whenever
    * the desktop reports a change. A theme that the application has already changes nothing.
    */
   protected final void themeChanged(SystemTheme newTheme) {
-    Objects.requireNonNull(newTheme, "newTheme");
-    SystemTheme old = this.theme;
-    if (old == newTheme) {
-      return;
-    }
-    this.theme = newTheme;
-    try {
-      this.themeNotifier.execute(
-          () -> {
-            for (Consumer<SystemTheme> listener : this.themeListeners) {
-              try {
-                listener.accept(newTheme);
-              } catch (Throwable t) {
-                ThrowableUtil.report(t);
-              }
-            }
-          });
-    } catch (RejectedExecutionException _) {
-      // The application is closed, and nobody is left to tell.
-    }
+    this.theme.changed(newTheme);
   }
 
   @Override
   public final EventSubscription onSecondInstance(Consumer<SecondInstanceEvent> listener) {
-    Objects.requireNonNull(listener, "listener");
-    List<SecondInstanceEvent> unheard;
-    synchronized (this.secondInstanceListeners) {
-      this.secondInstanceListeners.add(listener);
-      unheard = List.copyOf(this.unheardStarts);
-      this.unheardStarts.clear();
-    }
-    unheard.forEach(listener);
-    return () -> {
-      synchronized (this.secondInstanceListeners) {
-        this.secondInstanceListeners.remove(listener);
-      }
-    };
+    return AbstractApplication.listenAfterUnheard(
+        this.secondInstanceListeners, this.unheardStarts, listener);
   }
 
   /**
@@ -771,19 +674,7 @@ public abstract class AbstractApplication implements Application {
 
   @Override
   public final EventSubscription onOpen(Consumer<OpenEvent> listener) {
-    Objects.requireNonNull(listener, "listener");
-    List<OpenEvent> unheard;
-    synchronized (this.openListeners) {
-      this.openListeners.add(listener);
-      unheard = List.copyOf(this.unheardOpens);
-      this.unheardOpens.clear();
-    }
-    unheard.forEach(listener);
-    return () -> {
-      synchronized (this.openListeners) {
-        this.openListeners.remove(listener);
-      }
-    };
+    return AbstractApplication.listenAfterUnheard(this.openListeners, this.unheardOpens, listener);
   }
 
   /**
@@ -794,27 +685,13 @@ public abstract class AbstractApplication implements Application {
     if (request.isEmpty()) {
       return;
     }
-    List<Consumer<OpenEvent>> listeners;
-    synchronized (this.openListeners) {
+    // Queued under the lock: two requests that race reach the listeners in the order they took it.
+    synchronized (this.unheardOpens) {
       if (this.openListeners.isEmpty()) {
         this.unheardOpens.add(request);
-        return;
+      } else {
+        this.openListeners.deliver(request);
       }
-      listeners = List.copyOf(this.openListeners);
-    }
-    try {
-      this.openNotifier.execute(
-          () -> {
-            for (Consumer<OpenEvent> listener : listeners) {
-              try {
-                listener.accept(request);
-              } catch (Throwable t) {
-                ThrowableUtil.report(t);
-              }
-            }
-          });
-    } catch (RejectedExecutionException _) {
-      // The application is closed, and nobody is left to tell.
     }
   }
 
@@ -837,20 +714,33 @@ public abstract class AbstractApplication implements Application {
         ThrowableUtil.report(t);
       }
     }
-    List<Consumer<SecondInstanceEvent>> listeners;
-    synchronized (this.secondInstanceListeners) {
+    synchronized (this.unheardStarts) {
       if (this.secondInstanceListeners.isEmpty()) {
         this.unheardStarts.add(start);
         return;
       }
-      listeners = List.copyOf(this.secondInstanceListeners);
     }
-    for (Consumer<SecondInstanceEvent> listener : listeners) {
-      try {
-        listener.accept(start);
-      } catch (Throwable t) {
-        ThrowableUtil.report(t);
+    this.secondInstanceListeners.deliverHere(start);
+  }
+
+  /**
+   * Registers {@code listener} once it heard the events of {@code unheard}, which came before any
+   * listener, on this thread. An event that comes meanwhile waits in {@code unheard} too, and is
+   * heard next, so the listener hears the events in order and never two at once.
+   */
+  private static <E> EventSubscription listenAfterUnheard(
+      Listeners<E> listeners, List<E> unheard, Consumer<E> listener) {
+    Objects.requireNonNull(listener, "listener");
+    while (true) {
+      List<E> held;
+      synchronized (unheard) {
+        if (unheard.isEmpty()) {
+          return listeners.listen(listener);
+        }
+        held = List.copyOf(unheard);
+        unheard.clear();
       }
+      held.forEach(event -> Listeners.tell(listener, event));
     }
   }
 
@@ -878,24 +768,6 @@ public abstract class AbstractApplication implements Application {
    * @throws IllegalStateException If the system refused it.
    */
   protected abstract void launchExternal(String url);
-
-  @Override
-  public final NotificationHandle showNotification(Notification notification) {
-    Objects.requireNonNull(notification, "notification");
-    this.checkOpen();
-    NotificationHandle handle = this.createNotification(notification, this.notifications::remove);
-    this.notifications.add(handle);
-    // Gone before it was added: its callback found nothing to remove, so drop it here.
-    if (handle.isClosed()) {
-      this.notifications.remove(handle);
-    }
-    // Shown while quit() was taking the others back: this one missed it, so take it back here.
-    if (this.closed.get()) {
-      handle.close();
-      throw new IllegalStateException("The application is closed");
-    }
-    return handle;
-  }
 
   /**
    * Hands the notification to the desktop. The default throws, for a backend without notifications.
@@ -975,31 +847,16 @@ public abstract class AbstractApplication implements Application {
         ThrowableUtil.report(t);
       }
     }
-    for (NotificationHandle notification : List.copyOf(this.notifications)) {
-      try {
-        notification.close();
-      } catch (Throwable t) {
-        ThrowableUtil.report(t);
-      }
-    }
-    List<Map.Entry<Shortcut, EventSubscription>> shortcuts;
-    synchronized (this.globalShortcuts) {
-      shortcuts = List.copyOf(this.globalShortcuts.entrySet());
-    }
-    for (Map.Entry<Shortcut, EventSubscription> shortcut : shortcuts) {
-      try {
-        this.releaseGlobalShortcut(shortcut.getKey(), shortcut.getValue());
-      } catch (Throwable t) {
-        ThrowableUtil.report(t);
-      }
-    }
+    this.notifications.closeAll();
+    this.shortcuts.releaseAll();
     InstanceLock lock = this.instanceLock;
     if (lock != null) {
       lock.close();
     }
     this.listeners.shutdown();
-    this.themeNotifier.shutdown();
-    this.openNotifier.shutdown();
+    this.theme.shutdown();
+    this.openListeners.shutdown();
+    this.secondInstanceListeners.shutdown();
     this.stateSaver.shutdown();
     try {
       if (!this.stateSaver.awaitTermination(STATE_SAVE_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
@@ -1067,7 +924,8 @@ public abstract class AbstractApplication implements Application {
     return codec;
   }
 
-  private void checkOpen() {
+  /** Fails with {@link IllegalStateException} once the application is closed. */
+  final void checkOpen() {
     if (this.closed.get()) {
       throw new IllegalStateException("The application is closed");
     }

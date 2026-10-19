@@ -1,4 +1,22 @@
 {
+  "reflection": [
+    {
+      "type": "dev.ivchenko.lwjwae.store.Sqlite",
+      "methods": [
+        {
+          "name": "authorizeForPage",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "int",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
+        }
+      ]
+    }
+  ],
   "resources": [
     {
       "glob": "dev/ivchenko/lwjwae/bridge/bootstrap.js"
@@ -104,6 +122,29 @@
         "parameterTypes": [
           "void*",
           "jint"
+        ]
+      },
+      {
+        "returnType": "jint",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "void*"
+        ]
+      }
+    ],
+    "directUpcalls": [
+      {
+        "class": "dev.ivchenko.lwjwae.store.Sqlite",
+        "method": "authorizeForPage",
+        "returnType": "jint",
+        "parameterTypes": [
+          "void*",
+          "jint",
+          "void*",
+          "void*",
+          "void*",
+          "void*"
         ]
       }
     ]

@@ -6,6 +6,8 @@ import dev.ivchenko.lwjwae.glib.GlibDispatcher;
 import dev.ivchenko.lwjwae.glib.PortalShortcuts;
 import dev.ivchenko.lwjwae.glib.StatusNotifierTray;
 import dev.ivchenko.lwjwae.glib.WebKitCookies;
+import dev.ivchenko.lwjwae.glib.WebKitGtkWindow;
+import dev.ivchenko.lwjwae.glib.WebKitScheme;
 import dev.ivchenko.lwjwae.glib.binding.Dbus;
 import dev.ivchenko.lwjwae.glib.binding.GdkPixbuf;
 import dev.ivchenko.lwjwae.glib.binding.GioMenus;
@@ -13,6 +15,7 @@ import dev.ivchenko.lwjwae.glib.binding.Glib;
 import dev.ivchenko.lwjwae.glib.binding.Libsecret;
 import dev.ivchenko.lwjwae.glib.binding.Soup;
 import dev.ivchenko.lwjwae.glib.binding.Unix;
+import dev.ivchenko.lwjwae.glib.binding.WebKitGtk;
 import dev.ivchenko.lwjwae.glib.binding.X11;
 import dev.ivchenko.lwjwae.gtk4.binding.Gtk;
 import dev.ivchenko.lwjwae.gtk4.binding.WebKit;
@@ -26,6 +29,11 @@ class Gtk4NativeImageMetadataTest extends NativeImageMetadataContractTest {
   @BeforeEach
   void requireLinux() {
     Assumptions.assumeTrue(PlatformUtil.isUnixDesktop(), "Binds GTK libraries: Linux only");
+  }
+
+  @Override
+  protected String modulePackage() {
+    return "dev.ivchenko.lwjwae.gtk4";
   }
 
   @Override
@@ -56,6 +64,9 @@ class Gtk4NativeImageMetadataTest extends NativeImageMetadataContractTest {
         PortalShortcuts.class,
         Soup.class,
         WebKitCookies.class,
+        WebKitGtk.class,
+        WebKitGtkWindow.class,
+        WebKitScheme.class,
         Libsecret.class,
         Gtk.class,
         WebKit.class,

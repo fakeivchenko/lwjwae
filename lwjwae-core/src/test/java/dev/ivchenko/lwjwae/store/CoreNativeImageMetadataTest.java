@@ -6,6 +6,11 @@ import java.util.List;
 /** The SQLite of the store, whose downcalls the core lists for every backend. */
 class CoreNativeImageMetadataTest extends NativeImageMetadataContractTest {
   @Override
+  protected String modulePackage() {
+    return "dev.ivchenko.lwjwae";
+  }
+
+  @Override
   protected String metadataPath() {
     return "META-INF/native-image/dev.ivchenko.lwjwae/lwjwae-core/reachability-metadata.json";
   }

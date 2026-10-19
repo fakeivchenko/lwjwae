@@ -7,11 +7,12 @@ import dev.ivchenko.lwjwae.WindowParameters;
 import dev.ivchenko.lwjwae.WindowPosition;
 import dev.ivchenko.lwjwae.WindowSize;
 import dev.ivchenko.lwjwae.bridge.BridgeProtocol;
-import dev.ivchenko.lwjwae.bridge.RpcMessageChannel;
 import dev.ivchenko.lwjwae.dialog.DialogCompletion;
 import dev.ivchenko.lwjwae.dialog.MessageDialogParameters;
 import dev.ivchenko.lwjwae.dialog.OpenDialogParameters;
 import dev.ivchenko.lwjwae.dialog.SaveDialogParameters;
+import dev.ivchenko.lwjwae.download.DownloadRequest;
+import dev.ivchenko.lwjwae.download.DownloadState;
 import dev.ivchenko.lwjwae.event.LoadEvent;
 import dev.ivchenko.lwjwae.event.LoadState;
 import dev.ivchenko.lwjwae.exception.ResourceNotFoundException;
@@ -22,7 +23,9 @@ import dev.ivchenko.lwjwae.menu.CheckMenuItem;
 import dev.ivchenko.lwjwae.menu.MenuCommands;
 import dev.ivchenko.lwjwae.menu.MenuRole;
 import dev.ivchenko.lwjwae.permission.PermissionKind;
+import dev.ivchenko.lwjwae.rpc.RpcMessageChannel;
 import dev.ivchenko.lwjwae.shortcut.Shortcut;
+import dev.ivchenko.lwjwae.util.JsonUtil;
 import dev.ivchenko.lwjwae.util.MimeTypeUtil;
 import dev.ivchenko.lwjwae.util.ResourceUtil;
 import dev.ivchenko.lwjwae.util.ScriptUtil;
@@ -36,12 +39,13 @@ import dev.ivchenko.lwjwae.windows.binding.User32;
 import dev.ivchenko.lwjwae.windows.binding.WebView2;
 import dev.ivchenko.lwjwae.windows.binding.WebView2EventRegistration;
 import dev.ivchenko.lwjwae.windows.binding.Wide;
+import dev.ivchenko.lwjwae.windows.binding.WinRt;
 import dev.ivchenko.lwjwae.windows.binding.WindowFrame;
 import dev.ivchenko.lwjwae.windows.exception.ComCallFailedException;
-import dev.ivchenko.lwjwae.windows.util.JsonStringUtil;
 import java.lang.foreign.MemorySegment;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
+import java.net.URI;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -49,6 +53,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
 
 /**
@@ -694,13 +699,13 @@ public class WindowsWindow extends AbstractWindow {
   }
 
   @Override
-  public boolean isDevToolsEnabled() {
-    return this.dispatcher().call(() -> WebView2.isDevToolsEnabled(this.view()));
+  protected boolean currentDevTools() {
+    return WebView2.isDevToolsEnabled(this.view());
   }
 
   @Override
-  public void devToolsEnabled(boolean devToolsEnabled) {
-    this.dispatcher().run(() -> WebView2.setDevToolsEnabled(this.view(), devToolsEnabled));
+  protected void presentDevTools(boolean enabled) {
+    WebView2.setDevToolsEnabled(this.view(), enabled);
   }
 
   @Override
@@ -923,6 +928,7 @@ public class WindowsWindow extends AbstractWindow {
           WebView2::onPermissionRequested,
           WebView2.IID_PERMISSION_REQUESTED,
           (_, arguments) -> this.answerPermission(arguments));
+      this.subscribeDownloads();
       MemorySegment keys =
           ComCallback.event(
               WebView2.IID_ACCELERATOR_KEY_PRESSED,
@@ -974,6 +980,126 @@ public class WindowsWindow extends AbstractWindow {
       ThrowableUtil.report(e);
     }
     WebView2.answerPermission(arguments, granted);
+  }
+
+  /**
+   * Hears the downloads of the page through {@code ICoreWebView2_4}. A runtime older than 1.0.902
+   * has none, and its downloads go on as WebView2 decides, unheard.
+   */
+  private void subscribeDownloads() {
+    MemorySegment webView4 = null;
+    try {
+      webView4 = WinRt.query(this.webView, WebView2.IID_WEBVIEW_4);
+      MemorySegment callback =
+          ComCallback.event(
+              WebView2.IID_DOWNLOAD_STARTING, (_, arguments) -> this.downloadStarting(arguments));
+      WebView2.onDownloadStarting(webView4, callback);
+      Com.release(callback);
+    } catch (RuntimeException e) {
+      ThrowableUtil.report(e);
+    } finally {
+      Com.release(webView4);
+    }
+  }
+
+  /**
+   * The page started a download. The event waits, through its deferral, until the handler of the
+   * application decides, on a virtual thread, so the UI thread stays free for a dialog that the
+   * handler shows.
+   */
+  private void downloadStarting(MemorySegment arguments) {
+    MemorySegment operation = WebView2.downloadOperation(arguments);
+    MemorySegment deferral = WebView2.deferDownload(arguments);
+    Com.addRef(arguments);
+    URI url = WindowsWindow.downloadUrl(WebView2.downloadUri(operation));
+    long totalBytes = WebView2.downloadTotalBytes(operation);
+    Path defaultPath = Path.of(WebView2.downloadDefaultPath(arguments));
+    DownloadRequest request =
+        new DownloadRequest(
+            url,
+            defaultPath.getFileName() == null ? null : defaultPath.getFileName().toString(),
+            WebView2.downloadMimeType(operation),
+            totalBytes);
+    this.downloadRequested(request)
+        .thenAccept(
+            path ->
+                this.dispatcher()
+                    .post(
+                        () -> {
+                          try {
+                            if (path.isEmpty() || this.isClosed()) {
+                              WebView2.denyDownload(arguments);
+                              Com.release(operation);
+                            } else {
+                              WebView2.setDownloadPath(arguments, path.get().toString());
+                              this.followDownload(operation, url, path.get(), totalBytes);
+                            }
+                            WebView2.completeDeferral(deferral);
+                          } catch (RuntimeException e) {
+                            ThrowableUtil.report(e);
+                          } finally {
+                            Com.release(deferral);
+                            Com.release(arguments);
+                          }
+                        }));
+  }
+
+  /** Reports the steps of a download that has its path, and releases it when it ends. */
+  private void followDownload(MemorySegment operation, URI url, Path path, long totalBytes) {
+    AtomicBoolean ended = new AtomicBoolean();
+    long id =
+        this.downloadStarted(
+            url,
+            path,
+            totalBytes,
+            () -> {
+              if (!ended.get()) {
+                WebView2.cancelDownload(operation);
+              }
+            });
+    MemorySegment bytes =
+        ComCallback.event(
+            WebView2.IID_BYTES_RECEIVED_CHANGED,
+            (sender, _) -> {
+              if (!ended.get()) {
+                this.downloadProgressed(
+                    id,
+                    WebView2.downloadBytesReceived(sender),
+                    WebView2.downloadTotalBytes(sender));
+              }
+            });
+    MemorySegment state =
+        ComCallback.event(
+            WebView2.IID_DOWNLOAD_STATE_CHANGED,
+            (sender, _) -> {
+              int current = WebView2.downloadState(sender);
+              if (current == WebView2.DOWNLOAD_STATE_COMPLETED
+                  && ended.compareAndSet(false, true)) {
+                this.downloadEnded(id, DownloadState.COMPLETED, "");
+                Com.release(operation);
+              } else if (current == WebView2.DOWNLOAD_STATE_INTERRUPTED
+                  && ended.compareAndSet(false, true)) {
+                boolean canceled = WebView2.isDownloadCanceled(sender);
+                this.downloadEnded(
+                    id,
+                    canceled ? DownloadState.CANCELED : DownloadState.FAILED,
+                    canceled ? "" : WebView2.downloadInterruptReason(sender));
+                Com.release(operation);
+              }
+            });
+    WebView2.onDownloadBytesReceived(operation, bytes);
+    WebView2.onDownloadStateChanged(operation, state);
+    Com.release(bytes);
+    Com.release(state);
+  }
+
+  /** {@code url} as a URI, or {@code about:blank} for one that isn't. */
+  private static URI downloadUrl(String url) {
+    try {
+      return URI.create(url);
+    } catch (IllegalArgumentException | NullPointerException _) {
+      return URI.create("about:blank");
+    }
   }
 
   private void subscribe(
@@ -1080,30 +1206,12 @@ public class WindowsWindow extends AbstractWindow {
         .name("lwjwae-resource")
         .start(
             () -> {
-              byte[] content = null;
-              RuntimeException failure = null;
-              try {
-                content = ResourceUtil.read(path);
-              } catch (RuntimeException e) {
-                failure = e;
-              }
-              byte[] read = content;
-              ResourceNotFoundException missing =
-                  failure == null
-                      ? null
-                      : failure instanceof ResourceNotFoundException notFound
-                          ? notFound
-                          : new ResourceNotFoundException(
-                              "Could not read " + path + ": " + failure.getMessage());
+              Runnable answer = this.readAnswer(arguments, uri, path);
               this.dispatcher()
                   .post(
                       () -> {
                         try {
-                          if (read != null) {
-                            this.respond(arguments, path, read);
-                          } else {
-                            this.respondNotFound(arguments, uri, missing);
-                          }
+                          answer.run();
                           WebView2.completeDeferral(deferral);
                         } finally {
                           Com.release(deferral);
@@ -1111,6 +1219,20 @@ public class WindowsWindow extends AbstractWindow {
                         }
                       });
             });
+  }
+
+  /** Reads the resource at {@code path}, and returns how to answer the request with it. */
+  private Runnable readAnswer(MemorySegment arguments, String uri, String path) {
+    try {
+      byte[] content = ResourceUtil.read(path);
+      return () -> this.respond(arguments, path, content);
+    } catch (ResourceNotFoundException e) {
+      return () -> this.respondNotFound(arguments, uri, e);
+    } catch (RuntimeException e) {
+      ResourceNotFoundException missing =
+          new ResourceNotFoundException("Could not read " + path + ": " + e.getMessage());
+      return () -> this.respondNotFound(arguments, uri, missing);
+    }
   }
 
   private void respond(MemorySegment arguments, String path, byte[] content) {
@@ -1155,7 +1277,9 @@ public class WindowsWindow extends AbstractWindow {
       result.completeExceptionally(new ComCallFailedException("ExecuteScript", hresult));
       return;
     }
-    ScriptUtil.completeTagged(result, JsonStringUtil.decode(json));
+    // The result is the JSON of the tagged string; anything else is no outcome of the script.
+    Object value = json == null ? null : JsonUtil.parse(json);
+    ScriptUtil.completeTagged(result, value instanceof String tagged ? tagged : null);
   }
 
   private void fitWebView() {
@@ -1173,7 +1297,7 @@ public class WindowsWindow extends AbstractWindow {
   }
 
   /** The {@code ICoreWebView2}, or {@code null} once it's gone. */
-  MemorySegment webView() {
+  MemorySegment webViewIfAny() {
     return this.webView;
   }
 

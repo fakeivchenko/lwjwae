@@ -30,6 +30,11 @@ public abstract class TrayContractTest extends DisplayContractTest {
   private static final byte[] GREEN = Icons.circle(32, new Color(0x34, 0xd3, 0x99));
   private static final byte[] RED = Icons.circle(32, new Color(0xfb, 0x71, 0x85));
 
+  /**
+   * Suppressed warnings: {@code try}: the test closes the tray inside its block on purpose, twice,
+   * to see that a tray closes on its own and that a second close does nothing.
+   */
+  @SuppressWarnings("try")
   @Test
   void trayTakesEveryChangeAndClosesOnItsOwn() throws Exception {
     try (Application application = Application.create()) {
@@ -76,6 +81,11 @@ public abstract class TrayContractTest extends DisplayContractTest {
     }
   }
 
+  /**
+   * Suppressed warnings: {@code try}: the test closes the tray inside its block on purpose: the
+   * close is what lets {@code run()} return.
+   */
+  @SuppressWarnings("try")
   @Test
   void trayKeepsTheApplicationRunningWithoutWindows() throws Exception {
     try (Application application = Application.create();

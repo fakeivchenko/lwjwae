@@ -157,7 +157,7 @@ wrapper that the Windows and macOS backends use.
 
 ## Developer tools
 
-`devToolsEnabled(true)` sets `enable-developer-extras` on the `WebKitSettings` of the view. That
+`WebView.devToolsEnabled(true)` sets `enable-developer-extras` on the `WebKitSettings` of the view. That
 enables the Web Inspector and adds "Inspect Element" to the context menu, which the backend then
 stops suppressing. `isDevToolsEnabled()` reads the same setting back.
 
@@ -195,7 +195,7 @@ keeps `Application.run()` going, so an application can live in the tray with no 
 
 ## Notifications
 
-`Application.showNotification(Notification)` goes through the
+`Notifications.show(Notification)` goes through the
 [`FreedesktopNotifier`](../lwjwae-glib/src/main/java/dev/ivchenko/lwjwae/glib/FreedesktopNotifier.java)
 of [`lwjwae-glib`](../lwjwae-glib#notifications): `org.freedesktop.Notifications` over GDBus, the
 same under GTK 3 and GTK 4.
@@ -238,7 +238,7 @@ can't be called twice, and another application can be created on the same thread
 
 The metadata test initializes the binding classes, which loads GTK and WebKitGTK but opens no
 window, so it runs on a headless Linux machine. On CI, run the display tests under Xvfb with a
-window manager, as `scripts/linux/with-window-manager.sh` does with openbox, and with
+window manager, as `scripts/linux/with-window-manager.sh` does with xfwm4, and with
 `-Dlwjwae.requireDisplay=true`, and keep `GDK_BACKEND=x11`,
 `WEBKIT_DISABLE_DMABUF_RENDERER=1`, and `WEBKIT_DISABLE_COMPOSITING_MODE=1` in the environment,
 because a runner has no GPU.

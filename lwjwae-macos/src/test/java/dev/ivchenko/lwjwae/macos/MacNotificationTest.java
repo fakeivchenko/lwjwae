@@ -27,7 +27,10 @@ class MacNotificationTest extends NotificationContractTest {
   @Override
   protected void assumeNotificationsAllowed() {
     try (Application application = Application.create()) {
-      application.showNotification(Notification.builder().title("lwjwae :: probe").build()).close();
+      application
+          .notifications()
+          .show(Notification.builder().title("lwjwae :: probe").build())
+          .close();
     } catch (UnsupportedOperationException e) {
       Assumptions.abort(e.getMessage());
     }
@@ -40,7 +43,9 @@ class MacNotificationTest extends NotificationContractTest {
       boolean bundled = MacDispatcher.instance().call(UserNotifications::isBundledApplication);
       try {
         NotificationHandle notification =
-            application.showNotification(Notification.builder().title("lwjwae :: bundle").build());
+            application
+                .notifications()
+                .show(Notification.builder().title("lwjwae :: bundle").build());
         Assertions.assertTrue(bundled, "only a bundle gets a notification center");
         notification.close();
       } catch (UnsupportedOperationException e) {
@@ -65,16 +70,16 @@ class MacNotificationTest extends NotificationContractTest {
               .onActivate(activated::countDown)
               .build();
 
-      MacNotification clicked = (MacNotification) application.showNotification(content);
+      MacNotification clicked = (MacNotification) application.notifications().show(content);
       clicked.simulateResponse(UserNotifications.DEFAULT_ACTION);
       Assertions.assertTrue(activated.await(5, TimeUnit.SECONDS), "onActivate must run");
       Assertions.assertTrue(clicked.isClosed(), "a click ends the notification");
 
-      MacNotification answered = (MacNotification) application.showNotification(content);
+      MacNotification answered = (MacNotification) application.notifications().show(content);
       answered.simulateResponse("action-1");
       Assertions.assertTrue(second.await(5, TimeUnit.SECONDS), "the second button must run");
 
-      MacNotification dismissed = (MacNotification) application.showNotification(content);
+      MacNotification dismissed = (MacNotification) application.notifications().show(content);
       dismissed.simulateResponse(UserNotifications.DISMISS_ACTION);
       Assertions.assertTrue(dismissed.isClosed(), "a dismissal ends the notification");
     }

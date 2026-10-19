@@ -13,7 +13,9 @@ import java.security.Signature;
 import java.util.Base64;
 import java.util.HexFormat;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
 import lombok.SneakyThrows;
 
 /**
@@ -23,6 +25,8 @@ import lombok.SneakyThrows;
 public class UpdateServer implements AutoCloseable {
   private final HttpServer server;
   private final Map<String, byte[]> files = new ConcurrentHashMap<>();
+  private final Set<String> silent = ConcurrentHashMap.newKeySet();
+  private final Map<String, Long> stalling = new ConcurrentHashMap<>();
   private final KeyPair keys;
 
   @SneakyThrows
@@ -32,7 +36,19 @@ public class UpdateServer implements AutoCloseable {
     this.server.createContext(
         "/",
         exchange -> {
-          byte[] body = this.files.get(exchange.getRequestURI().getPath());
+          String path = exchange.getRequestURI().getPath();
+          byte[] body = this.files.get(path);
+          if (this.silent.contains(path)) {
+            UpdateServer.sleep();
+          }
+          Long announced = this.stalling.get(path);
+          if (announced != null) {
+            exchange.sendResponseHeaders(200, announced);
+            OutputStream out = exchange.getResponseBody();
+            out.write(body);
+            out.flush();
+            UpdateServer.sleep();
+          }
           exchange.sendResponseHeaders(body == null ? 404 : 200, body == null ? -1 : body.length);
           if (body != null) {
             try (OutputStream out = exchange.getResponseBody()) {
@@ -41,6 +57,7 @@ public class UpdateServer implements AutoCloseable {
           }
           exchange.close();
         });
+    this.server.setExecutor(Executors.newVirtualThreadPerTaskExecutor());
     this.server.start();
   }
 
@@ -61,6 +78,20 @@ public class UpdateServer implements AutoCloseable {
   /** Serves {@code bytes} at {@code path}. */
   public void file(String path, byte[] bytes) {
     this.files.put(path, bytes);
+  }
+
+  /** Answers nothing at {@code path}, not even the headers, for a minute. */
+  public void silent(String path) {
+    this.silent.add(path);
+  }
+
+  /**
+   * Answers {@code path} with headers that announce {@code announced} bytes, sends only {@code
+   * part}, and then nothing for a minute.
+   */
+  public void stalling(String path, byte[] part, long announced) {
+    this.files.put(path, part);
+    this.stalling.put(path, announced);
   }
 
   /**
@@ -89,6 +120,14 @@ public class UpdateServer implements AutoCloseable {
     this.file(
         path + ".sig",
         Base64.getEncoder().encodeToString(signer.sign()).getBytes(StandardCharsets.US_ASCII));
+  }
+
+  private static void sleep() {
+    try {
+      Thread.sleep(60_000);
+    } catch (InterruptedException _) {
+      Thread.currentThread().interrupt();
+    }
   }
 
   @Override

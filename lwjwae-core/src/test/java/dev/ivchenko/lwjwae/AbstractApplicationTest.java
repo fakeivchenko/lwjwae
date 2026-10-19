@@ -111,7 +111,7 @@ class AbstractApplicationTest {
     try (FakeApplication application = new FakeApplication()) {
       FakeWindow window = application.openFake();
       NotificationHandle notification =
-          application.showNotification(Notification.builder().title("Done").build());
+          application.notifications().show(Notification.builder().title("Done").build());
       CompletableFuture<Void> running = CompletableFuture.runAsync(application::run);
 
       window.close();
@@ -122,7 +122,7 @@ class AbstractApplicationTest {
       Assertions.assertTrue(notification.isClosed(), "quit() takes the notification back");
       Assertions.assertThrows(
           IllegalStateException.class,
-          () -> application.showNotification(Notification.builder().title("Late").build()));
+          () -> application.notifications().show(Notification.builder().title("Late").build()));
     }
   }
 
@@ -134,6 +134,11 @@ class AbstractApplicationTest {
         IllegalArgumentException.class, () -> Notification.builder().title(" ").build());
   }
 
+  /**
+   * Suppressed warnings: {@code try}: the test closes the tray inside its block on purpose: the
+   * close is what lets {@code run()} return.
+   */
+  @SuppressWarnings("try")
   @Test
   void closingTheLastTrayIconWithNoWindowReleasesRun() throws Exception {
     try (FakeApplication application = new FakeApplication();
@@ -675,6 +680,29 @@ class AbstractApplicationTest {
     }
   }
 
+  @Test
+  void listenerThatThrowsOnAnEarlyRequestStillHearsTheNextOne() {
+    try (FakeApplication application = new FakeApplication()) {
+      ((AbstractApplication) application).openArguments(List.of("notes://first"));
+      ((AbstractApplication) application).openArguments(List.of("notes://second"));
+      List<OpenEvent> heard = new CopyOnWriteArrayList<>();
+
+      Assertions.assertDoesNotThrow(
+          () ->
+              application.onOpen(
+                  request -> {
+                    heard.add(request);
+                    throw new IllegalStateException("thrown on purpose by the test");
+                  }));
+
+      Assertions.assertEquals(
+          List.of(
+              new OpenEvent(List.of(URI.create("notes://first")), List.of()),
+              new OpenEvent(List.of(URI.create("notes://second")), List.of())),
+          heard);
+    }
+  }
+
   private static void serveInstances(AbstractApplication application, Path directory) {
     application.serveInstances(
         InstanceLocks.claim(directory, "app", AbstractApplicationTest.start()).orElseThrow());
@@ -685,8 +713,11 @@ class AbstractApplicationTest {
     try (FakeApplication application = new FakeApplication()) {
       BlockingQueue<String> heard = new LinkedBlockingQueue<>();
       EventSubscription binding =
-          application.globalShortcut(
-              "Ctrl+Shift+K", () -> heard.add(String.valueOf(Thread.currentThread().isVirtual())));
+          application
+              .shortcuts()
+              .register(
+                  "Ctrl+Shift+K",
+                  () -> heard.add(String.valueOf(Thread.currentThread().isVirtual())));
       Shortcut shortcut = Shortcut.parse("Ctrl+Shift+K");
 
       application.boundShortcuts.get(shortcut).run();
@@ -695,7 +726,7 @@ class AbstractApplicationTest {
       binding.unlisten();
       binding.unlisten();
       Assertions.assertTrue(application.boundShortcuts.isEmpty());
-      Assertions.assertDoesNotThrow(() -> application.globalShortcut(shortcut, () -> {}));
+      Assertions.assertDoesNotThrow(() -> application.shortcuts().register(shortcut, () -> {}));
     }
   }
 
@@ -703,15 +734,16 @@ class AbstractApplicationTest {
   void sameShortcutTwiceIsRefusedAndQuitGivesEveryShortcutBack() {
     FakeApplication application = new FakeApplication();
     try (application) {
-      application.globalShortcut("Alt+F4", () -> {});
-      application.globalShortcut("Ctrl+Alt+Delete", () -> {});
+      application.shortcuts().register("Alt+F4", () -> {});
+      application.shortcuts().register("Ctrl+Alt+Delete", () -> {});
       Assertions.assertThrows(
-          ShortcutUnavailableException.class, () -> application.globalShortcut("alt+f4", () -> {}));
+          ShortcutUnavailableException.class,
+          () -> application.shortcuts().register("alt+f4", () -> {}));
       Assertions.assertEquals(2, application.boundShortcuts.size());
     }
     Assertions.assertTrue(application.boundShortcuts.isEmpty(), "quit gives the shortcuts back");
     Assertions.assertThrows(
-        IllegalStateException.class, () -> application.globalShortcut("Alt+F4", () -> {}));
+        IllegalStateException.class, () -> application.shortcuts().register("Alt+F4", () -> {}));
   }
 
   private static SecondInstanceEvent start() {

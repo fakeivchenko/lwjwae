@@ -210,8 +210,8 @@ public class WindowsApplication extends AbstractApplication {
    * taskbar tells a window once its button exists, and as they change. Runs on the UI thread.
    */
   void decorateTaskbarButton(MemorySegment hwnd) {
-    TaskbarProgress progress = this.progress();
-    int count = this.badgeCount();
+    TaskbarProgress progress = this.taskbar().progress();
+    int count = this.taskbar().badgeCount();
     if (this.taskbarList == null) {
       if (!progress.isShown() && count == 0) {
         return;
@@ -231,7 +231,7 @@ public class WindowsApplication extends AbstractApplication {
   private MemorySegment anyWebView() {
     return this.windows().stream()
         .map(WindowsWindow.class::cast)
-        .map(WindowsWindow::webView)
+        .map(WindowsWindow::webViewIfAny)
         .filter(Objects::nonNull)
         .findFirst()
         .orElseThrow(

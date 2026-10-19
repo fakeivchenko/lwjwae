@@ -15,6 +15,13 @@ public interface RpcExchange {
   /** Where RPC names live on the resource origin of a window: {@code /__lwjwae/rpc/NAME}. */
   String PATH_PREFIX = "/__lwjwae/rpc/";
 
+  /**
+   * The header that carries the secret of the window, which the bootstrap hands only to a document
+   * of a trusted origin. A request without it never reaches a handler, whatever its {@code Origin}
+   * says or leaves out.
+   */
+  String TOKEN_HEADER = "X-Lwjwae-Token";
+
   /** The HTTP method: {@code POST} for a call, {@code OPTIONS} for a CORS preflight. */
   String method();
 

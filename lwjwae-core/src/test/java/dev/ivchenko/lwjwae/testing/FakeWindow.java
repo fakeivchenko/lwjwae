@@ -8,7 +8,6 @@ import dev.ivchenko.lwjwae.WindowParameters;
 import dev.ivchenko.lwjwae.WindowPosition;
 import dev.ivchenko.lwjwae.WindowSize;
 import dev.ivchenko.lwjwae.bridge.BridgeProtocol;
-import dev.ivchenko.lwjwae.bridge.RpcMessageChannel;
 import dev.ivchenko.lwjwae.dialog.DialogCompletion;
 import dev.ivchenko.lwjwae.dialog.MessageDialogParameters;
 import dev.ivchenko.lwjwae.dialog.OpenDialogParameters;
@@ -17,6 +16,7 @@ import dev.ivchenko.lwjwae.event.LoadEvent;
 import dev.ivchenko.lwjwae.menu.MenuCommands;
 import dev.ivchenko.lwjwae.menu.MenuRole;
 import dev.ivchenko.lwjwae.permission.PermissionKind;
+import dev.ivchenko.lwjwae.rpc.RpcMessageChannel;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
@@ -440,13 +440,13 @@ public class FakeWindow extends AbstractWindow {
   }
 
   @Override
-  public boolean isDevToolsEnabled() {
+  protected boolean currentDevTools() {
     return this.devToolsEnabled;
   }
 
   @Override
-  public void devToolsEnabled(boolean devToolsEnabled) {
-    this.devToolsEnabled = devToolsEnabled;
+  protected void presentDevTools(boolean enabled) {
+    this.devToolsEnabled = enabled;
   }
 
   @Override

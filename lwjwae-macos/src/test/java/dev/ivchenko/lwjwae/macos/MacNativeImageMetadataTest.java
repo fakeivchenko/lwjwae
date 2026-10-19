@@ -20,6 +20,11 @@ class MacNativeImageMetadataTest extends NativeImageMetadataContractTest {
   }
 
   @Override
+  protected String modulePackage() {
+    return "dev.ivchenko.lwjwae.macos";
+  }
+
+  @Override
   protected String metadataPath() {
     return "META-INF/native-image/dev.ivchenko.lwjwae/lwjwae-macos/reachability-metadata.json";
   }

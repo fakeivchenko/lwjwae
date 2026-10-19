@@ -3,6 +3,7 @@ package dev.ivchenko.lwjwae;
 import dev.ivchenko.lwjwae.bridge.BridgeProtocol;
 import dev.ivchenko.lwjwae.testing.FakeApplication;
 import dev.ivchenko.lwjwae.testing.FakeWindow;
+import dev.ivchenko.lwjwae.testing.PageGrants;
 import dev.ivchenko.lwjwae.update.UpdateParameters;
 import dev.ivchenko.lwjwae.update.UpdateServer;
 import java.nio.charset.StandardCharsets;
@@ -20,7 +21,7 @@ class UpdatePageTest {
               .updates(
                   new UpdateParameters(server.url("/manifest.json"), server.publicKey(), "1.0.0"))
               .build();
-      try (FakeApplication application = new FakeApplication(parameters)) {
+      try (FakeApplication application = new FakeApplication(PageGrants.every(parameters))) {
         FakeWindow window = application.openFake();
         window.call(1, BridgeProtocol.UPDATE_CALL, "check");
         Assertions.assertEquals(502, window.awaitReply(1).status(), "no manifest yet");

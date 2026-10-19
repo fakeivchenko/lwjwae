@@ -1,16 +1,12 @@
-package dev.ivchenko.lwjwae.event;
+package dev.ivchenko.lwjwae.internal;
 
 import dev.ivchenko.lwjwae.Window;
-import dev.ivchenko.lwjwae.util.ThrowableUtil;
+import dev.ivchenko.lwjwae.event.EventSubscription;
+import dev.ivchenko.lwjwae.event.WindowEvent;
+import dev.ivchenko.lwjwae.event.WindowEventType;
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 
 /**
@@ -30,11 +26,8 @@ import java.util.function.Consumer;
 public final class WindowEvents {
   private final Window window;
   private final Consumer<WindowEvent> page;
-  private final Map<Long, Consumer<WindowEvent>> listeners = new ConcurrentHashMap<>();
-  private final AtomicLong listenerIds = new AtomicLong();
+  private final Listeners<WindowEvent> listeners = new Listeners<>("lwjwae-window-events");
   private final AtomicBoolean scheduled = new AtomicBoolean();
-  private final ExecutorService executor =
-      Executors.newSingleThreadExecutor(Thread.ofVirtual().name("lwjwae-window-events").factory());
 
   private volatile WindowSnapshot last;
 
@@ -82,40 +75,18 @@ public final class WindowEvents {
           for (WindowEventType type : changes) {
             WindowEvent event = new WindowEvent(type, this.window, now.size(), now.position());
             this.page.accept(event);
-            this.deliver(event);
+            this.listeners.deliver(event);
           }
         });
   }
 
   /** Registers {@code listener} for every event from now on. */
   public EventSubscription listen(Consumer<WindowEvent> listener) {
-    long id = this.listenerIds.incrementAndGet();
-    this.listeners.put(id, listener);
-    return () -> this.listeners.remove(id);
+    return this.listeners.listen(listener);
   }
 
   /** Stops the delivery: the window is gone. */
   public void shutdown() {
-    this.executor.shutdown();
-  }
-
-  private void deliver(WindowEvent event) {
-    if (this.listeners.isEmpty() || this.executor.isShutdown()) {
-      return;
-    }
-    try {
-      this.executor.execute(
-          () -> {
-            for (Consumer<WindowEvent> listener : this.listeners.values()) {
-              try {
-                listener.accept(event);
-              } catch (Throwable t) {
-                ThrowableUtil.report(t);
-              }
-            }
-          });
-    } catch (RejectedExecutionException _) {
-      // The window closed between the check and the delivery.
-    }
+    this.listeners.shutdown();
   }
 }
