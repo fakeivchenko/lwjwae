@@ -1,6 +1,5 @@
 package dev.ivchenko.lwjwae.update;
 
-import dev.ivchenko.lwjwae.exception.UpdateRejectedException;
 import dev.ivchenko.lwjwae.util.JsonUtil;
 import java.net.URI;
 import java.time.Instant;

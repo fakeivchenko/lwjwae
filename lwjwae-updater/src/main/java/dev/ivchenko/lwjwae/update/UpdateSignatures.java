@@ -1,6 +1,5 @@
 package dev.ivchenko.lwjwae.update;
 
-import dev.ivchenko.lwjwae.exception.UpdateRejectedException;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.KeyFactory;

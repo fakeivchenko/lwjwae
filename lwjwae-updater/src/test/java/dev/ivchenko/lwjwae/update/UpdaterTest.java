@@ -1,7 +1,5 @@
 package dev.ivchenko.lwjwae.update;
 
-import dev.ivchenko.lwjwae.exception.UpdateDownloadFailedException;
-import dev.ivchenko.lwjwae.exception.UpdateRejectedException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;

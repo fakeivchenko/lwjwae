@@ -1,4 +1,4 @@
-package dev.ivchenko.lwjwae.exception;
+package dev.ivchenko.lwjwae.update;
 
 import java.io.Serial;
 

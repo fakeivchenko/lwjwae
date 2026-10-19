@@ -23,8 +23,9 @@ import java.util.concurrent.TimeoutException;
  * application, and on the module path, where only the exported API is there. The page calls a bound
  * function, which takes the message channel; a handler, which takes the {@code fetch} of the scheme
  * of the application where the engine has it; and the store, which runs the SQL of a page under its
- * authorizer. Java evaluates a script of its own. Each answer is checked, and the first failure, or
- * a minute without the last answer, ends the run.
+ * authorizer. The page also finds {@code lwjwae.updates}, which only the updater module adds, as a
+ * service that the application finds on its own. Java evaluates a script of its own. Each answer is
+ * checked, and the first failure, or a minute without the last answer, ends the run.
  */
 public final class SmokeApplication {
   private static final long TIMEOUT_SECONDS = 60;
@@ -101,7 +102,7 @@ public final class SmokeApplication {
     String evaluated = window.eval("21 * 2").get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
     window.close();
     System.out.println("smoke eval " + evaluated);
-    boolean passed = "echo:ping,store:42".equals(report) && "42".equals(evaluated);
+    boolean passed = "echo:ping,store:42,updates:function".equals(report) && "42".equals(evaluated);
     System.out.println(passed ? "smoke passed" : "smoke FAILED");
     return passed ? 0 : 1;
   }

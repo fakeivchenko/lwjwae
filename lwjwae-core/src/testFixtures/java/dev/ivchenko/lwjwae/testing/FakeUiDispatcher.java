@@ -12,6 +12,7 @@ public class FakeUiDispatcher extends EventLoopDispatcher {
   private final BlockingQueue<Boolean> wakeUps = new LinkedBlockingQueue<>();
   private final Throwable initFailure;
 
+  /** A dispatcher whose loop starts. */
   public FakeUiDispatcher() {
     this(null);
   }

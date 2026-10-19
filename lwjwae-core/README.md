@@ -582,6 +582,26 @@ Where the platform can't, the call does what it can and the reads say so:
 Every method of `Application` and `Window` is safe to call from any thread. The backend forwards
 the call to its UI thread, and a getter blocks until the UI thread has answered.
 
+## Modules
+
+A feature that not every application needs, such as the updater, ships as a module of its own and
+joins every application that finds it. A module implements
+[`ApplicationModule`](src/main/java/dev/ivchenko/lwjwae/module/ApplicationModule.java) and
+registers it as a service, in `META-INF/services/dev.ivchenko.lwjwae.module.ApplicationModule` and
+with `provides` in its `module-info`. `Application.create` makes an instance of each module for the
+new application and starts it with a
+[`ModuleContext`](src/main/java/dev/ivchenko/lwjwae/module/ModuleContext.java), through which the
+module:
+
+- answers page calls under a name of its own that starts with `lwjwae:`, behind a
+  `PageCapability`;
+- adds a part of the page API, `window.lwjwae.NAME`, made from a script of the module;
+- hands requests to open links or files to `Application.onOpen`.
+
+`application.module(Type.class)` finds the module, which is how its API reaches it, as in
+`Updater.of(application)`; without the module on the path, it throws `IllegalStateException`. The
+module stops after the windows when the application quits.
+
 ## Backend discovery
 
 [`Application.create`](src/main/java/dev/ivchenko/lwjwae/Application.java) finds a backend in three steps:

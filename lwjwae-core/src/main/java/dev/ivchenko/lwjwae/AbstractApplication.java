@@ -12,6 +12,7 @@ import dev.ivchenko.lwjwae.exception.ShortcutUnavailableException;
 import dev.ivchenko.lwjwae.instance.InstanceLock;
 import dev.ivchenko.lwjwae.internal.Listeners;
 import dev.ivchenko.lwjwae.menu.MenuItem;
+import dev.ivchenko.lwjwae.module.ApplicationModule;
 import dev.ivchenko.lwjwae.notification.Notification;
 import dev.ivchenko.lwjwae.notification.NotificationHandle;
 import dev.ivchenko.lwjwae.notification.Notifications;
@@ -30,8 +31,6 @@ import dev.ivchenko.lwjwae.theme.Theme;
 import dev.ivchenko.lwjwae.tray.Tray;
 import dev.ivchenko.lwjwae.tray.TrayIcon;
 import dev.ivchenko.lwjwae.ui.UiDispatcher;
-import dev.ivchenko.lwjwae.update.UpdateParameters;
-import dev.ivchenko.lwjwae.update.Updater;
 import dev.ivchenko.lwjwae.util.OpenArgumentUtil;
 import dev.ivchenko.lwjwae.util.ThrowableUtil;
 import java.net.URI;
@@ -45,8 +44,10 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.ServiceLoader;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -97,6 +98,12 @@ public abstract class AbstractApplication implements Application {
   private final AtomicLong windowIds = new AtomicLong();
   private final Map<String, String> bindingScripts = new ConcurrentHashMap<>();
   private final EventListeners listeners = new EventListeners("lwjwae-application-events");
+
+  // --- modules: started once by create(), each with its page calls and its part of the page API
+  // ---
+  private final List<ApplicationModule> modules = new CopyOnWriteArrayList<>();
+  private final Map<String, ModuleCall> moduleCalls = new ConcurrentHashMap<>();
+  private final Map<String, String> modulePageApis = new ConcurrentHashMap<>();
   private final Map<Long, WindowStateTracker> stateTrackers = new ConcurrentHashMap<>();
 
   /**
@@ -125,7 +132,6 @@ public abstract class AbstractApplication implements Application {
   private volatile Secrets secrets;
   private volatile List<MenuItem> menu = List.of();
   private Store store;
-  private Updater updater;
 
   // --- single instance: a start before any listener waits in the list, under its lock ---
   private final Listeners<SecondInstanceEvent> secondInstanceListeners =
@@ -484,20 +490,6 @@ public abstract class AbstractApplication implements Application {
       this.store = Store.open(directory.resolve("store.sqlite"));
     }
     return this.store;
-  }
-
-  @Override
-  public final synchronized Updater updater() {
-    this.checkOpen();
-    if (this.updater == null) {
-      UpdateParameters updates = this.parameters.updates();
-      if (updates == null) {
-        throw new IllegalStateException(
-            "An updater needs update parameters: set them, or the updates block of the plugin");
-      }
-      this.updater = new Updater(updates, this::quit);
-    }
-    return this.updater;
   }
 
   @Override
@@ -869,12 +861,75 @@ public abstract class AbstractApplication implements Application {
       if (this.store != null) {
         this.store.close();
       }
-      if (this.updater != null) {
-        this.updater.close();
+    }
+    for (ApplicationModule module : this.modules.reversed()) {
+      try {
+        module.stop();
+      } catch (Throwable t) {
+        ThrowableUtil.report(t);
       }
     }
     this.signalIdle();
     this.onClose();
+  }
+
+  /**
+   * Starts every module on the class path or the module path for this application, each a new
+   * instance. {@link Application#create} calls this once, before it hands the application out; a
+   * backend never does, and an application made without {@code create}, as in a test, calls it
+   * itself.
+   */
+  protected final void startModules() {
+    ServiceLoader.load(ApplicationModule.class, ApplicationModule.class.getClassLoader())
+        .forEach(
+            module -> {
+              module.start(new ApplicationModuleContext(this));
+              this.modules.add(module);
+            });
+  }
+
+  @Override
+  public final <M extends ApplicationModule> M module(Class<M> type) {
+    Objects.requireNonNull(type, "type");
+    for (ApplicationModule module : this.modules) {
+      if (type.isInstance(module)) {
+        return type.cast(module);
+      }
+    }
+    throw new IllegalStateException(
+        "No " + type.getSimpleName() + " in this application: add its module to the runtime path");
+  }
+
+  /** Registers a page call of a module, see {@link ApplicationModuleContext#handle}. */
+  final void addModuleCall(String name, ModuleCall call) {
+    if (!name.startsWith(BridgeProtocol.RESERVED_PREFIX)
+        || BridgeProtocol.CORE_CALLS.contains(name)) {
+      throw new IllegalArgumentException("Not a call that a module can take: " + name);
+    }
+    if (this.moduleCalls.putIfAbsent(name, call) != null) {
+      throw new IllegalArgumentException("A module answers " + name + " already");
+    }
+  }
+
+  /** Registers a part of the page API of a module, see {@link ApplicationModuleContext#pageApi}. */
+  final void addModulePageApi(String name, String script) {
+    BridgeProtocol.checkIdentifier(name);
+    if (BridgeProtocol.CORE_PAGE_APIS.contains(name)) {
+      throw new IllegalArgumentException("The page API has " + name + " of its own");
+    }
+    if (this.modulePageApis.putIfAbsent(name, script) != null) {
+      throw new IllegalArgumentException("A module adds " + name + " already");
+    }
+  }
+
+  /** The page call of a module named {@code name}, or {@code null}. */
+  final ModuleCall moduleCall(String name) {
+    return this.moduleCalls.get(name);
+  }
+
+  /** The parts of the page API that the modules add, by their names. */
+  final Map<String, String> modulePageApis() {
+    return Map.copyOf(this.modulePageApis);
   }
 
   @Override

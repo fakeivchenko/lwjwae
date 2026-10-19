@@ -1,7 +1,7 @@
 package dev.ivchenko.lwjwae.update;
 
-import dev.ivchenko.lwjwae.exception.UpdateDownloadFailedException;
-import dev.ivchenko.lwjwae.exception.UpdateRejectedException;
+import dev.ivchenko.lwjwae.Application;
+import dev.ivchenko.lwjwae.update.internal.UpdaterModule;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -31,9 +31,10 @@ import java.util.function.Supplier;
  * Finds, downloads, and installs the updates of an application, from a manifest at any URL.
  *
  * <pre>{@code
- * Updater updater = application.updater();
+ * Updater updater = Updater.of(application);
  * updater.check().thenAccept(found -> found.ifPresent(update -> {
- *   DownloadedUpdate downloaded = updater.download(update, application::progress).join();
+ *   DownloadedUpdate downloaded =
+ *       updater.download(update, application.taskbar()::progress).join();
  *   updater.installAndRestart(downloaded);
  * }));
  * }</pre>
@@ -56,6 +57,10 @@ import java.util.function.Supplier;
  * the system that waits for the application to quit, puts the new version in place, and starts it.
  * A Debian or Arch package is updated by its package manager, so there {@link #check()} still finds
  * an update, but not an {@link Update#installable() installable} one.
+ *
+ * <p>The updater belongs to the {@code lwjwae-updater} module, which joins an application when it
+ * is on the class path or the module path, and gives its pages {@code window.lwjwae.updates} too.
+ * An application has one updater, which closes with it.
  *
  * <p>Every method is safe to call from any thread. The network calls run on virtual threads.
  */
@@ -87,8 +92,8 @@ public final class Updater implements AutoCloseable {
   private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
 
   /**
-   * Creates an updater. An application has one, from {@link
-   * dev.ivchenko.lwjwae.Application#updater()}.
+   * Creates an updater. An application has one, from {@link #of(Application)}; this one is for a
+   * program that updates without an application.
    *
    * @param quit Quits the application, once the installer waits for it.
    */
@@ -123,6 +128,32 @@ public final class Updater implements AutoCloseable {
             .followRedirects(HttpClient.Redirect.NORMAL)
             .executor(this.executor)
             .build();
+  }
+
+  /**
+   * The updater of {@code application}, with the update parameters that the {@code updates} block
+   * of the Gradle plugin writes into the application, see {@link UpdateParameters#discover()}.
+   *
+   * @throws IllegalStateException If the application has no update parameters, or is closed.
+   */
+  public static Updater of(Application application) {
+    return application.module(UpdaterModule.class).updater();
+  }
+
+  /**
+   * The updater of {@code application}, with {@code parameters}, for an application that finds its
+   * updates elsewhere than the plugin says.
+   *
+   * @throws IllegalStateException If the application has an updater with other parameters already,
+   *     or is closed.
+   */
+  public static Updater of(Application application, UpdateParameters parameters) {
+    return application.module(UpdaterModule.class).updater(parameters);
+  }
+
+  /** Where this updater looks for updates, and the key that signs them. */
+  public UpdateParameters parameters() {
+    return this.parameters;
   }
 
   /** The version that runs. */

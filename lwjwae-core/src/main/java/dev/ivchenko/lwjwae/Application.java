@@ -10,6 +10,7 @@ import dev.ivchenko.lwjwae.event.SecondInstanceEvent;
 import dev.ivchenko.lwjwae.exception.BackendNotAvailableException;
 import dev.ivchenko.lwjwae.instance.InstanceLock;
 import dev.ivchenko.lwjwae.menu.MenuItem;
+import dev.ivchenko.lwjwae.module.ApplicationModule;
 import dev.ivchenko.lwjwae.notification.Notifications;
 import dev.ivchenko.lwjwae.rpc.RpcHandler;
 import dev.ivchenko.lwjwae.secret.Secrets;
@@ -20,7 +21,6 @@ import dev.ivchenko.lwjwae.theme.Theme;
 import dev.ivchenko.lwjwae.tray.Tray;
 import dev.ivchenko.lwjwae.tray.TrayIcon;
 import dev.ivchenko.lwjwae.tray.TrayMenuItem;
-import dev.ivchenko.lwjwae.update.Updater;
 import dev.ivchenko.lwjwae.util.PlatformUtil;
 import java.io.UncheckedIOException;
 import java.nio.file.Path;
@@ -104,7 +104,9 @@ public interface Application extends AutoCloseable {
     BackendProvider provider =
         Application.provider()
             .orElseThrow(() -> new BackendNotAvailableException(Application.noBackendMessage()));
-    return provider.create(parameters);
+    Application application = provider.create(parameters);
+    ((AbstractApplication) application).startModules();
+    return application;
   }
 
   /**
@@ -555,31 +557,13 @@ public interface Application extends AutoCloseable {
   Store store();
 
   /**
-   * The updater of the application, which finds, downloads, and installs its new versions from the
-   * manifest of {@link ApplicationParameters#updates()}. A page reaches it as {@code
-   * lwjwae.updates}:
+   * The module of {@code type} in this application, such as the one behind {@code
+   * Updater.of(application)}. A module joins every application that finds it on the class path or
+   * the module path; see {@link ApplicationModule}.
    *
-   * <pre>{@code
-   * const update = await lwjwae.updates.check();
-   * if (update?.installable) {
-   *   await lwjwae.updates.install({ onProgress: (fraction) => bar.value = fraction });
-   * }
-   * }</pre>
-   *
-   * <p>Platforms:
-   *
-   * <ul>
-   *   <li>Windows: Installs the {@code .msi} of the new version with {@code msiexec /passive}.
-   *   <li>macOS: Replaces the {@code .app} bundle with the one of the new version, signed by the
-   *       same team.
-   *   <li>Linux, GTK 3: Replaces the AppImage; a Debian or Arch package updates through its package
-   *       manager, so the update is found but not installable.
-   *   <li>Linux, GTK 4: As on GTK 3.
-   * </ul>
-   *
-   * @throws IllegalStateException If the application has no update parameters, or is closed.
+   * @throws IllegalStateException If no module of {@code type} is there.
    */
-  Updater updater();
+  <M extends ApplicationModule> M module(Class<M> type);
 
   /**
    * The progress and the count on the icon of the application in the taskbar or the Dock. A page

@@ -37,8 +37,19 @@ public class FakeApplication extends AbstractApplication {
     this(PageGrants.every());
   }
 
+  /** An application with {@code parameters}, and no module started. */
   public FakeApplication(ApplicationParameters parameters) {
     super(FakeApplication.started(new FakeUiDispatcher()), parameters);
+  }
+
+  /**
+   * A fake application with the modules on the class path of the test started, as {@link
+   * dev.ivchenko.lwjwae.Application#create} starts them for a real one.
+   */
+  public static FakeApplication withModules(ApplicationParameters parameters) {
+    FakeApplication application = new FakeApplication(parameters);
+    application.startModules();
+    return application;
   }
 
   /** A backend starts its UI thread before the application; the fake does the same. */

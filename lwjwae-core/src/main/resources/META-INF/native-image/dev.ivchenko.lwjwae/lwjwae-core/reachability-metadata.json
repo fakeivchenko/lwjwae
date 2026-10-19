@@ -29,6 +29,9 @@
     },
     {
       "glob": "META-INF/services/dev.ivchenko.lwjwae.bridge.codec.BridgeCodec"
+    },
+    {
+      "glob": "META-INF/services/dev.ivchenko.lwjwae.module.ApplicationModule"
     }
   ],
   "foreign": {

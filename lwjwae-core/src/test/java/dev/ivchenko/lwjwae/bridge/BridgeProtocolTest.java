@@ -5,6 +5,7 @@ import dev.ivchenko.lwjwae.WindowParameters;
 import dev.ivchenko.lwjwae.WindowPosition;
 import dev.ivchenko.lwjwae.event.Event;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -23,8 +24,14 @@ class BridgeProtocolTest {
             "{base:\"app://local/__lwjwae/rpc/\"}",
             "secret",
             List.of("app://local", "http://localhost:5173"),
-            List.of(WindowEdge.TOP, WindowEdge.TOP_LEFT));
+            List.of(WindowEdge.TOP, WindowEdge.TOP_LEFT),
+            Map.of("extra", "(bridge) => ({ ping: () => bridge.call(\"lwjwae:ping\", \"\") })"));
     Assertions.assertTrue(script.contains("const resizeEdges = [\"top\",\"top-left\"];"));
+    Assertions.assertTrue(
+        script.contains(
+            "Object.entries({\"extra\": ((bridge) => ({ ping: () => bridge.call(\"lwjwae:ping\","
+                + " \"\") }))})"),
+        "the modules add to the page API");
     Assertions.assertTrue(script.contains("const post = (m) => host.post(m);"));
     Assertions.assertTrue(script.contains("const codec = fakeCodec;"));
     Assertions.assertTrue(script.contains("const rpc = {base:\"app://local/__lwjwae/rpc/\"};"));
@@ -36,11 +43,10 @@ class BridgeProtocolTest {
             "window." + BridgeProtocol.CHANNEL + " = { receive, bound, contextMenu: false };"));
     Assertions.assertTrue(
         script.contains(
-            "window."
-                + BridgeProtocol.PAGE_API
-                + " = { listen, once, emit, open, close, openExternal, call: callRpc, invoke:"
+            "const api = { listen, once, emit, open, close, openExternal, call: callRpc, invoke:"
                 + " rpcInvoke, RpcError, window: windowApi, theme, files, dialog, clipboard, menu,"
-                + " taskbar, downloads, store, updates };"));
+                + " taskbar, downloads, store };"));
+    Assertions.assertTrue(script.contains("window." + BridgeProtocol.PAGE_API + " = api;"));
     for (String reserved :
         List.of(
             BridgeProtocol.EVENT_CALL,
@@ -48,7 +54,6 @@ class BridgeProtocolTest {
             BridgeProtocol.OPEN_CALL,
             BridgeProtocol.CLOSE_CALL,
             BridgeProtocol.CONTROL_CALL,
-            BridgeProtocol.UPDATE_CALL,
             BridgeProtocol.MENU_CALL,
             BridgeProtocol.CLIPBOARD_CALL,
             BridgeProtocol.DIALOG_CALL,

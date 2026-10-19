@@ -555,24 +555,15 @@
         transaction: (statements) => storeCall({ op: "transaction", statements })
     };
 
-    // The updater of the application: check resolves to { version, notes, mandatory, installable,
-    // size } or null, and install downloads the update, reporting to onProgress from 0 to 1, and
-    // installs it, which ends the application. It rejects with no-update, not-installable,
-    // update-rejected, or download-failed.
-    const updates = {
-        check: () => callText("${updateCall}", "check")
-            .then(({ text }) => text === "" ? null : JSON.parse(text)),
-        install: async ({ onProgress } = {}) => {
-            const stop = typeof onProgress === "function"
-                ? await listen("${updateProgressEvent}", (event) => onProgress(Number(event.payload)))
-                : () => {};
-            try {
-                await callText("${updateCall}", "install");
-            } finally {
-                stop();
-            }
+    const api = { listen, once, emit, open, close, openExternal, call: callRpc, invoke: rpcInvoke, RpcError, window: windowApi, theme, files, dialog, clipboard, menu, taskbar, downloads, store };
+    // The parts of the API that the modules of the application add, each made from the bridge.
+    const bridge = { call: (name, text) => callText(name, text).then(({ text }) => text), listen, RpcError };
+    for (const [name, make] of Object.entries(${modules})) {
+        try {
+            api[name] = make(bridge);
+        } catch (error) {
+            console.error("lwjwae: the module behind " + name + " failed", error);
         }
-    };
-
-    window.${pageApi} = { listen, once, emit, open, close, openExternal, call: callRpc, invoke: rpcInvoke, RpcError, window: windowApi, theme, files, dialog, clipboard, menu, taskbar, downloads, store, updates };
+    }
+    window.${pageApi} = api;
 })();

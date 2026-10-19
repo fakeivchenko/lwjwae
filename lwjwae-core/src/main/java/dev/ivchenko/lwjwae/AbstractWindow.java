@@ -22,8 +22,6 @@ import dev.ivchenko.lwjwae.event.LoadEvent;
 import dev.ivchenko.lwjwae.event.WindowEvent;
 import dev.ivchenko.lwjwae.exception.ConstraintViolatedException;
 import dev.ivchenko.lwjwae.exception.StoreFailedException;
-import dev.ivchenko.lwjwae.exception.UpdateDownloadFailedException;
-import dev.ivchenko.lwjwae.exception.UpdateRejectedException;
 import dev.ivchenko.lwjwae.internal.Listeners;
 import dev.ivchenko.lwjwae.internal.StorePageCommands;
 import dev.ivchenko.lwjwae.internal.WindowDownloads;
@@ -41,9 +39,6 @@ import dev.ivchenko.lwjwae.rpc.RpcMessageChannel;
 import dev.ivchenko.lwjwae.taskbar.ProgressState;
 import dev.ivchenko.lwjwae.taskbar.TaskbarProgress;
 import dev.ivchenko.lwjwae.ui.UiDispatcher;
-import dev.ivchenko.lwjwae.update.DownloadedUpdate;
-import dev.ivchenko.lwjwae.update.Update;
-import dev.ivchenko.lwjwae.update.Updater;
 import dev.ivchenko.lwjwae.util.JsonUtil;
 import dev.ivchenko.lwjwae.util.ResourceUtil;
 import dev.ivchenko.lwjwae.util.ScriptUtil;
@@ -66,7 +61,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -453,9 +447,19 @@ public abstract class AbstractWindow implements Window {
       case BridgeProtocol.DIALOG_CALL -> this.needing(PageCapability.DIALOGS, this.dialogs::serve);
       case BridgeProtocol.MENU_CALL -> this.menus::serve;
       case BridgeProtocol.STORE_CALL -> this.needing(PageCapability.STORE, this::storeFromPage);
-      case BridgeProtocol.UPDATE_CALL -> this.needing(PageCapability.UPDATES, this::updateFromPage);
-      default -> null;
+      default -> this.moduleHandler(name);
     };
+  }
+
+  /** The handler of a module for {@code name}, behind its capability, or {@code null}. */
+  private RpcHandler moduleHandler(String name) {
+    ModuleCall call = this.application.moduleCall(name);
+    if (call == null) {
+      return null;
+    }
+    return call.capability() == null
+        ? call.handler()
+        : this.needing(call.capability(), call.handler());
   }
 
   /** Whether the application granted its pages {@code capability}. */
@@ -556,7 +560,8 @@ public abstract class AbstractWindow implements Window {
             this.rpcTransportScript(),
             this.token,
             this.trustedOrigins(),
-            this.pageResizeEdges()));
+            this.pageResizeEdges(),
+            this.application.modulePageApis()));
   }
 
   /**
@@ -696,60 +701,6 @@ public abstract class AbstractWindow implements Window {
     } catch (IllegalArgumentException e) {
       throw RpcException.badRequest("malformed-command", e.getMessage());
     }
-  }
-
-  /**
-   * {@code window.lwjwae.updates}: {@code check} answers with the update as JSON, or nothing for
-   * none; {@code install} checks again, downloads the update with its progress as events to this
-   * window, and installs it, which quits the application. No update answers {@code 404}, one that
-   * this process can't install {@code 409}, and a manifest or a file that fails its checks or its
-   * download {@code 502}.
-   */
-  private void updateFromPage(RpcCall call) throws Exception {
-    Updater updater = this.application.updater();
-    try {
-      Optional<Update> found = updater.check().get();
-      switch (call.text()) {
-        case "check" -> call.reply(found.map(AbstractWindow::updateJson).orElse(""));
-        case "install" -> {
-          Update update =
-              found.orElseThrow(() -> RpcException.notFound("no-update", "No newer version"));
-          if (!update.installable()) {
-            throw RpcException.conflict(
-                "not-installable", "A package manager updates this application");
-          }
-          DownloadedUpdate downloaded =
-              updater
-                  .download(
-                      update,
-                      fraction ->
-                          this.emit(
-                              BridgeProtocol.UPDATE_PROGRESS_EVENT, Double.toString(fraction)))
-                  .get();
-          updater.installAndRestart(downloaded);
-        }
-        default ->
-            throw RpcException.badRequest("malformed-command", "Not a command: " + call.text());
-      }
-    } catch (ExecutionException e) {
-      throw switch (e.getCause()) {
-        case UpdateRejectedException rejected ->
-            RpcException.badGateway("update-rejected", rejected.getMessage());
-        case UpdateDownloadFailedException failed ->
-            RpcException.badGateway("download-failed", failed.getMessage());
-        default -> e;
-      };
-    }
-  }
-
-  private static String updateJson(Update update) {
-    Map<String, Object> fields = new LinkedHashMap<>();
-    fields.put("version", update.version());
-    fields.put("notes", update.notes());
-    fields.put("mandatory", update.mandatory());
-    fields.put("installable", update.installable());
-    fields.put("size", update.artifact().size());
-    return JsonUtil.write(fields);
   }
 
   /**
