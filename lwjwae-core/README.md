@@ -984,7 +984,7 @@ throwable unwind into C is undefined behavior.
 The display tests skip when no display is present, so a headless machine gets a passing build. With
 `-Dlwjwae.requireDisplay=true`, a missing display fails the build instead, which is what CI runs
 under Xvfb. The window tests need a window manager, or nobody answers a request to minimize or
-maximize; CI runs openbox, and `WindowContractTest` has a hook for each thing that a platform
+maximize; CI runs xfwm4 on X11 and labwc on Wayland, and `WindowContractTest` has a hook for each thing that a platform
 can't do, such as telling a Wayland client that its window is minimized. `-Dlwjwae.screenshots=true` captures the screen while each window is open, with a tool of the system:
 `import` of ImageMagick on X11, `grim` on a wlroots compositor, PowerShell on Windows, and
 `screencapture` on macOS; never `java.awt.Robot`, which showed a GTK dialog on Xvfb as a black box.

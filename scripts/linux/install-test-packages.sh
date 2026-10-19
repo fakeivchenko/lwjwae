@@ -5,8 +5,8 @@
 #
 #   sudo scripts/linux/install-test-packages.sh
 #
-# GTK 3 and 4 with WebKitGTK 4.1 and 6.0; Xvfb and openbox, the display and the window manager;
-# Weston, the display of the Wayland tests;
+# GTK 3 and 4 with WebKitGTK 4.1 and 6.0; Xvfb and xfwm4, the display and the window manager, with
+# xprop, which tells when xfwm4 is up; labwc, the compositor of the Wayland tests;
 # ImageMagick for the screenshots; a session bus with dunst, the notification server, and GNOME
 # Keyring, the Secret Service; the desktop portal with its GTK backend, which serves the color
 # scheme to the theme tests; python3-gi and xdotool, which drag files onto a window; rsync, which
@@ -16,7 +16,7 @@ set -euo pipefail
 apt-get update
 apt-get install -y --no-install-recommends \
     libgtk-3-0t64 libwebkit2gtk-4.1-0 libgtk-4-1 libwebkitgtk-6.0-4 \
-    imagemagick xvfb openbox weston dbus-daemon dunst gnome-keyring \
+    imagemagick xvfb xfwm4 x11-utils labwc dbus-daemon dunst gnome-keyring \
     xdg-desktop-portal xdg-desktop-portal-gtk gsettings-desktop-schemas libglib2.0-bin \
     dconf-gsettings-backend python3-gi gir1.2-gtk-3.0 xdotool rsync
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Runs Gradle tasks in the Linux CI environment of Dockerfile.test: a virtual X display (Xvfb) with
-# openbox as the window manager, a private session bus with dunst as the notification server and
+# xfwm4 as the window manager, a private session bus with dunst as the notification server and
 # GNOME Keyring as the Secret Service, and software rendering, the way the Linux job on GitHub runs
 # them.
 #
@@ -14,7 +14,7 @@
 # bubblewrap sandbox, which needs user namespaces and a /proc of its own, and Docker's defaults
 # forbid both. LWJWAE_DOCKER_TIMEOUT caps
 # the run (default 20 minutes), so a hung test ends instead of blocking. LWJWAE_WAYLAND=1 runs the
-# tasks on a Wayland display of Weston instead of on Xvfb, as the Wayland job of CI does.
+# tasks on a Wayland display of labwc instead of on Xvfb, as the Wayland job of CI does.
 #
 set -euo pipefail
 root=$(cd "$(dirname "$0")/../.." && pwd)

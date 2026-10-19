@@ -215,6 +215,13 @@ public class Gtk {
           GTK.find("gdk_x11_display_get_xdisplay").isPresent() ? GTK : null,
           "gdk_x11_display_get_xdisplay",
           Signatures.POINTER_POINTER);
+  private final MethodHandle X11_GET_SERVER_TIME =
+      NativeLibraries.downcallIfPresent(
+          GTK.find("gdk_x11_get_server_time").isPresent() ? GTK : null,
+          "gdk_x11_get_server_time",
+          Signatures.INT_POINTER);
+  private final MethodHandle WINDOW_PRESENT_WITH_TIME =
+      NativeLibraries.downcall(GTK, "gtk_window_present_with_time", Signatures.VOID_POINTER_INT);
   private final MethodHandle X11_DISPLAY_ERROR_TRAP_PUSH =
       NativeLibraries.downcallIfPresent(
           GTK.find("gdk_x11_display_error_trap_push").isPresent() ? GTK : null,
@@ -455,9 +462,20 @@ public class Gtk {
     }
   }
 
-  /** Calls {@code gtk_window_present}: shows the window and asks the desktop to raise it. */
+  /**
+   * Calls {@code gtk_window_present}: shows the window and asks the desktop to raise it. On X11, a
+   * window that is already realized asks with the time of the X server, as GTK 3 does: GTK 4 asks
+   * with no time, which a window manager that prevents the theft of the focus, such as xfwm4, takes
+   * as older than the last input, and it only marks the window as wanting attention.
+   */
   @SneakyThrows
   public void windowPresent(MemorySegment window) {
+    MemorySegment surface = (MemorySegment) NATIVE_GET_SURFACE.invokeExact(window);
+    if (X11_GET_SERVER_TIME != null && !surface.equals(MemorySegment.NULL) && Gtk.isX11()) {
+      int time = (int) X11_GET_SERVER_TIME.invokeExact(surface);
+      WINDOW_PRESENT_WITH_TIME.invokeExact(window, time);
+      return;
+    }
     WINDOW_PRESENT.invokeExact(window);
   }
 
