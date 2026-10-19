@@ -4,10 +4,14 @@ import dev.ivchenko.lwjwae.foreign.Layouts;
 import dev.ivchenko.lwjwae.foreign.NativeLibraries;
 import java.lang.foreign.Arena;
 import java.lang.foreign.FunctionDescriptor;
+import java.lang.foreign.Linker;
+import java.lang.foreign.MemoryLayout;
 import java.lang.foreign.MemorySegment;
+import java.lang.foreign.StructLayout;
 import java.lang.foreign.SymbolLookup;
 import java.lang.foreign.ValueLayout;
 import java.lang.invoke.MethodHandle;
+import java.lang.invoke.VarHandle;
 import java.nio.charset.StandardCharsets;
 import lombok.SneakyThrows;
 import lombok.experimental.UtilityClass;
@@ -15,11 +19,21 @@ import lombok.experimental.UtilityClass;
 /**
  * Bindings to the generic credentials of the Credential Manager of Windows, in {@code
  * advapi32.dll}. The calls are synchronous and work from any thread.
+ *
+ * <p>Each call reads its {@code GetLastError} as it returns, through the call state that the linker
+ * captures: a call of {@code GetLastError} of its own afterwards would read whatever the JVM left
+ * there in between, often 0, and take a credential that isn't there for a failure.
  */
 @UtilityClass
 class Credentials {
   private final SymbolLookup ADVAPI32 = NativeLibraries.load("advapi32.dll");
-  private final SymbolLookup KERNEL32 = NativeLibraries.load("kernel32.dll");
+
+  /** Where a call leaves its {@code GetLastError}. */
+  private final StructLayout CALL_STATE = Linker.Option.captureStateLayout();
+
+  private final VarHandle LAST_ERROR =
+      CALL_STATE.varHandle(MemoryLayout.PathElement.groupElement("GetLastError"));
+  private final Linker.Option CAPTURE_LAST_ERROR = Linker.Option.captureCallState("GetLastError");
 
   /** {@code CRED_TYPE_GENERIC}: a credential that only the application that wrote it reads. */
   private final int CRED_TYPE_GENERIC = 1;
@@ -43,22 +57,23 @@ class Credentials {
       NativeLibraries.downcall(
           ADVAPI32,
           "CredWriteW",
-          FunctionDescriptor.of(Layouts.C_INT, Layouts.C_POINTER, Layouts.C_INT));
+          FunctionDescriptor.of(Layouts.C_INT, Layouts.C_POINTER, Layouts.C_INT),
+          CAPTURE_LAST_ERROR);
   private final MethodHandle CRED_READ =
       NativeLibraries.downcall(
           ADVAPI32,
           "CredReadW",
           FunctionDescriptor.of(
-              Layouts.C_INT, Layouts.C_POINTER, Layouts.C_INT, Layouts.C_INT, Layouts.C_POINTER));
+              Layouts.C_INT, Layouts.C_POINTER, Layouts.C_INT, Layouts.C_INT, Layouts.C_POINTER),
+          CAPTURE_LAST_ERROR);
   private final MethodHandle CRED_DELETE =
       NativeLibraries.downcall(
           ADVAPI32,
           "CredDeleteW",
-          FunctionDescriptor.of(Layouts.C_INT, Layouts.C_POINTER, Layouts.C_INT, Layouts.C_INT));
+          FunctionDescriptor.of(Layouts.C_INT, Layouts.C_POINTER, Layouts.C_INT, Layouts.C_INT),
+          CAPTURE_LAST_ERROR);
   private final MethodHandle CRED_FREE =
       NativeLibraries.downcall(ADVAPI32, "CredFree", FunctionDescriptor.ofVoid(Layouts.C_POINTER));
-  private final MethodHandle GET_LAST_ERROR =
-      NativeLibraries.downcall(KERNEL32, "GetLastError", FunctionDescriptor.of(Layouts.C_INT));
 
   /**
    * The bytes of the generic credential {@code target}, or {@code null} if none.
@@ -69,10 +84,13 @@ class Credentials {
   byte[] read(String target) {
     try (Arena arena = Arena.ofConfined()) {
       MemorySegment out = arena.allocate(Layouts.C_POINTER);
+      MemorySegment state = arena.allocate(CALL_STATE);
       int read =
-          (int) CRED_READ.invokeExact(Credentials.wide(arena, target), CRED_TYPE_GENERIC, 0, out);
+          (int)
+              CRED_READ.invokeExact(
+                  state, Credentials.wide(arena, target), CRED_TYPE_GENERIC, 0, out);
       if (read == 0) {
-        int error = Credentials.lastError();
+        int error = Credentials.lastError(state);
         if (error == ERROR_NOT_FOUND) {
           return null;
         }
@@ -109,8 +127,9 @@ class Credentials {
       }
       credential.set(Layouts.C_INT, CREDENTIAL_PERSIST, CRED_PERSIST_LOCAL_MACHINE);
       credential.set(Layouts.C_POINTER, CREDENTIAL_USER_NAME, Credentials.wide(arena, userName));
-      if ((int) CRED_WRITE.invokeExact(credential, 0) == 0) {
-        throw new IllegalStateException("CredWriteW failed, error " + Credentials.lastError());
+      MemorySegment state = arena.allocate(CALL_STATE);
+      if ((int) CRED_WRITE.invokeExact(state, credential, 0) == 0) {
+        throw new IllegalStateException("CredWriteW failed, error " + Credentials.lastError(state));
       }
     }
   }
@@ -124,11 +143,13 @@ class Credentials {
   @SneakyThrows
   boolean delete(String target) {
     try (Arena arena = Arena.ofConfined()) {
-      if ((int) CRED_DELETE.invokeExact(Credentials.wide(arena, target), CRED_TYPE_GENERIC, 0)
+      MemorySegment state = arena.allocate(CALL_STATE);
+      if ((int)
+              CRED_DELETE.invokeExact(state, Credentials.wide(arena, target), CRED_TYPE_GENERIC, 0)
           != 0) {
         return true;
       }
-      int error = Credentials.lastError();
+      int error = Credentials.lastError(state);
       if (error == ERROR_NOT_FOUND) {
         return false;
       }
@@ -141,8 +162,8 @@ class Credentials {
     return arena.allocateFrom(text, StandardCharsets.UTF_16LE);
   }
 
-  @SneakyThrows
-  private int lastError() {
-    return (int) GET_LAST_ERROR.invokeExact();
+  /** The {@code GetLastError} that a call left in {@code state}. */
+  private int lastError(MemorySegment state) {
+    return (int) LAST_ERROR.get(state, 0L);
   }
 }
