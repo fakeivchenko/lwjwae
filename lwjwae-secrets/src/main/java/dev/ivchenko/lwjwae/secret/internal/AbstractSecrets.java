@@ -1,12 +1,13 @@
-package dev.ivchenko.lwjwae.secret;
+package dev.ivchenko.lwjwae.secret.internal;
 
+import dev.ivchenko.lwjwae.secret.Secrets;
 import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The checks that every backend makes the same way: a key that isn't blank and a value within
- * {@link Secrets#MAXIMUM_SIZE}. A backend reads, writes, and deletes in the store of its platform,
+ * The checks that every platform makes the same way: a key that isn't blank and a value within
+ * {@link Secrets#MAXIMUM_SIZE}. A subclass reads, writes, and deletes in the store of its platform,
  * under the name of the application.
  */
 public abstract class AbstractSecrets implements Secrets {

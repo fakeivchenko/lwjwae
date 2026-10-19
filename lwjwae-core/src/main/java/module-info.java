@@ -35,7 +35,6 @@ module dev.ivchenko.lwjwae {
   exports dev.ivchenko.lwjwae.notification;
   exports dev.ivchenko.lwjwae.permission;
   exports dev.ivchenko.lwjwae.rpc;
-  exports dev.ivchenko.lwjwae.secret;
   exports dev.ivchenko.lwjwae.shortcut;
   exports dev.ivchenko.lwjwae.store;
   exports dev.ivchenko.lwjwae.taskbar;
@@ -54,7 +53,8 @@ module dev.ivchenko.lwjwae {
       dev.ivchenko.lwjwae.gtk,
       dev.ivchenko.lwjwae.gtk4,
       dev.ivchenko.lwjwae.macos,
-      dev.ivchenko.lwjwae.windows;
+      dev.ivchenko.lwjwae.windows,
+      dev.ivchenko.lwjwae.secrets;
   exports dev.ivchenko.lwjwae.util to
       dev.ivchenko.lwjwae.glib,
       dev.ivchenko.lwjwae.gtk,
@@ -62,7 +62,8 @@ module dev.ivchenko.lwjwae {
       dev.ivchenko.lwjwae.macos,
       dev.ivchenko.lwjwae.windows,
       dev.ivchenko.lwjwae.updater,
-      dev.ivchenko.lwjwae.instance;
+      dev.ivchenko.lwjwae.instance,
+      dev.ivchenko.lwjwae.secrets;
 
   uses dev.ivchenko.lwjwae.BackendProvider;
   uses dev.ivchenko.lwjwae.bridge.codec.BridgeCodec;

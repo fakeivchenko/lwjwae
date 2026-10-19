@@ -5,6 +5,8 @@ import dev.ivchenko.lwjwae.ApplicationParameters;
 import dev.ivchenko.lwjwae.PageCapability;
 import dev.ivchenko.lwjwae.Window;
 import dev.ivchenko.lwjwae.WindowParameters;
+import dev.ivchenko.lwjwae.instance.SingleInstance;
+import dev.ivchenko.lwjwae.secret.Secrets;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -24,8 +26,9 @@ import java.util.concurrent.TimeoutException;
  * function, which takes the message channel; a handler, which takes the {@code fetch} of the scheme
  * of the application where the engine has it; and the store, which runs the SQL of a page under its
  * authorizer. The page also finds {@code lwjwae.updates}, which only the updater module adds, as a
- * service that the application finds on its own. Java evaluates a script of its own. Each answer is
- * checked, and the first failure, or a minute without the last answer, ends the run.
+ * service that the application finds on its own, and Java finds the instance and the secrets
+ * modules the same way. Java evaluates a script of its own. Each answer is checked, and the first
+ * failure, or a minute without the last answer, ends the run.
  */
 public final class SmokeApplication {
   private static final long TIMEOUT_SECONDS = 60;
@@ -98,6 +101,10 @@ public final class SmokeApplication {
       throw e;
     }
     System.out.println("smoke engine " + application.engine());
+    // Each throws unless its module joined the application as a service.
+    SingleInstance.of(application);
+    Secrets.of(application);
+    System.out.println("smoke modules instance, secrets, updater");
     System.out.println("smoke page " + report);
     String evaluated = window.eval("21 * 2").get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
     window.close();

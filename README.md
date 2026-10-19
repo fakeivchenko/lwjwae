@@ -91,6 +91,7 @@ application as soon as it is on the class path or the module path:
 |---|---|
 | [`lwjwae-updater`](lwjwae-updater) | `Updater.of(application)` and `lwjwae.updates`: signed updates |
 | [`lwjwae-instance`](lwjwae-instance) | `SingleInstance.create`: one process per user, a second start hands its arguments over |
+| [`lwjwae-secrets`](lwjwae-secrets) | `Secrets.of(application)`: tokens and passwords in the store of credentials of the system |
 
 ## Get started
 

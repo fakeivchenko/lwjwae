@@ -1,8 +1,6 @@
-package dev.ivchenko.lwjwae.glib;
+package dev.ivchenko.lwjwae.secret.internal;
 
-import dev.ivchenko.lwjwae.exception.SecretStoreFailedException;
-import dev.ivchenko.lwjwae.glib.binding.Libsecret;
-import dev.ivchenko.lwjwae.secret.AbstractSecrets;
+import dev.ivchenko.lwjwae.secret.SecretStoreFailedException;
 
 /**
  * The secrets of an application in the Secret Service of the desktop, through libsecret: GNOME
@@ -12,13 +10,13 @@ import dev.ivchenko.lwjwae.secret.AbstractSecrets;
  * of the user, found by two attributes, the name of the application and the key, under a schema of
  * lwjwae, so that a manager of passwords such as Seahorse shows it as {@code APPLICATION: KEY}.
  */
-public class SecretServiceSecrets extends AbstractSecrets {
+final class SecretServiceSecrets extends AbstractSecrets {
   /**
    * Keeps the secrets of the application named {@code service}.
    *
    * @throws IllegalArgumentException If {@code service} is blank.
    */
-  public SecretServiceSecrets(String service) {
+  SecretServiceSecrets(String service) {
     super(service);
   }
 

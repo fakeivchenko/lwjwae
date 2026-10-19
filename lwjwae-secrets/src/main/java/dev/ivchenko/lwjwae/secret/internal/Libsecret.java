@@ -1,7 +1,9 @@
-package dev.ivchenko.lwjwae.glib.binding;
+package dev.ivchenko.lwjwae.secret.internal;
 
+import dev.ivchenko.lwjwae.foreign.Layouts;
 import dev.ivchenko.lwjwae.foreign.NativeLibraries;
 import java.lang.foreign.Arena;
+import java.lang.foreign.FunctionDescriptor;
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.SymbolLookup;
 import java.lang.invoke.MethodHandle;
@@ -19,10 +21,44 @@ import lombok.experimental.UtilityClass;
  * #isAvailable()} says so and every other call fails.
  */
 @UtilityClass
-public class Libsecret {
+class Libsecret {
   private final SymbolLookup SECRET =
       NativeLibraries.loadIfPresent("libsecret-1.so.0", "libsecret-1.so");
   private final SymbolLookup GLIB = NativeLibraries.load("libglib-2.0.so.0", "libglib-2.0.so");
+
+  // --- the forms of the calls ---
+  private final FunctionDescriptor INT_POINTER_X7 =
+      FunctionDescriptor.of(
+          Layouts.C_INT,
+          Layouts.C_POINTER,
+          Layouts.C_POINTER,
+          Layouts.C_POINTER,
+          Layouts.C_POINTER,
+          Layouts.C_POINTER,
+          Layouts.C_POINTER,
+          Layouts.C_POINTER);
+  private final FunctionDescriptor POINTER_POINTER_X4 =
+      FunctionDescriptor.of(
+          Layouts.C_POINTER,
+          Layouts.C_POINTER,
+          Layouts.C_POINTER,
+          Layouts.C_POINTER,
+          Layouts.C_POINTER);
+  private final FunctionDescriptor INT_POINTER_X4 =
+      FunctionDescriptor.of(
+          Layouts.C_INT,
+          Layouts.C_POINTER,
+          Layouts.C_POINTER,
+          Layouts.C_POINTER,
+          Layouts.C_POINTER);
+  private final FunctionDescriptor POINTER_POINTER_POINTER =
+      FunctionDescriptor.of(Layouts.C_POINTER, Layouts.C_POINTER, Layouts.C_POINTER);
+  private final FunctionDescriptor INT_POINTER_POINTER_POINTER =
+      FunctionDescriptor.of(Layouts.C_INT, Layouts.C_POINTER, Layouts.C_POINTER, Layouts.C_POINTER);
+  private final FunctionDescriptor VOID_POINTER = FunctionDescriptor.ofVoid(Layouts.C_POINTER);
+
+  /** Where the message is in a {@code GError}: after the domain and the code, two 32-bit fields. */
+  private final long ERROR_MESSAGE = 8;
 
   /** {@code SECRET_SCHEMA_ATTRIBUTE_STRING}. */
   private final int ATTRIBUTE_STRING = 0;
@@ -33,22 +69,21 @@ public class Libsecret {
   private final long SCHEMA_SIZE = 8 + 8 + 32 * 16 + 8 + 7 * 8;
 
   private final MethodHandle PASSWORD_STOREV_SYNC =
-      NativeLibraries.downcallIfPresent(
-          SECRET, "secret_password_storev_sync", Signatures.INT_POINTER_X7);
+      NativeLibraries.downcallIfPresent(SECRET, "secret_password_storev_sync", INT_POINTER_X7);
   private final MethodHandle PASSWORD_LOOKUPV_SYNC =
-      NativeLibraries.downcallIfPresent(
-          SECRET, "secret_password_lookupv_sync", Signatures.POINTER_POINTER_X4);
+      NativeLibraries.downcallIfPresent(SECRET, "secret_password_lookupv_sync", POINTER_POINTER_X4);
   private final MethodHandle PASSWORD_CLEARV_SYNC =
-      NativeLibraries.downcallIfPresent(
-          SECRET, "secret_password_clearv_sync", Signatures.INT_POINTER_X4);
+      NativeLibraries.downcallIfPresent(SECRET, "secret_password_clearv_sync", INT_POINTER_X4);
   private final MethodHandle PASSWORD_FREE =
-      NativeLibraries.downcallIfPresent(SECRET, "secret_password_free", Signatures.VOID_POINTER);
+      NativeLibraries.downcallIfPresent(SECRET, "secret_password_free", VOID_POINTER);
   private final MethodHandle HASH_TABLE_NEW =
-      NativeLibraries.downcall(GLIB, "g_hash_table_new", Signatures.POINTER_POINTER_POINTER);
+      NativeLibraries.downcall(GLIB, "g_hash_table_new", POINTER_POINTER_POINTER);
   private final MethodHandle HASH_TABLE_INSERT =
-      NativeLibraries.downcall(GLIB, "g_hash_table_insert", Signatures.INT_POINTER_POINTER_POINTER);
+      NativeLibraries.downcall(GLIB, "g_hash_table_insert", INT_POINTER_POINTER_POINTER);
   private final MethodHandle HASH_TABLE_UNREF =
-      NativeLibraries.downcall(GLIB, "g_hash_table_unref", Signatures.VOID_POINTER);
+      NativeLibraries.downcall(GLIB, "g_hash_table_unref", VOID_POINTER);
+  private final MethodHandle ERROR_FREE =
+      NativeLibraries.downcall(GLIB, "g_error_free", VOID_POINTER);
   private final MemorySegment STR_HASH = GLIB.find("g_str_hash").orElseThrow();
   private final MemorySegment STR_EQUAL = GLIB.find("g_str_equal").orElseThrow();
 
@@ -157,16 +192,25 @@ public class Libsecret {
   }
 
   private MemorySegment error(Arena arena) {
-    MemorySegment error = arena.allocate(Signatures.C_POINTER);
-    error.set(Signatures.C_POINTER, 0, MemorySegment.NULL);
+    MemorySegment error = arena.allocate(Layouts.C_POINTER);
+    error.set(Layouts.C_POINTER, 0, MemorySegment.NULL);
     return error;
   }
 
+  /**
+   * Fails with the message of the {@code GError} that a call left in {@code error}, which it frees.
+   */
+  @SneakyThrows
   private void check(MemorySegment error) {
-    String message = Glib.takeErrorMessage(error.get(Signatures.C_POINTER, 0));
-    if (message != null) {
-      throw new IllegalStateException(message);
+    MemorySegment failure = error.get(Layouts.C_POINTER, 0);
+    if (failure.equals(MemorySegment.NULL)) {
+      return;
     }
+    String message =
+        NativeLibraries.string(
+            failure.reinterpret(ERROR_MESSAGE + 8).get(Layouts.C_POINTER, ERROR_MESSAGE));
+    ERROR_FREE.invokeExact(failure);
+    throw new IllegalStateException(message);
   }
 
   /**
@@ -178,11 +222,11 @@ public class Libsecret {
     MemorySegment schema = NativeLibraries.ARENA.allocate(SCHEMA_SIZE, 8);
     schema.fill((byte) 0);
     schema.set(
-        Signatures.C_POINTER, 0, NativeLibraries.ARENA.allocateFrom("dev.ivchenko.lwjwae.Secret"));
-    schema.set(Signatures.C_POINTER, 16, NativeLibraries.ARENA.allocateFrom("application"));
-    schema.set(Signatures.C_INT, 24, ATTRIBUTE_STRING);
-    schema.set(Signatures.C_POINTER, 32, NativeLibraries.ARENA.allocateFrom("key"));
-    schema.set(Signatures.C_INT, 40, ATTRIBUTE_STRING);
+        Layouts.C_POINTER, 0, NativeLibraries.ARENA.allocateFrom("dev.ivchenko.lwjwae.Secret"));
+    schema.set(Layouts.C_POINTER, 16, NativeLibraries.ARENA.allocateFrom("application"));
+    schema.set(Layouts.C_INT, 24, ATTRIBUTE_STRING);
+    schema.set(Layouts.C_POINTER, 32, NativeLibraries.ARENA.allocateFrom("key"));
+    schema.set(Layouts.C_INT, 40, ATTRIBUTE_STRING);
     return schema;
   }
 }

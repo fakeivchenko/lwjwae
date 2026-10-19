@@ -12,7 +12,6 @@ import dev.ivchenko.lwjwae.glib.binding.Dbus;
 import dev.ivchenko.lwjwae.glib.binding.GdkPixbuf;
 import dev.ivchenko.lwjwae.glib.binding.GioMenus;
 import dev.ivchenko.lwjwae.glib.binding.Glib;
-import dev.ivchenko.lwjwae.glib.binding.Libsecret;
 import dev.ivchenko.lwjwae.glib.binding.Soup;
 import dev.ivchenko.lwjwae.glib.binding.Unix;
 import dev.ivchenko.lwjwae.glib.binding.WebKitGtk;
@@ -69,7 +68,6 @@ class GtkNativeImageMetadataTest extends NativeImageMetadataContractTest {
         WebKitGtk.class,
         WebKitGtkWindow.class,
         WebKitScheme.class,
-        Libsecret.class,
         Gdk.class,
         Gtk.class,
         WebKit.class,

@@ -1,8 +1,6 @@
-package dev.ivchenko.lwjwae.windows;
+package dev.ivchenko.lwjwae.secret.internal;
 
-import dev.ivchenko.lwjwae.exception.SecretStoreFailedException;
-import dev.ivchenko.lwjwae.secret.AbstractSecrets;
-import dev.ivchenko.lwjwae.windows.binding.Advapi32;
+import dev.ivchenko.lwjwae.secret.SecretStoreFailedException;
 import java.nio.charset.StandardCharsets;
 
 /**
@@ -13,20 +11,20 @@ import java.nio.charset.StandardCharsets;
  * across logons. The Credential Manager of the Control Panel lists them under Windows Credentials,
  * with the key as the user name. The calls are synchronous and work from any thread.
  */
-public class WindowsSecrets extends AbstractSecrets {
+final class CredentialManagerSecrets extends AbstractSecrets {
   /**
    * Keeps the secrets of the application named {@code service}.
    *
    * @throws IllegalArgumentException If {@code service} is blank.
    */
-  public WindowsSecrets(String service) {
+  CredentialManagerSecrets(String service) {
     super(service);
   }
 
   @Override
   protected String read(String key) {
     try {
-      byte[] blob = Advapi32.readCredential(this.target(key));
+      byte[] blob = Credentials.read(this.target(key));
       return blob == null ? null : new String(blob, StandardCharsets.UTF_8);
     } catch (IllegalStateException e) {
       throw new SecretStoreFailedException(e.getMessage());
@@ -36,7 +34,7 @@ public class WindowsSecrets extends AbstractSecrets {
   @Override
   protected void write(String key, String value) {
     try {
-      Advapi32.writeCredential(this.target(key), key, value.getBytes(StandardCharsets.UTF_8));
+      Credentials.write(this.target(key), key, value.getBytes(StandardCharsets.UTF_8));
     } catch (IllegalStateException e) {
       throw new SecretStoreFailedException(e.getMessage());
     }
@@ -45,7 +43,7 @@ public class WindowsSecrets extends AbstractSecrets {
   @Override
   protected boolean remove(String key) {
     try {
-      return Advapi32.deleteCredential(this.target(key));
+      return Credentials.delete(this.target(key));
     } catch (IllegalStateException e) {
       throw new SecretStoreFailedException(e.getMessage());
     }

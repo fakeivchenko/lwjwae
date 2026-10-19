@@ -342,27 +342,8 @@ read from a background thread, with no window in front, finds nothing.
 
 ### Secrets
 
-`application.secrets()` keeps tokens and passwords in the store of credentials of the system,
-encrypted for the user, rather than in a file of the application:
-
-```java
-Secrets secrets = application.secrets();
-secrets.set("api-token", token);
-Optional<String> saved = secrets.get("api-token");
-secrets.delete("api-token");
-```
-
-The secrets belong to the application by `ApplicationParameters.name()`, which they need. A call
-blocks until the system answers, and the system may ask the user to unlock the store first, so call
-it off the UI thread. A value takes at most `Secrets.MAXIMUM_SIZE`, 2,560 bytes of UTF-8, on every
-platform: the limit of the Credential Manager. A refusal of the system, such as a store that the
-user didn't unlock, throws `SecretStoreFailedException`.
-
-| Platform | Where the secrets go |
-|---|---|
-| Windows | Generic credentials of the Credential Manager, named `APPLICATION/KEY`. |
-| macOS | Generic passwords of the login keychain, with the application as the service and the key as the account. |
-| GTK 3 and 4 | Passwords of the Secret Service, GNOME Keyring or KWallet, through libsecret, under a schema of lwjwae with the application and the key as attributes. |
+Tokens and passwords in the store of credentials of the system are the
+[`lwjwae-secrets`](../lwjwae-secrets) module: `Secrets.of(application)`.
 
 ### Global shortcuts
 
