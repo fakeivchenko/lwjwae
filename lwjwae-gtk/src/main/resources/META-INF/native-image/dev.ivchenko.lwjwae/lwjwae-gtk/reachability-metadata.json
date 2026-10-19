@@ -333,6 +333,15 @@
           "void*",
           "jint"
         ]
+      },
+      {
+        "returnType": "jint",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "void*",
+          "void*"
+        ]
       }
     ],
     "directUpcalls": [
@@ -418,6 +427,16 @@
       {
         "class": "dev.ivchenko.lwjwae.gtk.GtkWindow",
         "method": "onWindowEvent",
+        "returnType": "jint",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.gtk.GtkWindow",
+        "method": "onTick",
         "returnType": "jint",
         "parameterTypes": [
           "void*",

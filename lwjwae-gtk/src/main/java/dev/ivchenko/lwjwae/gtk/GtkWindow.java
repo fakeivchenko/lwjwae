@@ -56,6 +56,14 @@ public class GtkWindow extends WebKitGtkWindow {
           MethodType.methodType(
               int.class, MemorySegment.class, MemorySegment.class, MemorySegment.class),
           Signatures.DELETE_EVENT_CALLBACK);
+  private static final MemorySegment ON_TICK =
+      NativeLibraries.upcall(
+          MethodHandles.lookup(),
+          GtkWindow.class,
+          "onTick",
+          MethodType.methodType(
+              int.class, MemorySegment.class, MemorySegment.class, MemorySegment.class),
+          Signatures.TICK_CALLBACK);
   private static final MemorySegment ON_DRAG_MOTION =
       NativeLibraries.upcall(
           MethodHandles.lookup(),
@@ -123,6 +131,9 @@ public class GtkWindow extends WebKitGtkWindow {
   private volatile WindowSize minimumSize = WindowSize.NONE;
   private volatile WindowSize maximumSize = WindowSize.NONE;
   private volatile boolean alwaysOnTop;
+
+  /** The frames to wait before the unmaximize of {@link #restore()} goes again. GTK thread only. */
+  private int unmaximizeFrames;
 
   /**
    * Creates the native window on the GTK thread and returns when it exists. The window is hidden
@@ -432,13 +443,25 @@ public class GtkWindow extends WebKitGtkWindow {
     this.dispatcher().run(() -> Gtk.windowMaximize(this.window()));
   }
 
+  /**
+   * On Wayland, asks again two frames later while the window is still maximized: a compositor such
+   * as Weston drops an unmaximize that comes before the window drew its maximized frame, and sends
+   * nothing back, so the window would stay maximized.
+   */
   @Override
   public void restore() {
     this.dispatcher()
         .run(
             () -> {
-              Gtk.windowDeiconify(this.window());
-              Gtk.windowUnmaximize(this.window());
+              MemorySegment current = this.window();
+              Gtk.windowDeiconify(current);
+              Gtk.windowUnmaximize(current);
+              if (Gdk.isWayland() && Gtk.isWindowMaximized(current)) {
+                if (this.unmaximizeFrames == 0) {
+                  Gtk.widgetAddTickCallback(current, ON_TICK, this.callbackData());
+                }
+                this.unmaximizeFrames = 2;
+              }
             });
   }
 
@@ -698,6 +721,37 @@ public class GtkWindow extends WebKitGtkWindow {
       GtkWindow window = WebKitGtkWindow.windowOf(userData, GtkWindow.class);
       if (window != null) {
         window.windowChanged();
+      }
+    } catch (Throwable t) {
+      ThrowableUtil.report(t);
+    }
+    return 0;
+  }
+
+  /**
+   * A frame of a window that waits to unmaximize, see {@link #restore()}.
+   *
+   * <p>Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
+   * binds it by name, so no Java code calls it and the compiler sees a dead private method. {@code
+   * resource}: the window is {@code AutoCloseable}, and a lookup that returns it looks like an
+   * unclosed resource. It is not: the application owns the window and closes it, this method only
+   * borrows it.
+   *
+   * @return {@code TRUE} to hear the next frame, {@code FALSE} once done.
+   */
+  @SuppressWarnings({"unused", "resource"})
+  private static int onTick(
+      MemorySegment widget, MemorySegment frameClock, MemorySegment userData) {
+    try {
+      GtkWindow window = WebKitGtkWindow.windowOf(userData, GtkWindow.class);
+      if (window == null) {
+        return 0;
+      }
+      if (--window.unmaximizeFrames > 0) {
+        return 1;
+      }
+      if (Gtk.isWindowMaximized(widget)) {
+        Gtk.windowUnmaximize(widget);
       }
     } catch (Throwable t) {
       ThrowableUtil.report(t);

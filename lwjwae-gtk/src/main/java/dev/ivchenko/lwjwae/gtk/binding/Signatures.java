@@ -96,6 +96,10 @@ public class Signatures {
   public final FunctionDescriptor VOID_POINTER_POINTER_POINTER_POINTER =
       FunctionDescriptor.ofVoid(C_POINTER, C_POINTER, C_POINTER, C_POINTER);
 
+  /** {@code guint f(T*, U*, V*, W*)}: {@code gtk_widget_add_tick_callback}. */
+  public final FunctionDescriptor INT_POINTER_POINTER_POINTER_POINTER =
+      FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_POINTER, C_POINTER);
+
   /** {@code void f(T*, gint, gint, gint, guint32)}: {@code gtk_window_begin_move_drag}. */
   public final FunctionDescriptor VOID_POINTER_INT_INT_INT_INT =
       FunctionDescriptor.ofVoid(C_POINTER, C_INT, C_INT, C_INT, C_INT);
@@ -179,6 +183,12 @@ public class Signatures {
    * gdk_window_add_filter}, which sees every {@code XEvent} before GDK does.
    */
   public final FunctionDescriptor GDK_FILTER_FUNC = DELETE_EVENT_CALLBACK;
+
+  /**
+   * {@code gboolean (*)(GtkWidget*, GdkFrameClock*, gpointer)}: a tick callback of {@code
+   * gtk_widget_add_tick_callback}, whose {@code FALSE} removes it.
+   */
+  public final FunctionDescriptor TICK_CALLBACK = DELETE_EVENT_CALLBACK;
 
   /**
    * {@code void (*)(GtkStatusIcon*, guint button, guint activate_time, gpointer)}: the {@code

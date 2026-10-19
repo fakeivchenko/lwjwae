@@ -86,6 +86,9 @@ public class Gtk {
       NativeLibraries.downcall(GTK, "gtk_window_maximize", Signatures.VOID_POINTER);
   private final MethodHandle WINDOW_UNMAXIMIZE =
       NativeLibraries.downcall(GTK, "gtk_window_unmaximize", Signatures.VOID_POINTER);
+  private final MethodHandle WIDGET_ADD_TICK_CALLBACK =
+      NativeLibraries.downcall(
+          GTK, "gtk_widget_add_tick_callback", Signatures.INT_POINTER_POINTER_POINTER_POINTER);
   private final MethodHandle WINDOW_IS_MAXIMIZED =
       NativeLibraries.downcall(GTK, "gtk_window_is_maximized", Signatures.INT_POINTER);
   private final MethodHandle WINDOW_FULLSCREEN =
@@ -455,6 +458,17 @@ public class Gtk {
   @SneakyThrows
   public void windowUnmaximize(MemorySegment window) {
     WINDOW_UNMAXIMIZE.invokeExact(window);
+  }
+
+  /**
+   * Calls {@code gtk_widget_add_tick_callback}, without a destroy notify: {@code callback} runs on
+   * every frame of {@code widget} until it returns {@code FALSE}.
+   */
+  @SneakyThrows
+  public void widgetAddTickCallback(
+      MemorySegment widget, MemorySegment callback, MemorySegment userData) {
+    int _ =
+        (int) WIDGET_ADD_TICK_CALLBACK.invokeExact(widget, callback, userData, MemorySegment.NULL);
   }
 
   /** Calls {@code gtk_window_is_maximized}. */
