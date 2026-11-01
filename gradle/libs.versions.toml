@@ -4,9 +4,9 @@
 
 [versions]
 checkstyle = "14.3.0"
-google-java-format = "1.36.1"
-jacoco = "0.8.15"
-jackson = "2.22.3"
+google-java-format = "1.37.0"
+jacoco = "0.8.16"
+jackson = "2.22.4"
 jqwik = "1.10.2"
 junit = "6.1.3"
 lombok = "1.18.48"
@@ -23,7 +23,7 @@ junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher
 lombok = { module = "org.projectlombok:lombok", version.ref = "lombok" }
 
 [plugins]
-graalvm-native = { id = "org.graalvm.buildtools.native", version = "1.1.14" }
+graalvm-native = { id = "org.graalvm.buildtools.native", version = "1.1.18" }
 lombok = { id = "io.freefair.lombok", version = "9.8.2" }
 spotless = { id = "com.diffplug.spotless", version = "8.10.4" }
 test-retry = { id = "org.gradle.test-retry", version = "1.6.6" }
