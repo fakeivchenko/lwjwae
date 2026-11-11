@@ -95,7 +95,7 @@ jobs:
           -Dlwjwae.requireDisplay=true -Dlwjwae.screenshots=true
 
       - name: Smoke test on the module path
-        run: xvfb-run -a dbus-run-session -- ./gradlew :lwjwae-smoke:run
+        run: xvfb-run -a dbus-run-session -- scripts/linux/with-secret-service.sh ./gradlew :lwjwae-smoke:run
 
       - name: Screenshots
         if: always() && steps.display.outcome != 'skipped'
@@ -294,8 +294,8 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           for backend in gtk3-webkit2gtk-4.1 gtk4-webkitgtk-6.0; do
-            xvfb-run -a dbus-run-session -- lwjwae-smoke/build/native/nativeCompile/lwjwae-smoke \
-              "-Dlwjwae.backend=$backend"
+            xvfb-run -a dbus-run-session -- scripts/linux/with-secret-service.sh \
+              lwjwae-smoke/build/native/nativeCompile/lwjwae-smoke "-Dlwjwae.backend=$backend"
           done
       - name: Run it
         if: runner.os == 'Windows'
