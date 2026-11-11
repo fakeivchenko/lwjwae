@@ -586,11 +586,16 @@ public final class WebKitGtk {
   /**
    * Answers a custom-scheme request with {@code status}, {@code headers}, and a body that WebKit
    * reads from {@code stream} as it arrives, to its end.
+   *
+   * <p>A {@code Content-Length} in {@code headers} becomes the length of the stream as well, so
+   * that the expected length of the body that WebKit hands its media player matches the header.
    */
   @SneakyThrows
   public void uriSchemeRequestFinishWithStream(
       MemorySegment request, MemorySegment stream, int status, Map<String, String> headers) {
-    MemorySegment response = (MemorySegment) this.uriSchemeResponseNew.invokeExact(stream, -1L);
+    String contentLength = headers.get("Content-Length");
+    long length = contentLength == null ? -1L : Long.parseLong(contentLength);
+    MemorySegment response = (MemorySegment) this.uriSchemeResponseNew.invokeExact(stream, length);
     this.uriSchemeResponseSetStatus.invokeExact(response, status, MemorySegment.NULL);
     this.uriSchemeResponseSetHttpHeaders.invokeExact(response, Soup.messageHeaders(headers));
     this.uriSchemeRequestFinishWithResponse.invokeExact(request, response);
