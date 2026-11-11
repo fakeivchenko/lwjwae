@@ -6,13 +6,11 @@ import dev.ivchenko.lwjwae.cookie.Cookies;
 import dev.ivchenko.lwjwae.event.Event;
 import dev.ivchenko.lwjwae.event.EventSubscription;
 import dev.ivchenko.lwjwae.event.OpenEvent;
-import dev.ivchenko.lwjwae.event.SecondInstanceEvent;
 import dev.ivchenko.lwjwae.exception.BackendNotAvailableException;
-import dev.ivchenko.lwjwae.instance.InstanceLock;
 import dev.ivchenko.lwjwae.menu.MenuItem;
+import dev.ivchenko.lwjwae.module.ApplicationModule;
 import dev.ivchenko.lwjwae.notification.Notifications;
 import dev.ivchenko.lwjwae.rpc.RpcHandler;
-import dev.ivchenko.lwjwae.secret.Secrets;
 import dev.ivchenko.lwjwae.shortcut.GlobalShortcuts;
 import dev.ivchenko.lwjwae.store.Store;
 import dev.ivchenko.lwjwae.taskbar.Taskbar;
@@ -20,15 +18,13 @@ import dev.ivchenko.lwjwae.theme.Theme;
 import dev.ivchenko.lwjwae.tray.Tray;
 import dev.ivchenko.lwjwae.tray.TrayIcon;
 import dev.ivchenko.lwjwae.tray.TrayMenuItem;
-import dev.ivchenko.lwjwae.update.Updater;
 import dev.ivchenko.lwjwae.util.PlatformUtil;
-import java.io.UncheckedIOException;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.ServiceLoader;
+import java.util.concurrent.CompletionStage;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -104,7 +100,9 @@ public interface Application extends AutoCloseable {
     BackendProvider provider =
         Application.provider()
             .orElseThrow(() -> new BackendNotAvailableException(Application.noBackendMessage()));
-    return provider.create(parameters);
+    Application application = provider.create(parameters);
+    ((AbstractApplication) application).startModules();
+    return application;
   }
 
   /**
@@ -167,73 +165,6 @@ public interface Application extends AutoCloseable {
       window.show();
       application.run();
     }
-  }
-
-  /**
-   * Creates the application unless another process of it runs already. That one gets the arguments
-   * of this process, its oldest window comes to the front, and its {@link #onSecondInstance}
-   * listeners hear of it; this process gets nothing and should end, having opened nothing, not even
-   * the toolkit.
-   *
-   * <pre>{@code
-   * public static void main(String[] args) {
-   *   ApplicationParameters parameters = ApplicationParameters.builder().name("notes").build();
-   *   Optional<Application> created = Application.createSingleInstance(parameters, args);
-   *   if (created.isEmpty()) {
-   *     return;
-   *   }
-   *   try (Application application = created.get()) {
-   *     application.onSecondInstance(start -> openFiles(start.arguments()));
-   *     ...
-   *   }
-   * }
-   * }</pre>
-   *
-   * <p>The processes find each other by {@link ApplicationParameters#name()} and the user, so two
-   * users each run their own.
-   *
-   * <p>Platforms:
-   *
-   * <ul>
-   *   <li>Windows: The socket is in the temporary directory of the user, which needs Windows 10 or
-   *       later. The window comes forward from the background too.
-   *   <li>macOS: The socket is in the temporary directory of the user, or in {@code /tmp} when that
-   *       path leaves no room for it.
-   *   <li>Linux, GTK 3: The socket is in {@code $XDG_RUNTIME_DIR}. X11: as described. Wayland: the
-   *       window comes back but may only ask for attention.
-   *   <li>Linux, GTK 4: As on GTK 3.
-   * </ul>
-   *
-   * @param parameters The parameters of the application, with a name.
-   * @param arguments The arguments of this process, as {@code main} received them.
-   * @return The application, or empty when another process of it runs and took over.
-   * @throws IllegalArgumentException If {@code parameters} has no name.
-   * @throws UncheckedIOException If the processes can't reach each other.
-   * @throws BackendNotAvailableException If no backend on the classpath supports this machine.
-   */
-  static Optional<Application> createSingleInstance(
-      ApplicationParameters parameters, String... arguments) {
-    if (parameters.name() == null) {
-      throw new IllegalArgumentException("A single instance needs the name of the application");
-    }
-    SecondInstanceEvent start =
-        new SecondInstanceEvent(List.of(arguments), Path.of("").toAbsolutePath());
-    Optional<InstanceLock> claimed = InstanceLock.claim(parameters.name(), start);
-    if (claimed.isEmpty()) {
-      return Optional.empty();
-    }
-    InstanceLock lock = claimed.get();
-    Application application;
-    try {
-      application = Application.create(parameters);
-    } catch (RuntimeException | Error e) {
-      try (lock) {
-        throw e;
-      }
-    }
-    ((AbstractApplication) application).serveInstances(lock);
-    ((AbstractApplication) application).openArguments(List.of(arguments));
-    return Optional.of(application);
   }
 
   /**
@@ -390,6 +321,47 @@ public interface Application extends AutoCloseable {
    * window called.
    */
   <T, R> void bind(String name, Class<T> argumentType, BiFunction<Window, T, R> handler);
+
+  /**
+   * The same as {@link #bind(String, Function)}, for a handler that answers later. The promise on
+   * the page settles when the future completes: with its value, or rejected with the message of the
+   * root cause of its failure, and with the status and code of an {@link
+   * dev.ivchenko.lwjwae.rpc.RpcException}.
+   *
+   * <p>When the page abandons the call, the future is cancelled, so that the work behind it can
+   * stop.
+   *
+   * @param name A JavaScript identifier.
+   * @param handler Called on a virtual thread with the payload as text; it returns the future of
+   *     the answer, which must not be {@code null}.
+   * @throws IllegalArgumentException If {@code name} isn't a JavaScript identifier.
+   */
+  void bindAsync(String name, Function<String, ? extends CompletionStage<String>> handler);
+
+  /**
+   * The same as {@link #bindAsync(String, Function)}, for a handler that needs to know which window
+   * called.
+   */
+  void bindAsync(
+      String name, BiFunction<Window, String, ? extends CompletionStage<String>> handler);
+
+  /**
+   * The same as {@link #bind(String, Class, Function)}, for a handler that answers later, the way
+   * {@link #bindAsync(String, Function)} describes.
+   *
+   * @throws IllegalStateException If there is no codec.
+   */
+  <T, R> void bindAsync(
+      String name, Class<T> argumentType, Function<T, ? extends CompletionStage<R>> handler);
+
+  /**
+   * The same as {@link #bindAsync(String, Class, Function)}, for a handler that needs to know which
+   * window called.
+   */
+  <T, R> void bindAsync(
+      String name,
+      Class<T> argumentType,
+      BiFunction<Window, T, ? extends CompletionStage<R>> handler);
 
   /**
    * Answers the calls that the page makes with {@code lwjwae.call(name, body)}, in every window of
@@ -555,31 +527,13 @@ public interface Application extends AutoCloseable {
   Store store();
 
   /**
-   * The updater of the application, which finds, downloads, and installs its new versions from the
-   * manifest of {@link ApplicationParameters#updates()}. A page reaches it as {@code
-   * lwjwae.updates}:
+   * The module of {@code type} in this application, such as the one behind {@code
+   * Updater.of(application)}. A module joins every application that finds it on the class path or
+   * the module path; see {@link ApplicationModule}.
    *
-   * <pre>{@code
-   * const update = await lwjwae.updates.check();
-   * if (update?.installable) {
-   *   await lwjwae.updates.install({ onProgress: (fraction) => bar.value = fraction });
-   * }
-   * }</pre>
-   *
-   * <p>Platforms:
-   *
-   * <ul>
-   *   <li>Windows: Installs the {@code .msi} of the new version with {@code msiexec /passive}.
-   *   <li>macOS: Replaces the {@code .app} bundle with the one of the new version, signed by the
-   *       same team.
-   *   <li>Linux, GTK 3: Replaces the AppImage; a Debian or Arch package updates through its package
-   *       manager, so the update is found but not installable.
-   *   <li>Linux, GTK 4: As on GTK 3.
-   * </ul>
-   *
-   * @throws IllegalStateException If the application has no update parameters, or is closed.
+   * @throws IllegalStateException If no module of {@code type} is there.
    */
-  Updater updater();
+  <M extends ApplicationModule> M module(Class<M> type);
 
   /**
    * The progress and the count on the icon of the application in the taskbar or the Dock. A page
@@ -626,43 +580,14 @@ public interface Application extends AutoCloseable {
   Cookies cookies();
 
   /**
-   * The secrets of the application, such as tokens and passwords, in the store of credentials of
-   * the system, under {@link ApplicationParameters#name()}.
-   *
-   * <p>Platforms:
-   *
-   * <ul>
-   *   <li>Windows: Generic credentials of the Credential Manager, named {@code APPLICATION/KEY}.
-   *   <li>macOS: Generic passwords of the login keychain, with the application as the service and
-   *       the key as the account.
-   *   <li>Linux, GTK 3: Passwords of the Secret Service, GNOME Keyring or KWallet, through
-   *       libsecret, with the application and the key as attributes.
-   *   <li>Linux, GTK 4: As on GTK 3.
-   * </ul>
-   *
-   * @throws IllegalStateException If the application has no name, or is closed.
-   * @throws UnsupportedOperationException If this backend has no secrets yet.
-   */
-  Secrets secrets();
-
-  /**
-   * Listens to the starts of other processes of the application, when it was created by {@link
-   * #createSingleInstance}; before the listeners hear of one, the oldest window has come to the
-   * front. A listener runs on a virtual thread, and the process that started waits until every
-   * listener returned. A start that came before any listener reaches the first one on the thread
-   * that registers it.
-   */
-  EventSubscription onSecondInstance(Consumer<SecondInstanceEvent> listener);
-
-  /**
    * Listens to the requests of the system to open links or files: a link of a scheme that the
    * application registered, such as {@code notes://today}, or a file of a type that it registered,
    * which the user opened from the file manager. The Gradle plugin registers both when it packages
    * the application, from {@code urlScheme} and {@code fileType}.
    *
    * <p>The links and the files among the arguments of the process count as a request too: those
-   * that {@link #create(ApplicationParameters, String...)} or {@link #createSingleInstance} was
-   * given, and, for a single instance, those of every later start. A request that came before any
+   * that {@link #create(ApplicationParameters, String...)} was given, and, for a single instance of
+   * the {@code lwjwae-instance} module, those of every later start. A request that came before any
    * listener reaches the first one on the thread that registers it; the later ones reach the
    * listeners on a virtual thread, one request after the other.
    *
@@ -670,7 +595,8 @@ public interface Application extends AutoCloseable {
    *
    * <ul>
    *   <li>Windows: The system starts the executable with the link or the file as an argument, so a
-   *       running application hears of it only as a {@link #createSingleInstance single instance}.
+   *       running application hears of it only as a single instance of the {@code lwjwae-instance}
+   *       module.
    *   <li>macOS: AppKit hands the links and the files to the process that runs, through {@code
    *       application:openURLs:} of the delegate of the application, and starts it first when none
    *       runs; no second process starts.

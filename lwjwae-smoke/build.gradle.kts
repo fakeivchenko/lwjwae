@@ -34,6 +34,9 @@ graalvmNative {
 dependencies {
     // lwjwae: the API, and every backend, so that one build runs on each platform
     implementation(project(":lwjwae-core"))
+    implementation(project(":lwjwae-instance"))
+    implementation(project(":lwjwae-secrets"))
+    runtimeOnly(project(":lwjwae-updater"))
     runtimeOnly(project(":lwjwae-gtk"))
     runtimeOnly(project(":lwjwae-gtk4"))
     runtimeOnly(project(":lwjwae-windows"))

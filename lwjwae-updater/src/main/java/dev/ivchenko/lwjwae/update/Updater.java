@@ -1,0 +1,357 @@
+package dev.ivchenko.lwjwae.update;
+
+import dev.ivchenko.lwjwae.Application;
+import dev.ivchenko.lwjwae.update.internal.UpdaterModule;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.io.UncheckedIOException;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.HexFormat;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.function.DoubleConsumer;
+import java.util.function.Supplier;
+
+/**
+ * Finds, downloads, and installs the updates of an application, from a manifest at any URL.
+ *
+ * <pre>{@code
+ * Updater updater = Updater.of(application);
+ * updater.check().thenAccept(found -> found.ifPresent(update -> {
+ *   DownloadedUpdate downloaded =
+ *       updater.download(update, application.taskbar()::progress).join();
+ *   updater.installAndRestart(downloaded);
+ * }));
+ * }</pre>
+ *
+ * <p>The manifest is a JSON file that the {@code updateManifest} task of the Gradle plugin writes,
+ * next to its Ed25519 signature, which {@link #check()} verifies with the public key of the
+ * application before it believes a word of it. The manifest names a file for every platform with
+ * its size and SHA-256, and {@link #download} checks both, so what gets installed is exactly what
+ * the private key signed for. A version that isn't newer than the running one is no update, so a
+ * manifest can't take the application back.
+ *
+ * <p>A signature says who wrote a manifest, not when. A manifest with an {@code expires} instant is
+ * refused after it, so a server that someone else controls can't keep serving an old signed one,
+ * and keep the application from the release that fixes it, for longer than that. Every request has
+ * a timeout, a body that stops arriving fails, and the manifest and its signature are read only up
+ * to a size that no real one reaches.
+ *
+ * <p>Each platform installs its own package: the {@code .msi} on Windows, the {@code .app} bundle
+ * on macOS, and the AppImage on Linux. {@link #installAndRestart} hands the file to a process of
+ * the system that waits for the application to quit, puts the new version in place, and starts it.
+ * A Debian or Arch package is updated by its package manager, so there {@link #check()} still finds
+ * an update, but not an {@link Update#installable() installable} one.
+ *
+ * <p>The updater belongs to the {@code lwjwae-updater} module, which joins an application when it
+ * is on the class path or the module path, and gives its pages {@code window.lwjwae.updates} too.
+ * An application has one updater, which closes with it.
+ *
+ * <p>Every method is safe to call from any thread. The network calls run on virtual threads.
+ */
+public final class Updater implements AutoCloseable {
+  private static final System.Logger LOG = System.getLogger(Updater.class.getName());
+  private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(20);
+
+  /** How long a server may take to answer a request with its headers. */
+  private static final Duration ANSWER_TIMEOUT = Duration.ofSeconds(30);
+
+  /** How long the body of an answer may go without a byte before the request fails. */
+  private static final Duration IDLE_TIMEOUT = Duration.ofSeconds(60);
+
+  /** The largest manifest that is read; a real one takes a few hundred bytes. */
+  static final int MANIFEST_LIMIT = 1024 * 1024;
+
+  /** The largest signature that is read: an Ed25519 signature in Base64 takes 88 bytes. */
+  static final int SIGNATURE_LIMIT = 1024;
+
+  private static final int BUFFER_SIZE = 64 * 1024;
+  private static final double PROGRESS_STEP = 0.01;
+
+  private final UpdateParameters parameters;
+  private final UpdateInstaller installer;
+  private final Runnable quit;
+  private final HttpClient client;
+  private final Duration answerTimeout;
+  private final Duration idleTimeout;
+  private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
+
+  /**
+   * Creates an updater. An application has one, from {@link #of(Application)}; this one is for a
+   * program that updates without an application.
+   *
+   * @param quit Quits the application, once the installer waits for it.
+   */
+  public Updater(UpdateParameters parameters, Runnable quit) {
+    this(parameters, UpdatePlatform.installer(), quit);
+  }
+
+  Updater(UpdateParameters parameters, UpdateInstaller installer, Runnable quit) {
+    this(parameters, installer, quit, ANSWER_TIMEOUT, IDLE_TIMEOUT);
+  }
+
+  /**
+   * The same, with timeouts of its own.
+   *
+   * @param answerTimeout How long a server may take to send the headers of an answer.
+   * @param idleTimeout How long the body of an answer may go without a byte.
+   */
+  Updater(
+      UpdateParameters parameters,
+      UpdateInstaller installer,
+      Runnable quit,
+      Duration answerTimeout,
+      Duration idleTimeout) {
+    this.parameters = Objects.requireNonNull(parameters, "parameters");
+    this.installer = installer;
+    this.quit = Objects.requireNonNull(quit, "quit");
+    this.answerTimeout = answerTimeout;
+    this.idleTimeout = idleTimeout;
+    this.client =
+        HttpClient.newBuilder()
+            .connectTimeout(CONNECT_TIMEOUT)
+            .followRedirects(HttpClient.Redirect.NORMAL)
+            .executor(this.executor)
+            .build();
+  }
+
+  /**
+   * The updater of {@code application}, with the update parameters that the {@code updates} block
+   * of the Gradle plugin writes into the application, see {@link UpdateParameters#discover()}.
+   *
+   * @throws IllegalStateException If the application has no update parameters, or is closed.
+   */
+  public static Updater of(Application application) {
+    return application.module(UpdaterModule.class).updater();
+  }
+
+  /**
+   * The updater of {@code application}, with {@code parameters}, for an application that finds its
+   * updates elsewhere than the plugin says.
+   *
+   * @throws IllegalStateException If the application has an updater with other parameters already,
+   *     or is closed.
+   */
+  public static Updater of(Application application, UpdateParameters parameters) {
+    return application.module(UpdaterModule.class).updater(parameters);
+  }
+
+  /** Where this updater looks for updates, and the key that signs them. */
+  public UpdateParameters parameters() {
+    return this.parameters;
+  }
+
+  /** The version that runs. */
+  public String currentVersion() {
+    return this.parameters.currentVersion();
+  }
+
+  /**
+   * Reads the manifest and its signature, and returns the update that it offers for this platform,
+   * if its version is newer than the running one.
+   *
+   * <p>The future fails with an {@link UpdateRejectedException} for a signature that isn't the one
+   * of the key, a manifest that isn't one or that expired, or a file too large to be either, and
+   * with an {@link UpdateDownloadFailedException} when either can't be downloaded.
+   */
+  public CompletableFuture<Optional<Update>> check() {
+    return this.async(this::checkNow);
+  }
+
+  /**
+   * Downloads the file of {@code update} and checks its size and SHA-256.
+   *
+   * @param progress Hears how much is downloaded, from 0 to 1, in steps of a hundredth; on the
+   *     thread of the download.
+   */
+  public CompletableFuture<DownloadedUpdate> download(Update update, DoubleConsumer progress) {
+    Objects.requireNonNull(update, "update");
+    Objects.requireNonNull(progress, "progress");
+    return this.async(() -> this.downloadNow(update, progress));
+  }
+
+  /** The same as {@link #download(Update, DoubleConsumer)}, without hearing the progress. */
+  public CompletableFuture<DownloadedUpdate> download(Update update) {
+    return this.download(update, _ -> {});
+  }
+
+  /**
+   * Starts the installer of {@code downloaded}, which waits for the application to exit, and quits
+   * the application. The installer starts the new version.
+   *
+   * @throws UnsupportedOperationException If the update isn't {@link Update#installable()}.
+   * @throws UpdateRejectedException If a bundle of macOS fails {@code codesign}.
+   * @throws UncheckedIOException If the installer can't start.
+   */
+  public void installAndRestart(DownloadedUpdate downloaded) {
+    Objects.requireNonNull(downloaded, "downloaded");
+    if (!downloaded.update().installable()) {
+      throw new UnsupportedOperationException(
+          "This application can't install its updates: a package manager updates it, or it"
+              + " doesn't run from its package");
+    }
+    try {
+      this.installer.install(downloaded.file(), ProcessHandle.current().pid());
+    } catch (IOException e) {
+      throw new UncheckedIOException(e);
+    }
+    this.quit.run();
+  }
+
+  /**
+   * Stops what runs, which the application does when it quits. It doesn't wait: {@link
+   * #installAndRestart} quits the application from a thread of the updater itself.
+   */
+  @Override
+  public void close() {
+    this.client.shutdownNow();
+    this.executor.shutdownNow();
+  }
+
+  private Optional<Update> checkNow() {
+    URI manifestUrl = this.parameters.manifestUrl();
+    byte[] manifest = this.fetch(manifestUrl, MANIFEST_LIMIT);
+    byte[] signature = this.fetch(URI.create(manifestUrl + ".sig"), SIGNATURE_LIMIT);
+    UpdateSignatures.verify(this.parameters.publicKey(), manifest, signature);
+    UpdateManifest parsed =
+        UpdateManifest.parse(new String(manifest, StandardCharsets.UTF_8), manifestUrl);
+    if (parsed.expires() != null && Instant.now().isAfter(parsed.expires())) {
+      throw new UpdateRejectedException("The manifest expired at " + parsed.expires());
+    }
+    String current = this.parameters.currentVersion();
+    if (VersionOrder.compare(parsed.version(), current) <= 0) {
+      LOG.log(
+          System.Logger.Level.DEBUG,
+          () ->
+              manifestUrl + " offers " + parsed.version() + ", which isn't newer than " + current);
+      return Optional.empty();
+    }
+    UpdateArtifact artifact = parsed.artifacts().get(UpdatePlatform.key());
+    if (artifact == null) {
+      LOG.log(
+          System.Logger.Level.DEBUG,
+          () -> manifestUrl + " has no file for " + UpdatePlatform.key());
+      return Optional.empty();
+    }
+    LOG.log(System.Logger.Level.DEBUG, () -> manifestUrl + " offers " + parsed.version());
+    boolean mandatory =
+        parsed.minimumVersion() != null
+            && VersionOrder.compare(current, parsed.minimumVersion()) < 0;
+    return Optional.of(
+        new Update(
+            parsed.version(), parsed.notes(), mandatory, artifact, this.installer.isInstallable()));
+  }
+
+  private DownloadedUpdate downloadNow(Update update, DoubleConsumer progress) {
+    UpdateArtifact artifact = update.artifact();
+    String name = Path.of(artifact.url().getPath()).getFileName().toString();
+    try {
+      Path directory =
+          this.installer.isInstallable()
+              ? this.installer.downloadDirectory()
+              : Files.createTempDirectory("lwjwae-update");
+      Path file = directory.resolve(".lwjwae-update-" + name);
+      Path partial = directory.resolve(file.getFileName() + ".part");
+      HttpResponse<InputStream> response =
+          this.client.send(this.request(artifact.url()), HttpResponse.BodyHandlers.ofInputStream());
+      MessageDigest digest = MessageDigest.getInstance("SHA-256");
+      long written = 0;
+      try (InputStream in =
+              new IdleTimeoutInputStream(response.body(), this.idleTimeout, artifact.url());
+          OutputStream out = Files.newOutputStream(partial)) {
+        Updater.requireOk(response, artifact.url());
+        byte[] buffer = new byte[BUFFER_SIZE];
+        double reported = 0;
+        progress.accept(0);
+        for (int read = in.read(buffer); read >= 0; read = in.read(buffer)) {
+          written += read;
+          if (written > artifact.size()) {
+            break;
+          }
+          digest.update(buffer, 0, read);
+          out.write(buffer, 0, read);
+          double fraction = artifact.size() == 0 ? 1 : (double) written / artifact.size();
+          if (fraction - reported >= PROGRESS_STEP) {
+            reported = fraction;
+            progress.accept(Math.min(1, fraction));
+          }
+        }
+      } catch (IOException | RuntimeException e) {
+        Files.deleteIfExists(partial);
+        throw e;
+      }
+      String sha256 = HexFormat.of().formatHex(digest.digest());
+      if (written != artifact.size() || !sha256.equals(artifact.sha256())) {
+        Files.deleteIfExists(partial);
+        throw new UpdateRejectedException(
+            "The download of " + artifact.url() + " isn't the file that the manifest signs for");
+      }
+      Files.move(
+          partial, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+      progress.accept(1);
+      return new DownloadedUpdate(update, file);
+    } catch (IOException e) {
+      throw new UpdateDownloadFailedException("Can't download " + artifact.url(), e);
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      throw new UpdateDownloadFailedException("Interrupted while downloading " + artifact.url(), e);
+    } catch (NoSuchAlgorithmException e) {
+      throw new IllegalStateException(e);
+    }
+  }
+
+  /**
+   * Reads the file at {@code url}, of at most {@code limit} bytes.
+   *
+   * @throws UpdateRejectedException If the file is larger.
+   */
+  private byte[] fetch(URI url, int limit) {
+    try {
+      HttpResponse<InputStream> response =
+          this.client.send(this.request(url), HttpResponse.BodyHandlers.ofInputStream());
+      try (InputStream in = new IdleTimeoutInputStream(response.body(), this.idleTimeout, url)) {
+        Updater.requireOk(response, url);
+        byte[] body = in.readNBytes(limit + 1);
+        if (body.length > limit) {
+          throw new UpdateRejectedException(url + " is larger than " + limit + " bytes");
+        }
+        return body;
+      }
+    } catch (IOException e) {
+      throw new UpdateDownloadFailedException("Can't download " + url, e);
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      throw new UpdateDownloadFailedException("Interrupted while downloading " + url, e);
+    }
+  }
+
+  private HttpRequest request(URI url) {
+    return HttpRequest.newBuilder(url).timeout(this.answerTimeout).GET().build();
+  }
+
+  private static void requireOk(HttpResponse<?> response, URI url) {
+    if (response.statusCode() != 200) {
+      throw new UpdateDownloadFailedException(
+          "Can't download " + url + ": HTTP " + response.statusCode());
+    }
+  }
+
+  private <T> CompletableFuture<T> async(Supplier<T> action) {
+    return CompletableFuture.supplyAsync(action, this.executor);
+  }
+}

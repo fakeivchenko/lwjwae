@@ -32,6 +32,7 @@ import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import lombok.experimental.UtilityClass;
@@ -153,16 +154,43 @@ public class BridgeProtocol {
    */
   public final String STORE_CALL = "lwjwae:store";
 
-  /**
-   * The name under which a page uses the updater of the application, through {@code
-   * window.lwjwae.updates}. Reserved like {@link #EVENT_CALL}. The body is {@code check}, answered
-   * with the update as JSON or nothing, or {@code install}, which reports its progress as {@link
-   * #UPDATE_PROGRESS_EVENT} events to the window and ends with the application.
-   */
-  public final String UPDATE_CALL = "lwjwae:update";
+  /** The prefix of the calls that the bridge and its modules answer, which no handler can take. */
+  public final String RESERVED_PREFIX = "lwjwae:";
 
-  /** The event whose payload is how much of an update the page asked for is downloaded, 0 to 1. */
-  public final String UPDATE_PROGRESS_EVENT = "lwjwae:update-progress";
+  /** The calls that the core answers itself, which a module can't take. */
+  public final Set<String> CORE_CALLS =
+      Set.of(
+          EVENT_CALL,
+          EVENTS_CALL,
+          OPEN_CALL,
+          CLOSE_CALL,
+          CONTROL_CALL,
+          DIALOG_CALL,
+          CLIPBOARD_CALL,
+          MENU_CALL,
+          STORE_CALL);
+
+  /** The names of {@code window.lwjwae} that the core takes itself, which a module can't take. */
+  public final Set<String> CORE_PAGE_APIS =
+      Set.of(
+          "listen",
+          "once",
+          "emit",
+          "open",
+          "close",
+          "openExternal",
+          "call",
+          "invoke",
+          "RpcError",
+          "window",
+          "theme",
+          "files",
+          "dialog",
+          "clipboard",
+          "menu",
+          "taskbar",
+          "downloads",
+          "store");
 
   /**
    * The separator between the kinds of file of a dialog in a {@link #DIALOG_CALL}: the ASCII record
@@ -236,7 +264,8 @@ public class BridgeProtocol {
       String rpcTransport,
       String token,
       List<String> trustedOrigins,
-      List<WindowEdge> resizeEdges) {
+      List<WindowEdge> resizeEdges,
+      Map<String, String> modulePageApis) {
     String origins =
         trustedOrigins.stream().map(ScriptUtil::quote).collect(Collectors.joining(",", "[", "]"));
     String edges =
@@ -260,15 +289,18 @@ public class BridgeProtocol {
         .replace("${clipboardCall}", CLIPBOARD_CALL)
         .replace("${menuCall}", MENU_CALL)
         .replace("${storeCall}", STORE_CALL)
-        .replace("${updateCall}", UPDATE_CALL)
-        .replace("${updateProgressEvent}", UPDATE_PROGRESS_EVENT)
         .replace("${resizeEdges}", edges)
         .replace("${separator}", "\u001f")
         .replace("${post}", postMessage)
         .replace("${codec}", pageCodec)
         .replace("${rpc}", rpcTransport)
         .replace("${token}", ScriptUtil.quote(token))
-        .replace("${trusted}", origins);
+        .replace("${trusted}", origins)
+        .replace(
+            "${modules}",
+            modulePageApis.entrySet().stream()
+                .map(api -> ScriptUtil.quote(api.getKey()) + ": (" + api.getValue() + ")")
+                .collect(Collectors.joining(",\n", "{", "}")));
   }
 
   /**

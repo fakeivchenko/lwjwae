@@ -8,6 +8,8 @@
 @SuppressWarnings("opens")
 module dev.ivchenko.lwjwae.smoke {
   requires dev.ivchenko.lwjwae;
+  requires dev.ivchenko.lwjwae.instance;
+  requires dev.ivchenko.lwjwae.secrets;
 
   opens smoke;
 }

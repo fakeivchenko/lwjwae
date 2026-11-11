@@ -11,6 +11,7 @@ import dev.ivchenko.lwjwae.rpc.RpcHandler;
 import dev.ivchenko.lwjwae.util.ResourceUtil;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -420,6 +421,31 @@ public interface Window extends AutoCloseable {
    * @throws IllegalStateException If there is no codec.
    */
   <T, R> void bind(String name, Class<T> argumentType, Function<T, R> handler);
+
+  /**
+   * The same as {@link #bind(String, Function)}, for a handler that answers later. The promise on
+   * the page settles when the future completes: with its value, or rejected with the message of the
+   * root cause of its failure, and with the status and code of an {@link
+   * dev.ivchenko.lwjwae.rpc.RpcException}.
+   *
+   * <p>When the page abandons the call, the future is cancelled, so that the work behind it can
+   * stop.
+   *
+   * @param name A JavaScript identifier.
+   * @param handler Called on a virtual thread with the payload as text; it returns the future of
+   *     the answer, which must not be {@code null}.
+   * @throws IllegalArgumentException If {@code name} isn't a JavaScript identifier.
+   */
+  void bindAsync(String name, Function<String, ? extends CompletionStage<String>> handler);
+
+  /**
+   * The same as {@link #bind(String, Class, Function)}, for a handler that answers later, the way
+   * {@link #bindAsync(String, Function)} describes.
+   *
+   * @throws IllegalStateException If there is no codec.
+   */
+  <T, R> void bindAsync(
+      String name, Class<T> argumentType, Function<T, ? extends CompletionStage<R>> handler);
 
   /**
    * Answers the calls that the page makes with {@code lwjwae.call(name, body)}, in this window.

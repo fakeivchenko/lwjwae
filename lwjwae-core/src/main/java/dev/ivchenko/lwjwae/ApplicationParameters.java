@@ -1,7 +1,6 @@
 package dev.ivchenko.lwjwae;
 
 import dev.ivchenko.lwjwae.bridge.codec.BridgeCodec;
-import dev.ivchenko.lwjwae.update.UpdateParameters;
 import dev.ivchenko.lwjwae.util.PlatformUtil;
 import java.nio.file.Path;
 import java.util.Set;
@@ -40,17 +39,14 @@ import lombok.Builder;
  *     BridgeCodec} on the classpath. When there is none, the value stays {@code null} and typed
  *     calls fail with a message.
  * @param name The name of the application, as the desktop shows it next to its notifications, and
- *     the one that the processes of {@link Application#createSingleInstance} meet under. The user
- *     agent of every web view names it too, before lwjwae and its version. Default: none, and the
- *     desktop shows its own placeholder.
+ *     the one that the processes of a single instance, of the {@code lwjwae-instance} module, meet
+ *     under. The user agent of every web view names it too, before lwjwae and its version. Default:
+ *     none, and the desktop shows its own placeholder.
  * @param dataDirectory Where the application keeps what it remembers from one run to the next, such
  *     as the size and the place of its windows. Default: the directory that the platform has for
  *     the data of an application, named after {@code name}: {@code $XDG_CONFIG_HOME/NAME} or {@code
  *     ~/.config/NAME} on Linux, {@code ~/Library/Application Support/NAME} on macOS, {@code
  *     %APPDATA%\NAME} on Windows. Without a name, none, and windows remember nothing.
- * @param updates Where {@link Application#updater()} looks for updates, and the key that signs
- *     them. Default: the ones that the Gradle plugin writes into the application, {@link
- *     UpdateParameters#discover()}, or none.
  * @param pageCapabilities What the pages of the application may do through {@code window.lwjwae}
  *     beyond their own window, the functions that the application binds, and its events. Default:
  *     none of them; see {@link PageCapability}.
@@ -61,7 +57,6 @@ public record ApplicationParameters(
     BridgeCodec codec,
     String name,
     Path dataDirectory,
-    UpdateParameters updates,
     Set<PageCapability> pageCapabilities) {
   /** The system property that supplies {@link #devServerUrl()} when the builder leaves it unset. */
   public static final String DEV_SERVER_URL_PROPERTY = "lwjwae.devServerUrl";
@@ -87,9 +82,6 @@ public record ApplicationParameters(
     }
     if (dataDirectory == null && name != null) {
       dataDirectory = ApplicationParameters.defaultDataDirectory(name);
-    }
-    if (updates == null) {
-      updates = UpdateParameters.discover().orElse(null);
     }
     pageCapabilities = pageCapabilities == null ? Set.of() : Set.copyOf(pageCapabilities);
   }

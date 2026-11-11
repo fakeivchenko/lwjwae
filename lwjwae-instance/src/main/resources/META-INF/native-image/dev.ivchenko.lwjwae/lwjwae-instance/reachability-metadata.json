@@ -1,0 +1,12 @@
+{
+  "reflection": [
+    {
+      "type": "dev.ivchenko.lwjwae.instance.internal.InstanceModule"
+    }
+  ],
+  "resources": [
+    {
+      "glob": "META-INF/services/dev.ivchenko.lwjwae.module.ApplicationModule"
+    }
+  ]
+}

@@ -552,24 +552,6 @@
           "void*",
           "jint"
         ]
-      },
-      {
-        "returnType": "void*",
-        "parameterTypes": [
-          "void*",
-          "void*",
-          "void*",
-          "void*"
-        ]
-      },
-      {
-        "returnType": "jint",
-        "parameterTypes": [
-          "void*",
-          "void*",
-          "void*",
-          "void*"
-        ]
       }
     ],
     "directUpcalls": [

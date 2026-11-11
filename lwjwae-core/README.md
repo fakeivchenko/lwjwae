@@ -342,27 +342,8 @@ read from a background thread, with no window in front, finds nothing.
 
 ### Secrets
 
-`application.secrets()` keeps tokens and passwords in the store of credentials of the system,
-encrypted for the user, rather than in a file of the application:
-
-```java
-Secrets secrets = application.secrets();
-secrets.set("api-token", token);
-Optional<String> saved = secrets.get("api-token");
-secrets.delete("api-token");
-```
-
-The secrets belong to the application by `ApplicationParameters.name()`, which they need. A call
-blocks until the system answers, and the system may ask the user to unlock the store first, so call
-it off the UI thread. A value takes at most `Secrets.MAXIMUM_SIZE`, 2,560 bytes of UTF-8, on every
-platform: the limit of the Credential Manager. A refusal of the system, such as a store that the
-user didn't unlock, throws `SecretStoreFailedException`.
-
-| Platform | Where the secrets go |
-|---|---|
-| Windows | Generic credentials of the Credential Manager, named `APPLICATION/KEY`. |
-| macOS | Generic passwords of the login keychain, with the application as the service and the key as the account. |
-| GTK 3 and 4 | Passwords of the Secret Service, GNOME Keyring or KWallet, through libsecret, under a schema of lwjwae with the application and the key as attributes. |
+Tokens and passwords in the store of credentials of the system are the
+[`lwjwae-secrets`](../lwjwae-secrets) module: `Secrets.of(application)`.
 
 ### Global shortcuts
 
@@ -514,36 +495,9 @@ still come, so a drop zone can light up. A field that edits text keeps its own d
 
 ### One instance
 
-`Application.createSingleInstance(parameters, args)` in place of `create` keeps one process of the
-application running per user. The first start creates the application as `create` does. A later
-one hands its arguments and its working directory to the first and gets an empty `Optional`,
-having opened nothing, not even the toolkit, so `main` returns and the process ends:
-
-```java
-public static void main(String[] args) {
-  ApplicationParameters parameters = ApplicationParameters.builder().name("notes").build();
-  Optional<Application> created = Application.createSingleInstance(parameters, args);
-  if (created.isEmpty()) {
-    return;
-  }
-  try (Application application = created.get()) {
-    application.onSecondInstance(start -> openFiles(start.workingDirectory(), start.arguments()));
-    ...
-  }
-}
-```
-
-In the first process, the oldest window comes to the front, shown and restored if it was hidden or
-minimized, and then the `onSecondInstance` listeners get a `SecondInstanceEvent`. A listener runs
-on a virtual thread, and the later process waits until it returns, so it ends knowing that it was
-heard. A start that comes before any listener waits for the first one. Where the system doesn't
-let a process take the focus, on Wayland, the window comes back but may only ask for attention.
-
-The processes meet on a Unix domain socket named after a hash of the user and
-`ApplicationParameters.name()`, which is therefore required: in `$XDG_RUNTIME_DIR` on Linux, the
-temporary directory elsewhere, Windows 10 and later included. A lock file next to it lets only one
-of two processes that start at the same moment become the first. The socket file stays when the
-process ends, and the next first start replaces it. `quit()` gives the name up.
+One process of the application per user, where a later start hands its arguments to the first, is
+the [`lwjwae-instance`](../lwjwae-instance) module: `SingleInstance.create(parameters, args)` in
+place of `create`.
 
 ### Links and files that the system opens
 
@@ -553,20 +507,16 @@ An application can own a scheme of links, such as `notes://today`, and types of 
 absolute paths of the `files`:
 
 ```java
-Optional<Application> created = Application.createSingleInstance(parameters, args);
-if (created.isEmpty()) {
-  return;
-}
-try (Application application = created.get()) {
+try (Application application = Application.create(parameters, args)) {
   application.onOpen(request -> request.files().forEach(Notes::open));
   ...
 }
 ```
 
 On Windows and Linux, the system starts the executable with the link or the file as an argument,
-so pass `args` to `createSingleInstance`, or to `create(parameters, args)`: the links and the files
-among them are the first request, and with a single instance, a later start hands its own to the
-process that runs. On macOS, AppKit hands them to the running process, through
+so pass `args` to `create(parameters, args)`, or to `SingleInstance.create` of
+[`lwjwae-instance`](../lwjwae-instance): the links and the files among them are the first request,
+and with a single instance, a later start hands its own to the process that runs. On macOS, AppKit hands them to the running process, through
 `application:openURLs:`, and starts it first when it doesn't run. A request that comes before any
 listener waits for the first one. Among arguments, a URI with a scheme of two letters or more is a
 link, and a `file:` URI or a path that exists is a file; a flag and anything else are left out.
@@ -581,6 +531,26 @@ Where the platform can't, the call does what it can and the reads say so:
 
 Every method of `Application` and `Window` is safe to call from any thread. The backend forwards
 the call to its UI thread, and a getter blocks until the UI thread has answered.
+
+## Modules
+
+A feature that not every application needs, such as the updater, ships as a module of its own and
+joins every application that finds it. A module implements
+[`ApplicationModule`](src/main/java/dev/ivchenko/lwjwae/module/ApplicationModule.java) and
+registers it as a service, in `META-INF/services/dev.ivchenko.lwjwae.module.ApplicationModule` and
+with `provides` in its `module-info`. `Application.create` makes an instance of each module for the
+new application and starts it with a
+[`ModuleContext`](src/main/java/dev/ivchenko/lwjwae/module/ModuleContext.java), through which the
+module:
+
+- answers page calls under a name of its own that starts with `lwjwae:`, behind a
+  `PageCapability`;
+- adds a part of the page API, `window.lwjwae.NAME`, made from a script of the module;
+- hands requests to open links or files to `Application.onOpen`.
+
+`application.module(Type.class)` finds the module, which is how its API reaches it, as in
+`Updater.of(application)`; without the module on the path, it throws `IllegalStateException`. The
+module stops after the windows when the application quits.
 
 ## Backend discovery
 
@@ -693,6 +663,21 @@ event without it doesn't reach the page. Java hears everything either way.
 5. The answer goes back as one message, `\u0001rpc␟doc␟id␟r␟status␟type␟encoding␟body`. A handler
    that throws answers `500` with the message of the root cause; an unknown name answers `404`.
    Nothing is sent to a window that closed in the meantime.
+
+`bindAsync` takes a handler that returns a `CompletionStage` instead of a value, for work that
+already answers with a future, such as a dialog, `eval`, or `HttpClient.sendAsync`:
+
+```java
+window.bindAsync("confirmClear", Void.class, _ -> window.dialogs().confirm("Clear every note?"));
+```
+
+It's the same binding on the page. On the Java side, the virtual thread of the call waits for the
+future, so step 5 happens when the future completes: its value resolves the promise, and its failure
+rejects it with the root cause, an `RpcException` keeping its status and code. When the page
+abandons the call, the thread is interrupted and the future is cancelled, which closes a dialog and
+stops a request of `HttpClient`. A future derived with `thenApply` and the like doesn't pass the
+cancel on to the one that it came from, so return the future of the work itself where cancelling
+matters.
 6. The runtime settles the promise: with the text, or the value that the codec decodes, or an
    `RpcError`.
 
@@ -760,8 +745,8 @@ its ID resolves the promise. `close` closes the window of the page, so its promi
 
 ### Typed calls
 
-`bind(name, Class, handler)` and `emit(name, Object)` use the same protocol with the `typed` flag
-set. A codec has two halves that must agree on a format:
+`bind(name, Class, handler)`, `bindAsync(name, Class, handler)`, and `emit(name, Object)` use the
+same protocol with the `typed` flag set. A codec has two halves that must agree on a format:
 
 - The Java half, [`BridgeCodec`](src/main/java/dev/ivchenko/lwjwae/bridge/codec/BridgeCodec.java):
   `encode(Object)` turns a value into text and `decode(String, Class)` turns text into the argument

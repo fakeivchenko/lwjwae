@@ -7,16 +7,14 @@ import dev.ivchenko.lwjwae.cookie.Cookies;
 import dev.ivchenko.lwjwae.event.Event;
 import dev.ivchenko.lwjwae.event.EventSubscription;
 import dev.ivchenko.lwjwae.event.OpenEvent;
-import dev.ivchenko.lwjwae.event.SecondInstanceEvent;
 import dev.ivchenko.lwjwae.exception.ShortcutUnavailableException;
-import dev.ivchenko.lwjwae.instance.InstanceLock;
 import dev.ivchenko.lwjwae.internal.Listeners;
 import dev.ivchenko.lwjwae.menu.MenuItem;
+import dev.ivchenko.lwjwae.module.ApplicationModule;
 import dev.ivchenko.lwjwae.notification.Notification;
 import dev.ivchenko.lwjwae.notification.NotificationHandle;
 import dev.ivchenko.lwjwae.notification.Notifications;
 import dev.ivchenko.lwjwae.rpc.RpcHandler;
-import dev.ivchenko.lwjwae.secret.Secrets;
 import dev.ivchenko.lwjwae.shortcut.GlobalShortcuts;
 import dev.ivchenko.lwjwae.shortcut.Shortcut;
 import dev.ivchenko.lwjwae.state.SavedWindowState;
@@ -30,8 +28,6 @@ import dev.ivchenko.lwjwae.theme.Theme;
 import dev.ivchenko.lwjwae.tray.Tray;
 import dev.ivchenko.lwjwae.tray.TrayIcon;
 import dev.ivchenko.lwjwae.ui.UiDispatcher;
-import dev.ivchenko.lwjwae.update.UpdateParameters;
-import dev.ivchenko.lwjwae.update.Updater;
 import dev.ivchenko.lwjwae.util.OpenArgumentUtil;
 import dev.ivchenko.lwjwae.util.ThrowableUtil;
 import java.net.URI;
@@ -45,8 +41,14 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.ServiceLoader;
 import java.util.Set;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -97,6 +99,11 @@ public abstract class AbstractApplication implements Application {
   private final AtomicLong windowIds = new AtomicLong();
   private final Map<String, String> bindingScripts = new ConcurrentHashMap<>();
   private final EventListeners listeners = new EventListeners("lwjwae-application-events");
+
+  // --- modules: started by create(), with their page calls and their parts of the page API ---
+  private final List<ApplicationModule> modules = new CopyOnWriteArrayList<>();
+  private final Map<String, ModuleCall> moduleCalls = new ConcurrentHashMap<>();
+  private final Map<String, String> modulePageApis = new ConcurrentHashMap<>();
   private final Map<Long, WindowStateTracker> stateTrackers = new ConcurrentHashMap<>();
 
   /**
@@ -122,16 +129,8 @@ public abstract class AbstractApplication implements Application {
 
   private volatile Clipboard clipboard;
   private volatile Cookies cookies;
-  private volatile Secrets secrets;
   private volatile List<MenuItem> menu = List.of();
   private Store store;
-  private Updater updater;
-
-  // --- single instance: a start before any listener waits in the list, under its lock ---
-  private final Listeners<SecondInstanceEvent> secondInstanceListeners =
-      new Listeners<>("lwjwae-second-instance");
-  private final List<SecondInstanceEvent> unheardStarts = new ArrayList<>();
-  private volatile InstanceLock instanceLock;
 
   // --- requests to open: one before any listener waits in the list, under its lock ---
   /** The listeners of a request to open, which hear one at a time and in order. */
@@ -343,6 +342,78 @@ public abstract class AbstractApplication implements Application {
     this.publish(name, AbstractApplication.typed(this.requireCodec(), argumentType, handler), true);
   }
 
+  @Override
+  public final void bindAsync(
+      String name, Function<String, ? extends CompletionStage<String>> handler) {
+    Objects.requireNonNull(handler, "handler");
+    this.bindAsync(name, (_, payload) -> handler.apply(payload));
+  }
+
+  @Override
+  public final void bindAsync(
+      String name, BiFunction<Window, String, ? extends CompletionStage<String>> handler) {
+    Objects.requireNonNull(handler, "handler");
+    this.publish(name, AbstractApplication.awaiting(handler), false);
+  }
+
+  @Override
+  public final <T, R> void bindAsync(
+      String name, Class<T> argumentType, Function<T, ? extends CompletionStage<R>> handler) {
+    Objects.requireNonNull(handler, "handler");
+    this.bindAsync(name, argumentType, (_, argument) -> handler.apply(argument));
+  }
+
+  @Override
+  public final <T, R> void bindAsync(
+      String name,
+      Class<T> argumentType,
+      BiFunction<Window, T, ? extends CompletionStage<R>> handler) {
+    Objects.requireNonNull(argumentType, "argumentType");
+    Objects.requireNonNull(handler, "handler");
+    this.publish(
+        name,
+        AbstractApplication.typed(
+            this.requireCodec(), argumentType, AbstractApplication.awaiting(handler)),
+        true);
+  }
+
+  /**
+   * Adapts a handler that answers with a future to one that answers with its value, by waiting on
+   * the virtual thread of the call. Package-private so that a window binds with the same rule.
+   *
+   * <p>Waiting is the whole adaptation because an RPC call ends when its handler returns: the
+   * thread is virtual, so a blocked one costs no carrier, and the bridge already interrupts it when
+   * the page abandons the call. That interrupt is what cancels the future, which reaches the work
+   * behind it only through cancellation.
+   *
+   * <p>A failed future fails the call with its cause rather than the {@link ExecutionException}
+   * around it, so that an {@link dev.ivchenko.lwjwae.rpc.RpcException} keeps its status and code.
+   */
+  static <T, R> BiFunction<Window, T, R> awaiting(
+      BiFunction<Window, T, ? extends CompletionStage<R>> handler) {
+    return (window, argument) -> {
+      CompletionStage<R> stage = handler.apply(window, argument);
+      Objects.requireNonNull(stage, "The handler returned no future");
+      CompletableFuture<R> future = stage.toCompletableFuture();
+      try {
+        return future.get();
+      } catch (InterruptedException e) {
+        future.cancel(true);
+        Thread.currentThread().interrupt();
+        throw new CancellationException("The page abandoned the call");
+      } catch (ExecutionException e) {
+        Throwable cause = e.getCause();
+        if (cause instanceof RuntimeException runtime) {
+          throw runtime;
+        }
+        if (cause instanceof Error error) {
+          throw error;
+        }
+        throw new CompletionException(cause);
+      }
+    };
+  }
+
   /**
    * Adapts a typed handler to the text that the bridge carries. Package-private so that a window
    * binds with the same rule.
@@ -487,20 +558,6 @@ public abstract class AbstractApplication implements Application {
   }
 
   @Override
-  public final synchronized Updater updater() {
-    this.checkOpen();
-    if (this.updater == null) {
-      UpdateParameters updates = this.parameters.updates();
-      if (updates == null) {
-        throw new IllegalStateException(
-            "An updater needs update parameters: set them, or the updates block of the plugin");
-      }
-      this.updater = new Updater(updates, this::quit);
-    }
-    return this.updater;
-  }
-
-  @Override
   public final Taskbar taskbar() {
     return this.taskbar;
   }
@@ -579,35 +636,6 @@ public abstract class AbstractApplication implements Application {
   }
 
   @Override
-  public final Secrets secrets() {
-    this.checkOpen();
-    String name = this.parameters.name();
-    if (name == null) {
-      throw new IllegalStateException("Secrets need the name of the application");
-    }
-    Secrets current = this.secrets;
-    if (current == null) {
-      synchronized (this) {
-        if (this.secrets == null) {
-          this.secrets = this.createSecrets(name);
-        }
-        current = this.secrets;
-      }
-    }
-    return current;
-  }
-
-  /**
-   * Creates the secrets of the platform for the application named {@code service}, once, on first
-   * use.
-   *
-   * @throws UnsupportedOperationException If this backend has no secrets yet, the default.
-   */
-  protected Secrets createSecrets(String service) {
-    throw new UnsupportedOperationException("The " + this.engine() + " backend has no secrets yet");
-  }
-
-  @Override
   public final Clipboard clipboard() {
     this.checkOpen();
     Clipboard current = this.clipboard;
@@ -655,24 +683,6 @@ public abstract class AbstractApplication implements Application {
   }
 
   @Override
-  public final EventSubscription onSecondInstance(Consumer<SecondInstanceEvent> listener) {
-    return AbstractApplication.listenAfterUnheard(
-        this.secondInstanceListeners, this.unheardStarts, listener);
-  }
-
-  /**
-   * Takes over {@code lock}, whose name this application now holds, and answers the processes that
-   * start after it, until {@link #quit()}.
-   */
-  final void serveInstances(InstanceLock lock) {
-    this.instanceLock = lock;
-    lock.serve(this::secondInstanceStarted);
-    if (this.closed.get()) {
-      lock.close();
-    }
-  }
-
-  @Override
   public final EventSubscription onOpen(Consumer<OpenEvent> listener) {
     return AbstractApplication.listenAfterUnheard(this.openListeners, this.unheardOpens, listener);
   }
@@ -698,29 +708,6 @@ public abstract class AbstractApplication implements Application {
   /** Hands the links and the files among the arguments of this process to {@link #onOpen}. */
   final void openArguments(List<String> arguments) {
     this.openRequested(OpenArgumentUtil.of(arguments, Path.of("").toAbsolutePath()));
-  }
-
-  /**
-   * Another process of the application started and handed its start over: the oldest window comes
-   * to the front, and the listeners hear of it, and of the links and the files among its arguments.
-   */
-  private void secondInstanceStarted(SecondInstanceEvent start) {
-    this.openRequested(OpenArgumentUtil.of(start.arguments(), start.workingDirectory()));
-    List<Window> open = this.windows();
-    if (!open.isEmpty()) {
-      try {
-        open.getFirst().focus();
-      } catch (Throwable t) {
-        ThrowableUtil.report(t);
-      }
-    }
-    synchronized (this.unheardStarts) {
-      if (this.secondInstanceListeners.isEmpty()) {
-        this.unheardStarts.add(start);
-        return;
-      }
-    }
-    this.secondInstanceListeners.deliverHere(start);
   }
 
   /**
@@ -849,14 +836,9 @@ public abstract class AbstractApplication implements Application {
     }
     this.notifications.closeAll();
     this.shortcuts.releaseAll();
-    InstanceLock lock = this.instanceLock;
-    if (lock != null) {
-      lock.close();
-    }
     this.listeners.shutdown();
     this.theme.shutdown();
     this.openListeners.shutdown();
-    this.secondInstanceListeners.shutdown();
     this.stateSaver.shutdown();
     try {
       if (!this.stateSaver.awaitTermination(STATE_SAVE_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
@@ -869,12 +851,75 @@ public abstract class AbstractApplication implements Application {
       if (this.store != null) {
         this.store.close();
       }
-      if (this.updater != null) {
-        this.updater.close();
+    }
+    for (ApplicationModule module : this.modules.reversed()) {
+      try {
+        module.stop();
+      } catch (Throwable t) {
+        ThrowableUtil.report(t);
       }
     }
     this.signalIdle();
     this.onClose();
+  }
+
+  /**
+   * Starts every module on the class path or the module path for this application, each a new
+   * instance. {@link Application#create} calls this once, before it hands the application out; a
+   * backend never does, and an application made without {@code create}, as in a test, calls it
+   * itself.
+   */
+  protected final void startModules() {
+    ServiceLoader.load(ApplicationModule.class, ApplicationModule.class.getClassLoader())
+        .forEach(
+            module -> {
+              module.start(new ApplicationModuleContext(this));
+              this.modules.add(module);
+            });
+  }
+
+  @Override
+  public final <M extends ApplicationModule> M module(Class<M> type) {
+    Objects.requireNonNull(type, "type");
+    for (ApplicationModule module : this.modules) {
+      if (type.isInstance(module)) {
+        return type.cast(module);
+      }
+    }
+    throw new IllegalStateException(
+        "No " + type.getSimpleName() + " in this application: add its module to the runtime path");
+  }
+
+  /** Registers a page call of a module, see {@link ApplicationModuleContext#handle}. */
+  final void addModuleCall(String name, ModuleCall call) {
+    if (!name.startsWith(BridgeProtocol.RESERVED_PREFIX)
+        || BridgeProtocol.CORE_CALLS.contains(name)) {
+      throw new IllegalArgumentException("Not a call that a module can take: " + name);
+    }
+    if (this.moduleCalls.putIfAbsent(name, call) != null) {
+      throw new IllegalArgumentException("A module answers " + name + " already");
+    }
+  }
+
+  /** Registers a part of the page API of a module, see {@link ApplicationModuleContext#pageApi}. */
+  final void addModulePageApi(String name, String script) {
+    BridgeProtocol.checkIdentifier(name);
+    if (BridgeProtocol.CORE_PAGE_APIS.contains(name)) {
+      throw new IllegalArgumentException("The page API has " + name + " of its own");
+    }
+    if (this.modulePageApis.putIfAbsent(name, script) != null) {
+      throw new IllegalArgumentException("A module adds " + name + " already");
+    }
+  }
+
+  /** The page call of a module named {@code name}, or {@code null}. */
+  final ModuleCall moduleCall(String name) {
+    return this.moduleCalls.get(name);
+  }
+
+  /** The parts of the page API that the modules add, by their names. */
+  final Map<String, String> modulePageApis() {
+    return Map.copyOf(this.modulePageApis);
   }
 
   @Override

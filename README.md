@@ -82,6 +82,17 @@ Every backend runs on the JVM and as a native executable. Windows 11 and macOS a
 web view; [`lwjwae-gtk`](lwjwae-gtk#requirements) lists the packages that each Linux distribution
 needs.
 
+## Feature modules
+
+A feature that not every application needs ships as a module of its own, which joins the
+application as soon as it is on the class path or the module path:
+
+| Module | What it adds |
+|---|---|
+| [`lwjwae-updater`](lwjwae-updater) | `Updater.of(application)` and `lwjwae.updates`: signed updates |
+| [`lwjwae-instance`](lwjwae-instance) | `SingleInstance.create`: one process per user, a second start hands its arguments over |
+| [`lwjwae-secrets`](lwjwae-secrets) | `Secrets.of(application)`: tokens and passwords in the store of credentials of the system |
+
 ## Get started
 
 You need Java 25 or later. The Gradle plugin adds the library, the backend of your platform, and

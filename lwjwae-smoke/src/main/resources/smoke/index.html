@@ -7,8 +7,8 @@
 <body>
 <p id="state">running</p>
 <script>
-    // A handler and the store in turn, then the bound function, which carries the report: what
-    // answered, or the first failure.
+    // A handler and the store in turn, and the part of the page API that the updater module adds,
+    // then the bound function, which carries the report: what answered, or the first failure.
     (async () => {
         const parts = [];
         try {
@@ -17,6 +17,7 @@
             await lwjwae.store.execute("INSERT INTO answers (value) VALUES (?)", [42]);
             const rows = await lwjwae.store.query("SELECT value FROM answers");
             parts.push("store:" + rows[0].value);
+            parts.push("updates:" + typeof lwjwae.updates?.check);
         } catch (error) {
             parts.push("failed:" + error);
         }

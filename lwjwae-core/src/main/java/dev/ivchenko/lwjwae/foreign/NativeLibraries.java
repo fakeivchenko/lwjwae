@@ -81,17 +81,24 @@ public class NativeLibraries {
   }
 
   /**
-   * Binds the C function {@code symbol} with the given signature.
+   * Binds the C function {@code symbol} with the given signature, and {@code options} of the
+   * linker, if any. {@link Linker.Option#captureCallState} reads {@code GetLastError} or {@code
+   * errno} as the call returns, before the JVM can run code of its own that changes it; a native
+   * image needs the same options in the reachability metadata.
    *
    * @throws UnsatisfiedLinkError If the library has no such symbol.
    */
-  public MethodHandle downcall(SymbolLookup library, String symbol, FunctionDescriptor descriptor) {
+  public MethodHandle downcall(
+      SymbolLookup library,
+      String symbol,
+      FunctionDescriptor descriptor,
+      Linker.Option... options) {
     MemorySegment address =
         library
             .find(symbol)
             .orElseThrow(() -> new UnsatisfiedLinkError("Symbol not found: " + symbol));
     DOWNCALLS.add(descriptor);
-    return LINKER.downcallHandle(address, descriptor);
+    return LINKER.downcallHandle(address, descriptor, options);
   }
 
   /**
@@ -105,10 +112,10 @@ public class NativeLibraries {
   }
 
   /**
-   * The same as {@link #downcall(SymbolLookup, String, FunctionDescriptor)} for a symbol that may
-   * be absent: {@code library} is {@code null} when it or the symbol isn't there, and then the
-   * result is {@code null} too. The descriptor is recorded either way, so that the reachability
-   * metadata of a module doesn't depend on the machine that ran its test.
+   * The same as {@link #downcall(SymbolLookup, String, FunctionDescriptor, Linker.Option...)} for a
+   * symbol that may be absent: {@code library} is {@code null} when it or the symbol isn't there,
+   * and then the result is {@code null} too. The descriptor is recorded either way, so that the
+   * reachability metadata of a module doesn't depend on the machine that ran its test.
    */
   public MethodHandle downcallIfPresent(
       SymbolLookup library, String symbol, FunctionDescriptor descriptor) {

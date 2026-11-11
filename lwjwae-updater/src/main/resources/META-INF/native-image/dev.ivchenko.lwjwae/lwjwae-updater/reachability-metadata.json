@@ -1,0 +1,15 @@
+{
+  "reflection": [
+    {
+      "type": "dev.ivchenko.lwjwae.update.internal.UpdaterModule"
+    }
+  ],
+  "resources": [
+    {
+      "glob": "META-INF/services/dev.ivchenko.lwjwae.module.ApplicationModule"
+    },
+    {
+      "glob": "dev/ivchenko/lwjwae/update/internal/page.js"
+    }
+  ]
+}

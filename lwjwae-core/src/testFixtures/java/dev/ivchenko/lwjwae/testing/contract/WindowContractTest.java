@@ -20,7 +20,6 @@ import dev.ivchenko.lwjwae.dialog.SaveDialogParameters;
 import dev.ivchenko.lwjwae.event.EventSubscription;
 import dev.ivchenko.lwjwae.event.FileDropEvent;
 import dev.ivchenko.lwjwae.event.LoadEvent;
-import dev.ivchenko.lwjwae.event.SecondInstanceEvent;
 import dev.ivchenko.lwjwae.event.WindowEvent;
 import dev.ivchenko.lwjwae.event.WindowEventType;
 import dev.ivchenko.lwjwae.exception.ShortcutUnavailableException;
@@ -50,7 +49,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.TreeMap;
-import java.util.UUID;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -1339,45 +1337,6 @@ public abstract class WindowContractTest extends DisplayContractTest {
       Assertions.assertEquals(this.canKeepOnTop(), window.isAlwaysOnTop());
       window.alwaysOnTop(false);
       Assertions.assertFalse(window.isAlwaysOnTop());
-    }
-  }
-
-  @Test
-  void secondInstanceHandsItsArgumentsOverAndBringsTheWindowBack(@TempDir Path directory)
-      throws Exception {
-    ApplicationParameters parameters =
-        ApplicationParameters.builder()
-            .name("lwjwae-contract-" + UUID.randomUUID())
-            .dataDirectory(directory)
-            .build();
-    try (Application application =
-        Application.createSingleInstance(parameters, "first").orElseThrow()) {
-      Window window =
-          application.open(
-              WindowParameters.builder().title("lwjwae :: single").size(400, 300).build());
-      window.show();
-      WindowContractTest.awaitTrue(window::isVisible, "the window must show");
-      window.minimize();
-      if (this.canTellMinimized()) {
-        WindowContractTest.awaitTrue(window::isMinimized, "minimize must minimize");
-      }
-      BlockingQueue<SecondInstanceEvent> heard = new LinkedBlockingQueue<>();
-      application.onSecondInstance(heard::add);
-
-      Optional<Application> second = Application.createSingleInstance(parameters, "two", "--x");
-
-      Assertions.assertTrue(second.isEmpty(), "the second start gets no application");
-      SecondInstanceEvent start = heard.poll(10, TimeUnit.SECONDS);
-      Assertions.assertNotNull(start, "the running instance must hear of the second start");
-      Assertions.assertEquals(List.of("two", "--x"), start.arguments());
-      Assertions.assertEquals(Path.of("").toAbsolutePath(), start.workingDirectory());
-      Assertions.assertEquals(List.of(window), application.windows());
-      WindowContractTest.awaitTrue(
-          () -> !window.isMinimized(), "the second start must bring the window back");
-    }
-
-    try (Application next = Application.createSingleInstance(parameters).orElseThrow()) {
-      Assertions.assertFalse(next.isClosed(), "a closed instance gives the name up");
     }
   }
 

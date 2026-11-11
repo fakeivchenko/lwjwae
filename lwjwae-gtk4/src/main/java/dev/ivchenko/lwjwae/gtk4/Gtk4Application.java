@@ -12,7 +12,6 @@ import dev.ivchenko.lwjwae.foreign.NativeLibraries;
 import dev.ivchenko.lwjwae.glib.DesktopServices;
 import dev.ivchenko.lwjwae.glib.DesktopTheme;
 import dev.ivchenko.lwjwae.glib.PortalDialogs;
-import dev.ivchenko.lwjwae.glib.SecretServiceSecrets;
 import dev.ivchenko.lwjwae.glib.StatusNotifierTray;
 import dev.ivchenko.lwjwae.glib.WebKitCookies;
 import dev.ivchenko.lwjwae.glib.WebKitScheme;
@@ -23,7 +22,6 @@ import dev.ivchenko.lwjwae.gtk4.binding.Signatures;
 import dev.ivchenko.lwjwae.gtk4.binding.WebKit;
 import dev.ivchenko.lwjwae.notification.Notification;
 import dev.ivchenko.lwjwae.notification.NotificationHandle;
-import dev.ivchenko.lwjwae.secret.Secrets;
 import dev.ivchenko.lwjwae.shortcut.Shortcut;
 import dev.ivchenko.lwjwae.taskbar.TaskbarProgress;
 import dev.ivchenko.lwjwae.tray.Tray;
@@ -95,11 +93,6 @@ public class Gtk4Application extends AbstractApplication {
   @Override
   public String engine() {
     return "WebKitGTK " + WebKit.SHARED.version();
-  }
-
-  @Override
-  protected Secrets createSecrets(String service) {
-    return new SecretServiceSecrets(service);
   }
 
   @Override
