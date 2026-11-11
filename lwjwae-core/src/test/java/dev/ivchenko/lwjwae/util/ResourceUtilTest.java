@@ -2,6 +2,8 @@ package dev.ivchenko.lwjwae.util;
 
 import dev.ivchenko.lwjwae.exception.ResourceNotFoundException;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.util.Map;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -47,5 +49,38 @@ class ResourceUtilTest {
       Assertions.assertThrows(
           ResourceNotFoundException.class, () -> ResourceUtil.servedSize(path), path);
     }
+  }
+
+  @Test
+  void streamsTheWholeResourceWithItsLength() throws InterruptedException {
+    RecordingRpcExchange exchange = new RecordingRpcExchange(Map.of());
+    ResourceUtil.stream(exchange, "fixtures/hello.txt");
+    exchange.awaitEnd(Duration.ofSeconds(5));
+    Assertions.assertEquals(200, exchange.status());
+    Assertions.assertEquals("25", exchange.headers().get("Content-Length"));
+    Assertions.assertEquals("bytes", exchange.headers().get("Accept-Ranges"));
+    Assertions.assertEquals(
+        "hello from the classpath\n", new String(exchange.written(), StandardCharsets.UTF_8));
+  }
+
+  @Test
+  void streamsOnlyTheRangeThatTheRequestAsksFor() throws InterruptedException {
+    RecordingRpcExchange exchange = new RecordingRpcExchange(Map.of("Range", "bytes=6-9"));
+    ResourceUtil.stream(exchange, "fixtures/hello.txt");
+    exchange.awaitEnd(Duration.ofSeconds(5));
+    Assertions.assertEquals(206, exchange.status());
+    Assertions.assertEquals("bytes 6-9/25", exchange.headers().get("Content-Range"));
+    Assertions.assertEquals("4", exchange.headers().get("Content-Length"));
+    Assertions.assertEquals("from", new String(exchange.written(), StandardCharsets.UTF_8));
+  }
+
+  @Test
+  void rangePastTheEndIsAnsweredWithItsSizeAndNoBody() throws InterruptedException {
+    RecordingRpcExchange exchange = new RecordingRpcExchange(Map.of("Range", "bytes=25-"));
+    ResourceUtil.stream(exchange, "fixtures/hello.txt");
+    exchange.awaitEnd(Duration.ofSeconds(5));
+    Assertions.assertEquals(416, exchange.status());
+    Assertions.assertEquals("bytes */25", exchange.headers().get("Content-Range"));
+    Assertions.assertEquals(0, exchange.written().length);
   }
 }

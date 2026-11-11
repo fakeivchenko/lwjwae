@@ -73,7 +73,9 @@ public class WebKitScheme {
       }
       path = ResourceUtil.servedPath(requested == null ? "" : requested);
       long size = ResourceUtil.servedSize(path);
-      if (size < 0 || size >= ResourceUtil.STREAM_THRESHOLD) {
+      // Only the stream answers a range, whatever the size of the file.
+      boolean ranged = binding.uriSchemeRequestHeader(request, "Range") != null;
+      if (ranged || size < 0 || size >= ResourceUtil.STREAM_THRESHOLD) {
         ResourceUtil.stream(new WebKitRpcExchange(binding, dispatcher, request, path), path);
         return;
       }

@@ -27,6 +27,7 @@ final class WebKitRpcExchange implements RpcExchange {
   private final String origin;
   private final String token;
   private final String contentType;
+  private final String range;
   private final MemorySegment bodyStream;
 
   private byte[] body;
@@ -49,6 +50,7 @@ final class WebKitRpcExchange implements RpcExchange {
     this.origin = webKit.uriSchemeRequestHeader(request, "Origin");
     this.token = webKit.uriSchemeRequestHeader(request, TOKEN_HEADER);
     this.contentType = webKit.uriSchemeRequestHeader(request, "Content-Type");
+    this.range = webKit.uriSchemeRequestHeader(request, "Range");
     // The GInputStream of the body, which this exchange owns, or NULL without one.
     this.bodyStream = webKit.uriSchemeRequestBody(request);
   }
@@ -70,6 +72,9 @@ final class WebKitRpcExchange implements RpcExchange {
     }
     if (TOKEN_HEADER.equalsIgnoreCase(name)) {
       return this.token;
+    }
+    if ("Range".equalsIgnoreCase(name)) {
+      return this.range;
     }
     return "Content-Type".equalsIgnoreCase(name) ? this.contentType : null;
   }

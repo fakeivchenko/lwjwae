@@ -9,6 +9,7 @@ import java.net.URL;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Pattern;
@@ -107,6 +108,11 @@ public class ResourceUtil {
    * Answers {@code exchange} with the resource at {@code path}, part by part, from a virtual thread
    * of its own: the thread of the engine hands the request over and goes on, however large the file
    * is and however long the jar takes to inflate it.
+   *
+   * <p>A request with a {@code Range} header gets only those bytes, with {@code 206 Partial
+   * Content}, see {@link ByteRange}; that is what lets a page play audio and video from the scheme.
+   * Every answer of a resource whose size is known carries {@code Accept-Ranges} and {@code
+   * Content-Length}, so that a player knows from the first answer that it may seek.
    */
   public void stream(RpcExchange exchange, String path) {
     String normalized = ResourceUtil.normalize(path);
@@ -119,19 +125,52 @@ public class ResourceUtil {
                   exchange.reply(404, Map.of(), new byte[0]);
                   return;
                 }
-                exchange.respond(200, Map.of("Content-Type", MimeTypeUtil.of(normalized)));
-                byte[] chunk = new byte[CHUNK_SIZE];
-                int read;
-                while ((read = stream.read(chunk)) > 0) {
-                  if (!exchange.write(Arrays.copyOf(chunk, read))) {
-                    break;
-                  }
-                }
-                exchange.end();
+                ResourceUtil.answer(exchange, normalized, stream);
               } catch (Throwable t) {
                 ThrowableUtil.report(t);
               }
             });
+  }
+
+  /** Answers {@code exchange} from {@code stream}, which holds the resource at {@code path}. */
+  private void answer(RpcExchange exchange, String path, InputStream stream) throws IOException {
+    long size = ResourceUtil.servedSize(path);
+    Map<String, String> headers = new LinkedHashMap<>();
+    headers.put("Content-Type", MimeTypeUtil.of(path));
+    // Without the size there is no end to count a range from, so the whole resource goes.
+    ByteRange range = size < 0 ? null : ByteRange.parse(exchange.header("Range"), size);
+    if (size >= 0) {
+      headers.put("Accept-Ranges", "bytes");
+    }
+    if (range != null && !range.isSatisfiable()) {
+      headers.put("Content-Range", range.contentRange(size));
+      exchange.reply(416, headers, new byte[0]);
+      return;
+    }
+    int status = 200;
+    long length = size;
+    if (range != null) {
+      // A jar entry is compressed, so this inflates every byte before the range.
+      stream.skipNBytes(range.first());
+      status = 206;
+      length = range.length();
+      headers.put("Content-Range", range.contentRange(size));
+    }
+    if (length >= 0) {
+      headers.put("Content-Length", Long.toString(length));
+    }
+    exchange.respond(status, headers);
+    long remaining = length < 0 ? Long.MAX_VALUE : length;
+    byte[] chunk = new byte[CHUNK_SIZE];
+    int read;
+    while (remaining > 0
+        && (read = stream.read(chunk, 0, (int) Math.min(chunk.length, remaining))) > 0) {
+      if (!exchange.write(Arrays.copyOf(chunk, read))) {
+        break;
+      }
+      remaining -= read;
+    }
+    exchange.end();
   }
 
   /**
