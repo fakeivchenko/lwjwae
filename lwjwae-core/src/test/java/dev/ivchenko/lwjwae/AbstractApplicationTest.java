@@ -257,6 +257,30 @@ class AbstractApplicationTest {
   }
 
   @Test
+  void asyncApplicationBindingsAnswerInTheWindowThatCalled() throws Exception {
+    ApplicationParameters parameters =
+        ApplicationParameters.builder().codec(new PointCodec()).build();
+    try (FakeApplication application = new FakeApplication(parameters)) {
+      FakeWindow first = application.openFake();
+      application.bindAsync(
+          "whoami",
+          (window, payload) -> CompletableFuture.supplyAsync(() -> window.id() + ":" + payload));
+      application.bindAsync(
+          "shift",
+          Point.class,
+          (window, point) ->
+              CompletableFuture.completedFuture(new Point(point.x() + (int) window.id(), 0)));
+      FakeWindow second = application.openFake();
+      Assertions.assertTrue(second.injected.contains(BridgeProtocol.bindingScript("whoami")));
+
+      first.call(1, "whoami", "x");
+      Assertions.assertEquals(first.id() + ":x", first.awaitReply(1).body());
+      second.call(2, "shift", "application/x-lwjwae-value; charset=utf-8", "1,9");
+      Assertions.assertEquals((1 + second.id()) + ",0", second.awaitReply(2).body());
+    }
+  }
+
+  @Test
   void rebindingAnApplicationNameReplacesTheHandlerWithoutInjectingAgain() throws Exception {
     try (FakeApplication application = new FakeApplication()) {
       FakeWindow window = application.openFake();

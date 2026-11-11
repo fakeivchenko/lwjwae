@@ -60,6 +60,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
@@ -287,6 +288,30 @@ public abstract class AbstractWindow implements Window {
             this.application.requireCodec(),
             argumentType,
             (_, argument) -> handler.apply(argument));
+    this.publish(name, typed, true);
+  }
+
+  @Override
+  public final void bindAsync(
+      String name, Function<String, ? extends CompletionStage<String>> handler) {
+    Objects.requireNonNull(handler, "handler");
+    BiFunction<Window, String, ? extends CompletionStage<String>> windowless =
+        (_, payload) -> handler.apply(payload);
+    this.publish(name, AbstractApplication.awaiting(windowless), false);
+  }
+
+  @Override
+  public final <T, R> void bindAsync(
+      String name, Class<T> argumentType, Function<T, ? extends CompletionStage<R>> handler) {
+    Objects.requireNonNull(argumentType, "argumentType");
+    Objects.requireNonNull(handler, "handler");
+    BiFunction<Window, T, ? extends CompletionStage<R>> windowless =
+        (_, argument) -> handler.apply(argument);
+    BiFunction<Window, String, String> typed =
+        AbstractApplication.typed(
+            this.application.requireCodec(),
+            argumentType,
+            AbstractApplication.awaiting(windowless));
     this.publish(name, typed, true);
   }
 

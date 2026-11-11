@@ -16,6 +16,7 @@ import dev.ivchenko.lwjwae.event.WindowEventType;
 import dev.ivchenko.lwjwae.permission.PermissionDecision;
 import dev.ivchenko.lwjwae.permission.PermissionKind;
 import dev.ivchenko.lwjwae.permission.PermissionRequest;
+import dev.ivchenko.lwjwae.rpc.RpcException;
 import dev.ivchenko.lwjwae.testing.FakeApplication;
 import dev.ivchenko.lwjwae.testing.FakeWindow;
 import dev.ivchenko.lwjwae.testing.Icons;
@@ -30,6 +31,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
@@ -402,6 +404,84 @@ class AbstractWindowTest {
       window.emit("tick", "for the third document");
       Assertions.assertEquals(
           List.of("0" + SEP + "tick" + SEP + "for the third document"), window.awaitEvents(3, 1));
+    }
+  }
+
+  @Test
+  void asyncBindingResolvesWhenItsFutureCompletes() throws Exception {
+    try (FakeApplication application = new FakeApplication()) {
+      FakeWindow window = application.openFake();
+      CompletableFuture<String> answer = new CompletableFuture<>();
+      window.bindAsync("later", payload -> answer.thenApply(text -> text + payload));
+      Assertions.assertTrue(window.injected.contains(BridgeProtocol.bindingScript("later")));
+
+      window.call(1, "later", "!");
+      Thread.sleep(100);
+      Assertions.assertTrue(window.posted.isEmpty(), "nothing answers before the future");
+      answer.complete("done");
+      Assertions.assertEquals("done!", window.awaitReply(1).body());
+    }
+  }
+
+  @Test
+  void failedFutureRejectsWithItsCause() throws Exception {
+    try (FakeApplication application = new FakeApplication()) {
+      FakeWindow window = application.openFake();
+      window.bindAsync(
+          "missing",
+          _ -> CompletableFuture.failedFuture(RpcException.notFound("no-such", "Nothing here")));
+      window.bindAsync(
+          "broken",
+          _ ->
+              CompletableFuture.supplyAsync(
+                  () -> {
+                    throw new IllegalStateException("kaboom");
+                  }));
+
+      window.call(1, "missing", "");
+      RpcReply missing = window.awaitReply(1);
+      Assertions.assertEquals(404, missing.status());
+      Assertions.assertEquals("{\"code\":\"no-such\",\"error\":\"Nothing here\"}", missing.body());
+      window.call(2, "broken", "");
+      RpcReply broken = window.awaitReply(2);
+      Assertions.assertEquals(500, broken.status());
+      Assertions.assertEquals("{\"code\":\"internal\",\"error\":\"kaboom\"}", broken.body());
+    }
+  }
+
+  @Test
+  void cancelingCallCancelsTheFutureOfAnAsyncBinding() throws Exception {
+    try (FakeApplication application = new FakeApplication()) {
+      FakeWindow window = application.openFake();
+      CompletableFuture<String> pending = new CompletableFuture<>();
+      CountDownLatch started = new CountDownLatch(1);
+      window.bindAsync(
+          "pending",
+          _ -> {
+            started.countDown();
+            return pending;
+          });
+      window.call(1, "pending", "");
+      Assertions.assertTrue(started.await(5, TimeUnit.SECONDS));
+      window.cancel(1);
+      Assertions.assertThrows(CancellationException.class, () -> pending.get(5, TimeUnit.SECONDS));
+    }
+  }
+
+  @Test
+  void typedAsyncBindingsGoThroughTheCodec() throws Exception {
+    ApplicationParameters parameters =
+        ApplicationParameters.builder().codec(new PointCodec()).build();
+    try (FakeApplication application = new FakeApplication(parameters)) {
+      FakeWindow window = application.openFake();
+      window.bindAsync(
+          "mirror",
+          Point.class,
+          point -> CompletableFuture.supplyAsync(() -> new Point(point.y(), point.x())));
+      Assertions.assertTrue(window.injected.contains(BridgeProtocol.bindingScript("mirror", true)));
+
+      window.call(1, "mirror", VALUE_TYPE, "1,2");
+      Assertions.assertEquals("2,1", window.awaitReply(1).body());
     }
   }
 

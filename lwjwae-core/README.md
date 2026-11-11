@@ -663,6 +663,21 @@ event without it doesn't reach the page. Java hears everything either way.
 5. The answer goes back as one message, `\u0001rpc␟doc␟id␟r␟status␟type␟encoding␟body`. A handler
    that throws answers `500` with the message of the root cause; an unknown name answers `404`.
    Nothing is sent to a window that closed in the meantime.
+
+`bindAsync` takes a handler that returns a `CompletionStage` instead of a value, for work that
+already answers with a future, such as a dialog, `eval`, or `HttpClient.sendAsync`:
+
+```java
+window.bindAsync("confirmClear", Void.class, _ -> window.dialogs().confirm("Clear every note?"));
+```
+
+It's the same binding on the page. On the Java side, the virtual thread of the call waits for the
+future, so step 5 happens when the future completes: its value resolves the promise, and its failure
+rejects it with the root cause, an `RpcException` keeping its status and code. When the page
+abandons the call, the thread is interrupted and the future is cancelled, which closes a dialog and
+stops a request of `HttpClient`. A future derived with `thenApply` and the like doesn't pass the
+cancel on to the one that it came from, so return the future of the work itself where cancelling
+matters.
 6. The runtime settles the promise: with the text, or the value that the codec decodes, or an
    `RpcError`.
 
@@ -730,8 +745,8 @@ its ID resolves the promise. `close` closes the window of the page, so its promi
 
 ### Typed calls
 
-`bind(name, Class, handler)` and `emit(name, Object)` use the same protocol with the `typed` flag
-set. A codec has two halves that must agree on a format:
+`bind(name, Class, handler)`, `bindAsync(name, Class, handler)`, and `emit(name, Object)` use the
+same protocol with the `typed` flag set. A codec has two halves that must agree on a format:
 
 - The Java half, [`BridgeCodec`](src/main/java/dev/ivchenko/lwjwae/bridge/codec/BridgeCodec.java):
   `encode(Object)` turns a value into text and `decode(String, Class)` turns text into the argument

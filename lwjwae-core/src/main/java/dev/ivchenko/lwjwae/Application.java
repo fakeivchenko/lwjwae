@@ -24,6 +24,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.ServiceLoader;
+import java.util.concurrent.CompletionStage;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -320,6 +321,47 @@ public interface Application extends AutoCloseable {
    * window called.
    */
   <T, R> void bind(String name, Class<T> argumentType, BiFunction<Window, T, R> handler);
+
+  /**
+   * The same as {@link #bind(String, Function)}, for a handler that answers later. The promise on
+   * the page settles when the future completes: with its value, or rejected with the message of the
+   * root cause of its failure, and with the status and code of an {@link
+   * dev.ivchenko.lwjwae.rpc.RpcException}.
+   *
+   * <p>When the page abandons the call, the future is cancelled, so that the work behind it can
+   * stop.
+   *
+   * @param name A JavaScript identifier.
+   * @param handler Called on a virtual thread with the payload as text; it returns the future of
+   *     the answer, which must not be {@code null}.
+   * @throws IllegalArgumentException If {@code name} isn't a JavaScript identifier.
+   */
+  void bindAsync(String name, Function<String, ? extends CompletionStage<String>> handler);
+
+  /**
+   * The same as {@link #bindAsync(String, Function)}, for a handler that needs to know which window
+   * called.
+   */
+  void bindAsync(
+      String name, BiFunction<Window, String, ? extends CompletionStage<String>> handler);
+
+  /**
+   * The same as {@link #bind(String, Class, Function)}, for a handler that answers later, the way
+   * {@link #bindAsync(String, Function)} describes.
+   *
+   * @throws IllegalStateException If there is no codec.
+   */
+  <T, R> void bindAsync(
+      String name, Class<T> argumentType, Function<T, ? extends CompletionStage<R>> handler);
+
+  /**
+   * The same as {@link #bindAsync(String, Class, Function)}, for a handler that needs to know which
+   * window called.
+   */
+  <T, R> void bindAsync(
+      String name,
+      Class<T> argumentType,
+      BiFunction<Window, T, ? extends CompletionStage<R>> handler);
 
   /**
    * Answers the calls that the page makes with {@code lwjwae.call(name, body)}, in every window of

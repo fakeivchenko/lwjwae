@@ -43,6 +43,10 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.ServiceLoader;
 import java.util.Set;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutionException;
@@ -336,6 +340,78 @@ public abstract class AbstractApplication implements Application {
     Objects.requireNonNull(argumentType, "argumentType");
     Objects.requireNonNull(handler, "handler");
     this.publish(name, AbstractApplication.typed(this.requireCodec(), argumentType, handler), true);
+  }
+
+  @Override
+  public final void bindAsync(
+      String name, Function<String, ? extends CompletionStage<String>> handler) {
+    Objects.requireNonNull(handler, "handler");
+    this.bindAsync(name, (_, payload) -> handler.apply(payload));
+  }
+
+  @Override
+  public final void bindAsync(
+      String name, BiFunction<Window, String, ? extends CompletionStage<String>> handler) {
+    Objects.requireNonNull(handler, "handler");
+    this.publish(name, AbstractApplication.awaiting(handler), false);
+  }
+
+  @Override
+  public final <T, R> void bindAsync(
+      String name, Class<T> argumentType, Function<T, ? extends CompletionStage<R>> handler) {
+    Objects.requireNonNull(handler, "handler");
+    this.bindAsync(name, argumentType, (_, argument) -> handler.apply(argument));
+  }
+
+  @Override
+  public final <T, R> void bindAsync(
+      String name,
+      Class<T> argumentType,
+      BiFunction<Window, T, ? extends CompletionStage<R>> handler) {
+    Objects.requireNonNull(argumentType, "argumentType");
+    Objects.requireNonNull(handler, "handler");
+    this.publish(
+        name,
+        AbstractApplication.typed(
+            this.requireCodec(), argumentType, AbstractApplication.awaiting(handler)),
+        true);
+  }
+
+  /**
+   * Adapts a handler that answers with a future to one that answers with its value, by waiting on
+   * the virtual thread of the call. Package-private so that a window binds with the same rule.
+   *
+   * <p>Waiting is the whole adaptation because an RPC call ends when its handler returns: the
+   * thread is virtual, so a blocked one costs no carrier, and the bridge already interrupts it when
+   * the page abandons the call. That interrupt is what cancels the future, which reaches the work
+   * behind it only through cancellation.
+   *
+   * <p>A failed future fails the call with its cause rather than the {@link ExecutionException}
+   * around it, so that an {@link dev.ivchenko.lwjwae.rpc.RpcException} keeps its status and code.
+   */
+  static <T, R> BiFunction<Window, T, R> awaiting(
+      BiFunction<Window, T, ? extends CompletionStage<R>> handler) {
+    return (window, argument) -> {
+      CompletionStage<R> stage = handler.apply(window, argument);
+      Objects.requireNonNull(stage, "The handler returned no future");
+      CompletableFuture<R> future = stage.toCompletableFuture();
+      try {
+        return future.get();
+      } catch (InterruptedException e) {
+        future.cancel(true);
+        Thread.currentThread().interrupt();
+        throw new CancellationException("The page abandoned the call");
+      } catch (ExecutionException e) {
+        Throwable cause = e.getCause();
+        if (cause instanceof RuntimeException runtime) {
+          throw runtime;
+        }
+        if (cause instanceof Error error) {
+          throw error;
+        }
+        throw new CompletionException(cause);
+      }
+    };
   }
 
   /**
