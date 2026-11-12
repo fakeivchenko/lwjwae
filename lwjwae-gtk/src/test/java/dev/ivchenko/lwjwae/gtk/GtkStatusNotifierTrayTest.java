@@ -19,9 +19,9 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 /**
- * The StatusNotifierItem tray inside a GTK 3 process: the way the backend takes where
- * libappindicator is missing. The application picks libappindicator on this machine if it has it,
- * so the test builds the tray itself.
+ * The StatusNotifierItem tray inside a GTK 3 process: the way the backend takes whenever the
+ * session has a StatusNotifier host. The test builds the tray itself against a fake watcher, so it
+ * doesn't depend on the host that the machine runs.
  */
 @Tag(Tags.DISPLAY)
 class GtkStatusNotifierTrayTest {

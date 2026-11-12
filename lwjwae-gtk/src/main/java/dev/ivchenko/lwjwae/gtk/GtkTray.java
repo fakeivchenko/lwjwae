@@ -3,7 +3,6 @@ package dev.ivchenko.lwjwae.gtk;
 import dev.ivchenko.lwjwae.foreign.CallbackRegistry;
 import dev.ivchenko.lwjwae.foreign.NativeLibraries;
 import dev.ivchenko.lwjwae.glib.binding.Glib;
-import dev.ivchenko.lwjwae.gtk.binding.AppIndicator;
 import dev.ivchenko.lwjwae.gtk.binding.Gtk;
 import dev.ivchenko.lwjwae.gtk.binding.Signatures;
 import dev.ivchenko.lwjwae.tray.Tray;
@@ -25,23 +24,19 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 
 /**
- * A tray icon on Linux, through libappindicator where it exists and {@code GtkStatusIcon} where it
- * doesn't.
+ * A tray icon on Linux through {@code GtkStatusIcon}: the XEmbed tray, for an X11 session whose
+ * panel has no StatusNotifier host but still offers a legacy tray.
  *
- * <p>Linux has two tray protocols. The old one, XEmbed, is what {@code GtkStatusIcon} speaks; it
- * needs X11 and a panel that still offers a legacy tray. The current one, StatusNotifierItem over
- * D-Bus, is what KDE, GNOME with its AppIndicator extension, and most other panels take today, and
- * the only one that works on Wayland. libappindicator (Ayatana or Ubuntu flavor) speaks it, so the
- * tray prefers that library and falls back to the status icon when it isn't installed.
+ * <p>The application tries a StatusNotifierItem first, which it serves over D-Bus itself, and comes
+ * here only when no host takes one. libappindicator would speak the same protocol, but Ayatana
+ * deprecated its GTK 3 flavor and warns on every load, and it adds nothing the D-Bus item lacks:
+ * the item even reports the primary click, which an indicator never does.
  *
- * <p>Both hosts read the image from a file, and a StatusNotifier host caches it by name, so every
- * image becomes a fresh PNG file in a temporary directory, and every change of the image gets a new
- * name. The directory goes away with the tray.
+ * <p>The status icon reads the image from a file, so every image becomes a fresh PNG file in a
+ * temporary directory that goes away with the tray.
  *
- * <p>The menu is a {@code GtkMenu} either way. An indicator shows it on any click; a status icon
- * shows it on the secondary button and reports the primary one through {@code activate}, which is
- * where {@link TrayIcon#onActivate()} comes from. An indicator has no primary click of its own, so
- * on that path the handler never runs.
+ * <p>The menu is a {@code GtkMenu}, shown on the secondary button; the primary one comes through
+ * {@code activate}, which is where {@link TrayIcon#onActivate()} runs.
  */
 public class GtkTray implements Tray {
   private static final CallbackRegistry<GtkTray> TRAYS = new CallbackRegistry<>();
@@ -78,7 +73,6 @@ public class GtkTray implements Tray {
   private final Path directory;
   private final Runnable onActivate;
 
-  private volatile MemorySegment indicator;
   private volatile MemorySegment statusIcon;
   private volatile MemorySegment menu;
   private volatile List<Long> actionIds = List.of();
@@ -116,22 +110,13 @@ public class GtkTray implements Tray {
   /** Builds the native objects. Runs on the GTK thread, once, from the constructor. */
   private void create(Path image, TrayIcon icon) {
     MemorySegment newMenu = this.buildMenu(icon.menu());
-    if (AppIndicator.isAvailable()) {
-      MemorySegment newIndicator = AppIndicator.create(this.name, this.iconName(image));
-      AppIndicator.setIconThemePath(newIndicator, this.directory.toString());
-      AppIndicator.setTitle(newIndicator, icon.tooltip());
-      AppIndicator.setMenu(newIndicator, newMenu);
-      AppIndicator.setActive(newIndicator, true);
-      this.indicator = newIndicator;
-    } else {
-      MemorySegment userData = CallbackRegistry.userData(this.id);
-      MemorySegment newIcon = Gtk.statusIconNewFromFile(image.toString());
-      Gtk.statusIconSetTooltipText(newIcon, icon.tooltip());
-      Glib.signalConnect(newIcon, "activate", ON_ACTIVATE, userData);
-      Glib.signalConnect(newIcon, "popup-menu", ON_POPUP_MENU, userData);
-      Gtk.statusIconSetVisible(newIcon, true);
-      this.statusIcon = newIcon;
-    }
+    MemorySegment userData = CallbackRegistry.userData(this.id);
+    MemorySegment newIcon = Gtk.statusIconNewFromFile(image.toString());
+    Gtk.statusIconSetTooltipText(newIcon, icon.tooltip());
+    Glib.signalConnect(newIcon, "activate", ON_ACTIVATE, userData);
+    Glib.signalConnect(newIcon, "popup-menu", ON_POPUP_MENU, userData);
+    Gtk.statusIconSetVisible(newIcon, true);
+    this.statusIcon = newIcon;
     this.menu = newMenu;
   }
 
@@ -142,9 +127,7 @@ public class GtkTray implements Tray {
     this.dispatcher()
         .run(
             () -> {
-              if (this.indicator != null) {
-                AppIndicator.setIcon(this.indicator, this.iconName(image), null);
-              } else if (this.statusIcon != null) {
+              if (this.statusIcon != null) {
                 Gtk.statusIconSetFromFile(this.statusIcon, image.toString());
               }
             });
@@ -156,9 +139,7 @@ public class GtkTray implements Tray {
     this.dispatcher()
         .run(
             () -> {
-              if (this.indicator != null) {
-                AppIndicator.setTitle(this.indicator, tooltip);
-              } else if (this.statusIcon != null) {
+              if (this.statusIcon != null) {
                 Gtk.statusIconSetTooltipText(this.statusIcon, tooltip);
               }
             });
@@ -167,15 +148,7 @@ public class GtkTray implements Tray {
   @Override
   public void menu(List<TrayMenuItem> items) {
     this.checkOpen();
-    this.dispatcher()
-        .run(
-            () -> {
-              MemorySegment newMenu = this.buildMenu(items);
-              if (this.indicator != null) {
-                AppIndicator.setMenu(this.indicator, newMenu);
-              }
-              this.menu = newMenu;
-            });
+    this.dispatcher().run(() -> this.menu = this.buildMenu(items));
   }
 
   @Override
@@ -192,14 +165,7 @@ public class GtkTray implements Tray {
     TRAYS.unregister(this.id);
     this.dispatcher.run(
         () -> {
-          // The menu first: the indicator holds the only reference to it, so releasing the
-          // indicator first would free the menu under dropMenu().
           this.dropMenu();
-          if (this.indicator != null) {
-            AppIndicator.setActive(this.indicator, false);
-            Glib.unref(this.indicator);
-            this.indicator = null;
-          }
           if (this.statusIcon != null) {
             Gtk.statusIconSetVisible(this.statusIcon, false);
             Glib.unref(this.statusIcon);
@@ -261,7 +227,7 @@ public class GtkTray implements Tray {
 
   /**
    * Writes {@code png} under a name that no previous image of this tray had, and deletes the
-   * previous file. A host that cached the old name can't serve the old image for the new name.
+   * previous file.
    */
   private Path writeIcon(byte[] png) {
     Path previous = this.iconFile;
@@ -276,14 +242,6 @@ public class GtkTray implements Tray {
     }
     this.iconFile = file;
     return file;
-  }
-
-  /**
-   * The icon name that libappindicator resolves inside the theme path: the file name minus .png.
-   */
-  private String iconName(Path image) {
-    String fileName = image.getFileName().toString();
-    return fileName.substring(0, fileName.length() - ".png".length());
   }
 
   private void deleteDirectory() {

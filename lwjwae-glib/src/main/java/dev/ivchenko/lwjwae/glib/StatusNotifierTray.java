@@ -26,12 +26,12 @@ import java.util.function.Supplier;
  * D-Bus, with no toolkit involved.
  *
  * <p>GTK 4 has no tray of its own: {@code GtkStatusIcon} is gone, and libappindicator links GTK 3,
- * which can't share a process with GTK 4. Under GTK 3, libappindicator may be missing, and {@code
- * GtkStatusIcon} needs X11. What a panel talks to, though, is only D-Bus: KDE, GNOME with its
- * AppIndicator extension, and most other panels read an object with the {@code
- * org.kde.StatusNotifierItem} interface for the icon and one with {@code com.canonical.dbusmenu}
- * for the menu. The tray exports both through GDBus, which ships with GLib, and registers the item
- * with the {@code org.kde.StatusNotifierWatcher} of the session.
+ * which can't share a process with GTK 4. Under GTK 3, {@code GtkStatusIcon} needs X11, and the
+ * libappindicator of Ayatana is deprecated and warns on every load. What a panel talks to, though,
+ * is only D-Bus: KDE, GNOME with its AppIndicator extension, and most other panels read an object
+ * with the {@code org.kde.StatusNotifierItem} interface for the icon and one with {@code
+ * com.canonical.dbusmenu} for the menu. The tray exports both through GDBus, which ships with GLib,
+ * and registers the item with the {@code org.kde.StatusNotifierWatcher} of the session.
  *
  * <p>Each tray has a connection of its own to the session bus, so a unique name of its own. The
  * watcher tracks an item by that name, and closing the connection is what takes the icon off the

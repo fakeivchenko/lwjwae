@@ -127,7 +127,7 @@ public class Signatures {
   public final FunctionDescriptor POINTER_POINTER_POINTER_POINTER =
       FunctionDescriptor.of(C_POINTER, C_POINTER, C_POINTER, C_POINTER);
 
-  /** {@code T* f(const gchar*, const gchar*, gint)}: {@code app_indicator_new}. */
+  /** {@code T* f(U*, const gchar*, gint)}: {@code gtk_dialog_add_button}. */
   public final FunctionDescriptor POINTER_POINTER_POINTER_INT =
       FunctionDescriptor.of(C_POINTER, C_POINTER, C_POINTER, C_INT);
 

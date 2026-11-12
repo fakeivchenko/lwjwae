@@ -16,7 +16,6 @@ import dev.ivchenko.lwjwae.glib.binding.Soup;
 import dev.ivchenko.lwjwae.glib.binding.Unix;
 import dev.ivchenko.lwjwae.glib.binding.WebKitGtk;
 import dev.ivchenko.lwjwae.glib.binding.X11;
-import dev.ivchenko.lwjwae.gtk.binding.AppIndicator;
 import dev.ivchenko.lwjwae.gtk.binding.Gdk;
 import dev.ivchenko.lwjwae.gtk.binding.Gtk;
 import dev.ivchenko.lwjwae.gtk.binding.WebKit;
@@ -71,7 +70,6 @@ class GtkNativeImageMetadataTest extends NativeImageMetadataContractTest {
         Gdk.class,
         Gtk.class,
         WebKit.class,
-        AppIndicator.class,
         GtkDispatcher.class,
         GtkWindow.class,
         GtkDialogs.class,
