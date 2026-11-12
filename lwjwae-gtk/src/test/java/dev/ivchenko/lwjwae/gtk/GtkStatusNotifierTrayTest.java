@@ -48,4 +48,29 @@ class GtkStatusNotifierTrayTest {
       Assertions.assertFalse(application.isClosed());
     }
   }
+
+  @Test
+  void trayRegistersAgainWhenTheWatcherRestarts() throws Exception {
+    Assumptions.assumeTrue(PlatformUtil.isUnixDesktop(), "Linux only");
+    DisplayAssumptions.assumeDisplay();
+    try (Application _ = Application.create()) {
+      FakeStatusNotifierWatcher.ensureRunning(GtkDispatcher.instance());
+      Assumptions.assumeTrue(
+          FakeStatusNotifierWatcher.isRunning(), "a panel owns the watcher of this session");
+      try (StatusNotifierTray _ =
+          new StatusNotifierTray(
+              GtkDispatcher.instance(),
+              TrayIcon.builder().icon(Icons.circle(32, Color.GREEN)).build(),
+              _ -> {})) {
+        FakeStatusNotifierWatcher.restart(GtkDispatcher.instance());
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        while (FakeStatusNotifierWatcher.items().isEmpty() && System.nanoTime() < deadline) {
+          Thread.sleep(50);
+        }
+        Assertions.assertFalse(
+            FakeStatusNotifierWatcher.items().isEmpty(),
+            "the item must register with the new watcher");
+      }
+    }
+  }
 }

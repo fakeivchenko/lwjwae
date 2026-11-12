@@ -171,9 +171,10 @@ stops suppressing. `isDevToolsEnabled()` reads the same setting back.
    with its AppIndicator extension, and most other panels take, and the only tray that works on
    Wayland. `Activate` runs `onActivate`.
 2. **XEmbed**, through `GtkStatusIcon`, in a
-   [`GtkTray`](src/main/java/dev/ivchenko/lwjwae/gtk/GtkTray.java), otherwise. Deprecated in GTK 3.14
-   but still in the library; needs X11 and a panel with a legacy tray. The `activate` signal runs
-   `onActivate`, and `popup-menu` opens the menu at the pointer.
+   [`GtkTray`](src/main/java/dev/ivchenko/lwjwae/gtk/GtkTray.java), otherwise, on X11. Deprecated in
+   GTK 3.14 but still in the library; needs a panel with a legacy tray. The `activate` signal runs
+   `onActivate`, and `popup-menu` opens the menu at the pointer. Outside X11, where a status icon
+   would never show, `Application.tray` throws `UnsupportedOperationException` instead.
 
 libappindicator is not used. It would speak the same protocol as the first way, but Ayatana deprecated
 `libayatana-appindicator3` in favor of `libayatana-appindicator-glib`, and the old library warns on every

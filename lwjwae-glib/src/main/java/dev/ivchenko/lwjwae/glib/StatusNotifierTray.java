@@ -4,6 +4,7 @@ import dev.ivchenko.lwjwae.foreign.CallbackRegistry;
 import dev.ivchenko.lwjwae.foreign.NativeLibraries;
 import dev.ivchenko.lwjwae.glib.binding.Dbus;
 import dev.ivchenko.lwjwae.glib.binding.GdkPixbuf;
+import dev.ivchenko.lwjwae.glib.binding.Glib;
 import dev.ivchenko.lwjwae.glib.binding.Pixmap;
 import dev.ivchenko.lwjwae.glib.binding.Signatures;
 import dev.ivchenko.lwjwae.tray.Tray;
@@ -46,6 +47,15 @@ import java.util.function.Supplier;
  * image} icon. {@link GdkPixbuf#argb32} decodes the PNG into the ARGB32 in network byte order that
  * the specification asks for.
  *
+ * <p>The watcher forgets every item when the panel that runs it restarts, as after a crash of the
+ * shell or a reload of the GNOME extension. The tray listens for the name of the watcher to get a
+ * new owner, and registers the item again with it, so the icon comes back on its own, as
+ * libappindicator brought it back and as the Windows tray does after Explorer restarts.
+ *
+ * <p>A dbusmenu label takes {@code _} as the mark of a mnemonic, where the label of a {@code
+ * GtkMenu} entry shows it as text. Each {@code _} goes out doubled, so a label reads the same on
+ * every tray of the library.
+ *
  * <p>A primary click reaches {@code Activate}, which runs {@link TrayIcon#onActivate()}. Without
  * that handler, the item says it is only a menu ({@code ItemIsMenu}), and the panel opens the menu
  * on any click. Menu entries have the IDs 1 and up in their order; the root of the layout is 0.
@@ -57,6 +67,8 @@ public final class StatusNotifierTray implements Tray {
   private static final String MENU_PATH = "/MenuBar";
   private static final String WATCHER = "org.kde.StatusNotifierWatcher";
   private static final String WATCHER_PATH = "/StatusNotifierWatcher";
+  private static final String BUS = "org.freedesktop.DBus";
+  private static final String BUS_PATH = "/org/freedesktop/DBus";
   private static final int CALL_TIMEOUT_MILLIS = 5000;
   private static final int DBUSMENU_VERSION = 3;
 
@@ -188,6 +200,21 @@ public final class StatusNotifierTray implements Tray {
               MemorySegment.class,
               MemorySegment.class),
           Signatures.G_DBUS_GET_PROPERTY);
+  private static final MemorySegment ON_WATCHER_OWNER_CHANGED =
+      NativeLibraries.upcall(
+          MethodHandles.lookup(),
+          StatusNotifierTray.class,
+          "onWatcherOwnerChanged",
+          MethodType.methodType(
+              void.class,
+              MemorySegment.class,
+              MemorySegment.class,
+              MemorySegment.class,
+              MemorySegment.class,
+              MemorySegment.class,
+              MemorySegment.class,
+              MemorySegment.class),
+          Signatures.G_DBUS_SIGNAL_CALLBACK);
 
   private static MemorySegment itemInterface;
   private static MemorySegment menuInterface;
@@ -203,6 +230,7 @@ public final class StatusNotifierTray implements Tray {
   private volatile MemorySegment connection;
   private volatile int itemRegistration;
   private volatile int menuRegistration;
+  private volatile int watcherSubscription;
   private volatile Pixmap pixmap;
   private volatile String tooltip;
   private volatile List<TrayMenuItem> menu;
@@ -249,6 +277,16 @@ public final class StatusNotifierTray implements Tray {
     try {
       this.itemRegistration = Dbus.registerObject(bus, ITEM_PATH, itemInterface, vtable, userData);
       this.menuRegistration = Dbus.registerObject(bus, MENU_PATH, menuInterface, vtable, userData);
+      this.watcherSubscription =
+          Dbus.subscribe(
+              bus,
+              BUS,
+              BUS,
+              "NameOwnerChanged",
+              BUS_PATH,
+              WATCHER,
+              ON_WATCHER_OWNER_CHANGED,
+              userData);
     } catch (IllegalStateException e) {
       Dbus.close(bus);
       throw e;
@@ -264,19 +302,8 @@ public final class StatusNotifierTray implements Tray {
    * @throws UnsupportedOperationException If the session has no watcher.
    */
   private void register() {
-    MemorySegment bus = this.connection;
     try {
-      MemorySegment reply =
-          Dbus.call(
-              bus,
-              WATCHER,
-              WATCHER_PATH,
-              WATCHER,
-              "RegisterStatusNotifierItem",
-              Dbus.tuple(List.of(Dbus.string(Dbus.uniqueName(bus)))),
-              null,
-              CALL_TIMEOUT_MILLIS);
-      Dbus.unref(reply);
+      StatusNotifierTray.announce(this.connection);
     } catch (IllegalStateException e) {
       this.closed = true;
       TRAYS.unregister(this.callbackId);
@@ -286,11 +313,58 @@ public final class StatusNotifierTray implements Tray {
     }
   }
 
+  /**
+   * Calls {@code RegisterStatusNotifierItem} with the unique name of {@code bus}. Never on the GTK
+   * thread, see {@link #register()}.
+   *
+   * @throws IllegalStateException If the watcher is missing or refuses the item.
+   */
+  private static void announce(MemorySegment bus) {
+    MemorySegment reply =
+        Dbus.call(
+            bus,
+            WATCHER,
+            WATCHER_PATH,
+            WATCHER,
+            "RegisterStatusNotifierItem",
+            Dbus.tuple(List.of(Dbus.string(Dbus.uniqueName(bus)))),
+            null,
+            CALL_TIMEOUT_MILLIS);
+    Dbus.unref(reply);
+  }
+
+  /**
+   * Registers the item with a watcher that has just taken the name. Runs on the GTK thread, from
+   * the signal, so the call itself goes to a virtual thread: the watcher reads the properties of
+   * the item before it answers, and those reads need the GTK thread free. The thread holds a
+   * reference to the connection, so a {@link #close()} meanwhile makes the call fail instead of
+   * freeing the connection under it.
+   */
+  private void reregister() {
+    MemorySegment bus = this.connection;
+    if (this.closed || bus == null) return;
+    Glib.ref(bus);
+    Thread.ofVirtual()
+        .start(
+            () -> {
+              try {
+                StatusNotifierTray.announce(bus);
+              } catch (IllegalStateException e) {
+                if (!this.closed) {
+                  ThrowableUtil.report(e);
+                }
+              } finally {
+                Glib.unref(bus);
+              }
+            });
+  }
+
   /** Takes the objects off the bus and closes the connection. Runs on the GTK thread. */
   private void disconnect() {
     MemorySegment bus = this.connection;
     this.connection = null;
     if (bus != null) {
+      Dbus.unsubscribe(bus, this.watcherSubscription);
       Dbus.unregisterObject(bus, this.itemRegistration);
       Dbus.unregisterObject(bus, this.menuRegistration);
       // The watcher sees the unique name go, and the panel drops the icon.
@@ -510,7 +584,7 @@ public final class StatusNotifierTray implements Tray {
     if (item != null && item.isSeparator()) {
       properties.add(Dbus.dictEntry("type", Dbus.string("separator")));
     } else if (item != null) {
-      properties.add(Dbus.dictEntry("label", Dbus.string(item.label())));
+      properties.add(Dbus.dictEntry("label", Dbus.string(StatusNotifierTray.label(item))));
       properties.add(Dbus.dictEntry("enabled", Dbus.bool(item.enabled())));
     }
     return Dbus.array("{sv}", properties);
@@ -523,11 +597,18 @@ public final class StatusNotifierTray implements Tray {
     }
     return switch (key) {
       case "type" -> Dbus.string(item.isSeparator() ? "separator" : "standard");
-      case "label" -> item.isSeparator() ? null : Dbus.string(item.label());
+      case "label" -> item.isSeparator() ? null : Dbus.string(StatusNotifierTray.label(item));
       case "enabled" -> Dbus.bool(item.enabled());
       case "visible" -> Dbus.bool(true);
       default -> null;
     };
+  }
+
+  /**
+   * The label of {@code item} as dbusmenu reads it: each {@code _} doubled, so none is a mnemonic.
+   */
+  static String label(TrayMenuItem item) {
+    return item.label().replace("_", "__");
   }
 
   private TrayMenuItem entry(int id) {
@@ -559,6 +640,35 @@ public final class StatusNotifierTray implements Tray {
   }
 
   // --- the vtable callbacks, bound by name from the upcall stubs above; signatures are GDBus's ---
+
+  /**
+   * {@code NameOwnerChanged} for the name of the watcher, as {@code (sss)}: the name, the old
+   * owner, and the new one, empty when the name is gone.
+   *
+   * <p>Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that
+   * binds it by name, so no Java code calls it and the compiler sees a dead private method. {@code
+   * resource}: the tray is {@code AutoCloseable}, and a lookup that returns it looks like an
+   * unclosed resource. It is not: the application owns the tray and closes it, this method only
+   * borrows it.
+   */
+  @SuppressWarnings({"unused", "resource"})
+  private static void onWatcherOwnerChanged(
+      MemorySegment connection,
+      MemorySegment sender,
+      MemorySegment objectPath,
+      MemorySegment interfaceName,
+      MemorySegment signalName,
+      MemorySegment parameters,
+      MemorySegment userData) {
+    try {
+      StatusNotifierTray tray = TRAYS.lookup(userData);
+      if (tray != null && !Dbus.stringAt(parameters, 2).isEmpty()) {
+        tray.reregister();
+      }
+    } catch (Throwable t) {
+      ThrowableUtil.report(t);
+    }
+  }
 
   /**
    * Suppressed warnings: {@code unused}: the method is reached only through the upcall stub that

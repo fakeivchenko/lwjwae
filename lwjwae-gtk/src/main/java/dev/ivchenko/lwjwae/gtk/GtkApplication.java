@@ -122,8 +122,9 @@ public class GtkApplication extends AbstractApplication {
    *
    * <p>The tray takes the first of two ways that works: a StatusNotifierItem that the backend
    * serves itself over D-Bus, when the session has a StatusNotifier host, as KDE and GNOME with its
-   * AppIndicator extension have; otherwise {@code GtkStatusIcon}, which needs X11 and a legacy
-   * tray. libappindicator is left out on purpose: Ayatana deprecated its GTK 3 library, which warns
+   * AppIndicator extension have; otherwise, on X11, {@code GtkStatusIcon}, which needs a panel with
+   * a legacy tray. Outside X11 with no host, the call throws, as a status icon there would never
+   * show. libappindicator is left out on purpose: Ayatana deprecated its GTK 3 library, which warns
    * on every load, and the D-Bus item reaches the same panels and reports the primary click
    * besides.
    */
@@ -131,8 +132,9 @@ public class GtkApplication extends AbstractApplication {
   protected Tray createTray(TrayIcon icon, Consumer<Tray> closed) {
     try {
       return new StatusNotifierTray(this.dispatcher(), icon, closed);
-    } catch (UnsupportedOperationException _) {
-      // No StatusNotifier host on the bus: the legacy tray is the one left.
+    } catch (UnsupportedOperationException e) {
+      // A GtkStatusIcon outside X11 would be created and never shown, a tray that silently isn't.
+      if (!this.dispatcher().call(Gdk::isX11)) throw e;
     }
     return new GtkTray(this.dispatcher(), icon, closed);
   }

@@ -67,7 +67,14 @@ icon, and `/MenuBar` with `com.canonical.dbusmenu` for the menu, both through
 registers the item with `org.kde.StatusNotifierWatcher`, which KDE, GNOME with the AppIndicator
 extension, and most other panels run. Without a watcher, the constructor throws
 `UnsupportedOperationException`. The GTK 4 backend uses it as its tray; the GTK 3 backend tries it
-first, before it falls back to `GtkStatusIcon`.
+first, before it falls back to `GtkStatusIcon` on X11.
+
+- **Back after a panel restart.** The watcher forgets its items when the panel that runs it
+  restarts. Each tray subscribes to `NameOwnerChanged` for `org.kde.StatusNotifierWatcher`, with the
+  bus filtering by name, and registers the item again with the new owner, from a virtual thread,
+  since the watcher reads the properties of the item, served on the GTK thread, before it answers.
+- **Labels without mnemonics.** dbusmenu reads `_` as the mark of a mnemonic, so each one in a label
+  goes out doubled, and the label reads as it does in a `GtkMenu`.
 
 - **One connection per tray.** The watcher tracks an item by the unique bus name that registered it,
   and drops the item when that name leaves the bus. On the shared session connection, the name lives

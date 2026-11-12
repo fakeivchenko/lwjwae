@@ -70,6 +70,7 @@ public final class FakeStatusNotifierWatcher {
           Signatures.G_DBUS_GET_PROPERTY);
 
   private static boolean started;
+  private static MemorySegment connection;
 
   private FakeStatusNotifierWatcher() {}
 
@@ -81,33 +82,71 @@ public final class FakeStatusNotifierWatcher {
     if (started) {
       return;
     }
+    dispatcher.run(() -> FakeStatusNotifierWatcher.start(true));
+    started = true;
+  }
+
+  /** Whether this fake is the watcher of the session, rather than a panel that had one already. */
+  public static synchronized boolean isRunning() {
+    return connection != null;
+  }
+
+  /** The unique bus names of the items registered since the watcher last started. */
+  public static List<String> items() {
+    return List.copyOf(ITEMS);
+  }
+
+  /**
+   * Leaves the bus and takes the name again on a new connection, with no items: what a panel does
+   * when it crashes and comes back.
+   *
+   * @throws IllegalStateException If this fake isn't the watcher, see {@link #isRunning()}.
+   */
+  public static synchronized void restart(UiDispatcher dispatcher) {
+    if (connection == null) {
+      throw new IllegalStateException("The session has a watcher of its own");
+    }
     dispatcher.run(
         () -> {
-          MemorySegment bus = Dbus.privateSessionBus();
-          if (FakeStatusNotifierWatcher.hasOwner(bus)) {
-            Dbus.close(bus);
-            return;
-          }
-          Dbus.registerObject(
-              bus,
-              PATH,
-              Dbus.interfaceInfo(XML, NAME),
-              Dbus.vtable(ON_METHOD_CALL, ON_GET_PROPERTY),
-              MemorySegment.NULL);
-          MemorySegment reply =
-              Dbus.call(
-                  bus,
-                  "org.freedesktop.DBus",
-                  "/org/freedesktop/DBus",
-                  "org.freedesktop.DBus",
-                  "RequestName",
-                  Dbus.tuple(List.of(Dbus.string(NAME), Dbus.uint32(0))),
-                  "(u)",
-                  5000);
-          Dbus.unref(reply);
-          // The connection stays open for the rest of the test JVM: that is the watcher.
+          Dbus.close(connection);
+          connection = null;
+          ITEMS.clear();
+          FakeStatusNotifierWatcher.start(false);
         });
-    started = true;
+  }
+
+  /**
+   * Takes the name on a connection of its own. Runs on the thread of the dispatcher. The connection
+   * stays open until a restart or the end of the test JVM: that is the watcher.
+   *
+   * @param onlyIfFree Whether to leave a name that has an owner alone. A restart passes {@code
+   *     false}: the bus may not have seen the old connection go yet, and the request, which queues,
+   *     makes the new one the owner as soon as it has.
+   */
+  private static void start(boolean onlyIfFree) {
+    MemorySegment bus = Dbus.privateSessionBus();
+    if (onlyIfFree && FakeStatusNotifierWatcher.hasOwner(bus)) {
+      Dbus.close(bus);
+      return;
+    }
+    Dbus.registerObject(
+        bus,
+        PATH,
+        Dbus.interfaceInfo(XML, NAME),
+        Dbus.vtable(ON_METHOD_CALL, ON_GET_PROPERTY),
+        MemorySegment.NULL);
+    MemorySegment reply =
+        Dbus.call(
+            bus,
+            "org.freedesktop.DBus",
+            "/org/freedesktop/DBus",
+            "org.freedesktop.DBus",
+            "RequestName",
+            Dbus.tuple(List.of(Dbus.string(NAME), Dbus.uint32(0))),
+            "(u)",
+            5000);
+    Dbus.unref(reply);
+    connection = bus;
   }
 
   private static boolean hasOwner(MemorySegment bus) {

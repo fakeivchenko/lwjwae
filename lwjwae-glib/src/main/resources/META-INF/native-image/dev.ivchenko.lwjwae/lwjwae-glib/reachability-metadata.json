@@ -55,6 +55,18 @@
             "java.lang.foreign.MemorySegment",
             "java.lang.foreign.MemorySegment"
           ]
+        },
+        {
+          "name": "onWatcherOwnerChanged",
+          "parameterTypes": [
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment",
+            "java.lang.foreign.MemorySegment"
+          ]
         }
       ]
     },
@@ -596,6 +608,20 @@
         "class": "dev.ivchenko.lwjwae.glib.StatusNotifierTray",
         "method": "onGetProperty",
         "returnType": "void*",
+        "parameterTypes": [
+          "void*",
+          "void*",
+          "void*",
+          "void*",
+          "void*",
+          "void*",
+          "void*"
+        ]
+      },
+      {
+        "class": "dev.ivchenko.lwjwae.glib.StatusNotifierTray",
+        "method": "onWatcherOwnerChanged",
+        "returnType": "void",
         "parameterTypes": [
           "void*",
           "void*",
