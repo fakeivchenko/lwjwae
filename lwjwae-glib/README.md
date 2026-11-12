@@ -57,7 +57,8 @@ application.
 ## Tray
 
 GTK 4 has no tray: `GtkStatusIcon` is gone, and libappindicator links GTK 3, which can't share a
-process with GTK 4. Under GTK 3, libappindicator may be missing, and `GtkStatusIcon` needs X11. A
+process with GTK 4. Under GTK 3, `GtkStatusIcon` needs X11, and the libappindicator of Ayatana is
+deprecated and warns on every load. A
 panel, though, only talks D-Bus, so
 [`StatusNotifierTray`](src/main/java/dev/ivchenko/lwjwae/glib/StatusNotifierTray.java) serves the two objects that
 libappindicator would have served: `/StatusNotifierItem` with `org.kde.StatusNotifierItem` for the
@@ -65,8 +66,15 @@ icon, and `/MenuBar` with `com.canonical.dbusmenu` for the menu, both through
 `g_dbus_connection_register_object` with introspection XML and a vtable of two upcall stubs. It
 registers the item with `org.kde.StatusNotifierWatcher`, which KDE, GNOME with the AppIndicator
 extension, and most other panels run. Without a watcher, the constructor throws
-`UnsupportedOperationException`. The GTK 4 backend uses it as its tray; the GTK 3 backend uses it
-where libappindicator is missing, before it falls back to `GtkStatusIcon`.
+`UnsupportedOperationException`. The GTK 4 backend uses it as its tray; the GTK 3 backend tries it
+first, before it falls back to `GtkStatusIcon` on X11.
+
+- **Back after a panel restart.** The watcher forgets its items when the panel that runs it
+  restarts. Each tray subscribes to `NameOwnerChanged` for `org.kde.StatusNotifierWatcher`, with the
+  bus filtering by name, and registers the item again with the new owner, from a virtual thread,
+  since the watcher reads the properties of the item, served on the GTK thread, before it answers.
+- **Labels without mnemonics.** dbusmenu reads `_` as the mark of a mnemonic, so each one in a label
+  goes out doubled, and the label reads as it does in a `GtkMenu`.
 
 - **One connection per tray.** The watcher tracks an item by the unique bus name that registered it,
   and drops the item when that name leaves the bus. On the shared session connection, the name lives

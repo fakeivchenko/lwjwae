@@ -203,7 +203,6 @@ public class Dbus {
    *
    * @return The subscription ID, for {@link #unsubscribe}.
    */
-  @SneakyThrows
   public int subscribe(
       MemorySegment connection,
       String sender,
@@ -211,15 +210,40 @@ public class Dbus {
       String objectPath,
       MemorySegment callback,
       MemorySegment userData) {
+    return Dbus.subscribe(
+        connection, sender, interfaceName, null, objectPath, null, callback, userData);
+  }
+
+  /**
+   * {@code g_dbus_connection_signal_subscribe}: the signal {@code member} of {@code interfaceName}
+   * from {@code sender} on {@code objectPath}, only where its first argument is {@code arg0}. The
+   * bus filters by {@code arg0}, so a subscription to {@code NameOwnerChanged} for one name doesn't
+   * wake the process for every client that comes and goes. A {@code null} {@code member} or {@code
+   * arg0} matches any.
+   *
+   * @return The subscription ID, for {@link #unsubscribe}.
+   */
+  @SneakyThrows
+  public int subscribe(
+      MemorySegment connection,
+      String sender,
+      String interfaceName,
+      String member,
+      String objectPath,
+      String arg0,
+      MemorySegment callback,
+      MemorySegment userData) {
     try (Arena arena = Arena.ofConfined()) {
+      MemorySegment memberString = member == null ? MemorySegment.NULL : arena.allocateFrom(member);
+      MemorySegment arg0String = arg0 == null ? MemorySegment.NULL : arena.allocateFrom(arg0);
       return (int)
           SIGNAL_SUBSCRIBE.invokeExact(
               connection,
               arena.allocateFrom(sender),
               arena.allocateFrom(interfaceName),
-              MemorySegment.NULL,
+              memberString,
               arena.allocateFrom(objectPath),
-              MemorySegment.NULL,
+              arg0String,
               SIGNAL_FLAGS_NONE,
               callback,
               userData,

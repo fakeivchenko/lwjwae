@@ -19,9 +19,9 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 /**
- * The StatusNotifierItem tray inside a GTK 3 process: the way the backend takes where
- * libappindicator is missing. The application picks libappindicator on this machine if it has it,
- * so the test builds the tray itself.
+ * The StatusNotifierItem tray inside a GTK 3 process: the way the backend takes whenever the
+ * session has a StatusNotifier host. The test builds the tray itself against a fake watcher, so it
+ * doesn't depend on the host that the machine runs.
  */
 @Tag(Tags.DISPLAY)
 class GtkStatusNotifierTrayTest {
@@ -46,6 +46,31 @@ class GtkStatusNotifierTrayTest {
       }
       Assertions.assertTrue(tray.isClosed());
       Assertions.assertFalse(application.isClosed());
+    }
+  }
+
+  @Test
+  void trayRegistersAgainWhenTheWatcherRestarts() throws Exception {
+    Assumptions.assumeTrue(PlatformUtil.isUnixDesktop(), "Linux only");
+    DisplayAssumptions.assumeDisplay();
+    try (Application _ = Application.create()) {
+      FakeStatusNotifierWatcher.ensureRunning(GtkDispatcher.instance());
+      Assumptions.assumeTrue(
+          FakeStatusNotifierWatcher.isRunning(), "a panel owns the watcher of this session");
+      try (StatusNotifierTray _ =
+          new StatusNotifierTray(
+              GtkDispatcher.instance(),
+              TrayIcon.builder().icon(Icons.circle(32, Color.GREEN)).build(),
+              _ -> {})) {
+        FakeStatusNotifierWatcher.restart(GtkDispatcher.instance());
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        while (FakeStatusNotifierWatcher.items().isEmpty() && System.nanoTime() < deadline) {
+          Thread.sleep(50);
+        }
+        Assertions.assertFalse(
+            FakeStatusNotifierWatcher.items().isEmpty(),
+            "the item must register with the new watcher");
+      }
     }
   }
 }

@@ -32,8 +32,7 @@ import lombok.Builder;
  *       opens the menu.
  *   <li>macOS: The image is scaled to 18 points. Without {@code onActivate}, any click opens the
  *       menu; with it, a primary click runs it, and a secondary or Control click opens the menu.
- *   <li>Linux, GTK 3: Through libappindicator, any click opens the menu, and {@code onActivate}
- *       never runs. Through the StatusNotifierItem that the library serves, or {@code
+ *   <li>Linux, GTK 3: Through the StatusNotifierItem that the library serves, or {@code
  *       GtkStatusIcon} on X11, a primary click runs {@code onActivate}. The menu is the only way in
  *       on panels that show nothing else.
  *   <li>Linux, GTK 4: A StatusNotifierItem: a primary click runs {@code onActivate}, and without

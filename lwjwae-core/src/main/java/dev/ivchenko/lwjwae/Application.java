@@ -432,10 +432,9 @@ public interface Application extends AutoCloseable {
    *   <li>macOS: An item in the menu bar, with the image scaled to 18 points. Without {@code
    *       onActivate}, any click opens the menu; with it, a primary click runs it, and a secondary
    *       or Control click opens the menu.
-   *   <li>Linux, GTK 3: The first that works: libappindicator, where any click opens the menu and
-   *       {@code onActivate} never runs; a StatusNotifierItem that the library serves itself, where
-   *       the session has a StatusNotifier host; or {@code GtkStatusIcon} on X11 with a panel that
-   *       has a legacy tray. Without any, the call throws.
+   *   <li>Linux, GTK 3: The first that works: a StatusNotifierItem that the library serves itself,
+   *       where the session has a StatusNotifier host; or {@code GtkStatusIcon} on X11 with a panel
+   *       that has a legacy tray. Without either, the call throws.
    *   <li>Linux, GTK 4: A StatusNotifierItem that the library serves itself, so it needs a
    *       StatusNotifier host, which KDE and GNOME with the AppIndicator extension have; without
    *       one, the call throws.

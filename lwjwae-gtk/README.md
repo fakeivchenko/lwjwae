@@ -35,10 +35,9 @@ checks the operating system first and the libraries second, because probing a li
 | [`GtkWindow`](src/main/java/dev/ivchenko/lwjwae/gtk/GtkWindow.java)                                                                                      | The window. Forwards every call to the GTK thread.                                          |
 | [`GtkRpcExchange`](src/main/java/dev/ivchenko/lwjwae/gtk/GtkRpcExchange.java) | One RPC call: a `POST` to the custom scheme, answered through a pipe. |
 | [`GtkDispatcher`](src/main/java/dev/ivchenko/lwjwae/gtk/GtkDispatcher.java)                                                                              | The one GTK thread of the process.                                                          |
-| [`GtkTray`](src/main/java/dev/ivchenko/lwjwae/gtk/GtkTray.java)                                                                                          | A tray icon, through libappindicator or `GtkStatusIcon`.                                    |
+| [`GtkTray`](src/main/java/dev/ivchenko/lwjwae/gtk/GtkTray.java)                                                                                          | The legacy tray icon, through `GtkStatusIcon`.                                              |
 | [`binding.Gtk`](src/main/java/dev/ivchenko/lwjwae/gtk/binding/Gtk.java)                                                                                  | `gtk_*` functions: the window and the main loop.                                            |
 | [`binding.WebKit`](src/main/java/dev/ivchenko/lwjwae/gtk/binding/WebKit.java)                                                                            | `webkit_*` functions: the view, user scripts, message handlers, the URI scheme, evaluation. |
-| [`binding.AppIndicator`](src/main/java/dev/ivchenko/lwjwae/gtk/binding/AppIndicator.java)                                                                | `app_indicator_*` functions, from an optional library.                                      |
 | [`binding.Signatures`](src/main/java/dev/ivchenko/lwjwae/gtk/binding/Signatures.java)                                                                    | Every `FunctionDescriptor` the module binds, named by shape.                                |
 
 The binding classes are Lombok `@UtilityClass`es with `static final` method handles. `invokeExact`
@@ -163,32 +162,30 @@ stops suppressing. `isDevToolsEnabled()` reads the same setting back.
 
 ## Tray
 
-`Application.tray(TrayIcon)` takes the first of three ways that works:
+`Application.tray(TrayIcon)` takes the first of two ways that works:
 
-1. **StatusNotifierItem** over D-Bus, through libappindicator (`libayatana-appindicator3.so.1` or
-   `libappindicator3.so.1`), when the library loads, in a
-   [`GtkTray`](src/main/java/dev/ivchenko/lwjwae/gtk/GtkTray.java). This is what KDE, GNOME with
-   its AppIndicator extension, and most other panels take, and the only tray that works on Wayland.
-   The indicator shows the menu on any click; there is no primary-click event, so `onActivate`
-   never runs on this path.
-2. **StatusNotifierItem** served by the backend itself, when libappindicator is missing and the
-   session has a StatusNotifier host: the
+1. **StatusNotifierItem** served by the backend itself over D-Bus, when the session has a
+   StatusNotifier host: the
    [`StatusNotifierTray`](../lwjwae-glib/src/main/java/dev/ivchenko/lwjwae/glib/StatusNotifierTray.java)
-   of [`lwjwae-glib`](../lwjwae-glib#tray), which the GTK 4 backend uses too. It reaches the same
-   panels, and `Activate` runs `onActivate`.
-3. **XEmbed**, through `GtkStatusIcon`, in a `GtkTray`, otherwise. Deprecated in GTK 3.14 but still
-   in the library; needs X11 and a panel with a legacy tray. The `activate` signal runs
-   `onActivate`, and `popup-menu` opens the menu at the pointer.
+   of [`lwjwae-glib`](../lwjwae-glib#tray), which the GTK 4 backend uses too. This is what KDE, GNOME
+   with its AppIndicator extension, and most other panels take, and the only tray that works on
+   Wayland. `Activate` runs `onActivate`.
+2. **XEmbed**, through `GtkStatusIcon`, in a
+   [`GtkTray`](src/main/java/dev/ivchenko/lwjwae/gtk/GtkTray.java), otherwise, on X11. Deprecated in
+   GTK 3.14 but still in the library; needs a panel with a legacy tray. The `activate` signal runs
+   `onActivate`, and `popup-menu` opens the menu at the pointer. Outside X11, where a status icon
+   would never show, `Application.tray` throws `UnsupportedOperationException` instead.
 
-With `GtkTray`, both hosts read the image from a file, and a StatusNotifier host caches it by name, so every image
-becomes a fresh PNG file under a name that no previous image had, in a temporary directory that the
-tray deletes when it closes. The menu is a `GtkMenu` with one `activate` handler per labeled entry;
-each entry has its own ID in a `CallbackRegistry`, so one upcall stub serves every entry of every
-tray. Entry actions and `onActivate` run on a virtual thread, off the GTK thread.
+libappindicator is not used. It would speak the same protocol as the first way, but Ayatana deprecated
+`libayatana-appindicator3` in favor of `libayatana-appindicator-glib`, and the old library warns on every
+load. The item the backend serves reaches the same panels, needs no extra package, and reports the
+primary click, which an indicator never did.
 
-The library is optional, so [`binding.AppIndicator`](src/main/java/dev/ivchenko/lwjwae/gtk/binding/AppIndicator.java)
-binds through `NativeLibraries.downcallIfPresent`, which records the descriptor whether the library
-loaded or not: the reachability metadata of the module stays the same on a machine without it.
+`GtkTray` reads the image from a file, so every image becomes a fresh PNG file under a name that no
+previous image had, in a temporary directory that the tray deletes when it closes. The menu is a
+`GtkMenu` with one `activate` handler per labeled entry; each entry has its own ID in a
+`CallbackRegistry`, so one upcall stub serves every entry of every tray. Entry actions and
+`onActivate` run on a virtual thread, off the GTK thread.
 
 The tray closes with its application, on `quit()`, or earlier through `Tray.close()`. Until then it
 keeps `Application.run()` going, so an application can live in the tray with no window open.
